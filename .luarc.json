@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime": {
+    "version": "LuaJIT"
+  },
+  "workspace": {
+    "library": ["$VIMRUNTIME", ".tests/site/pack/deps/start/mini.nvim"],
+    "ignoreDir": [".tests", ".luals-log", ".git"],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "globals": ["vim"],
+    "severity": {
+      "assign-type-mismatch": "Error",
+      "param-type-mismatch": "Error",
+      "return-type-mismatch": "Error",
+      "undefined-field": "Warning"
+    }
+  }
+}

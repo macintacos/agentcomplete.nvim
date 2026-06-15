@@ -1,0 +1,5 @@
+# Taplo (TOML) formatter config. `align_entries` lines up the `=` within each
+# table so entries read as columns.
+# https://taplo.tamasfe.dev/configuration/formatter-options.html
+[formatting]
+align_entries = true

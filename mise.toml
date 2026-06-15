@@ -1,0 +1,33 @@
+[settings]
+# Commit mise.lock for reproducible, checksum-pinned tool versions.
+lockfile = true
+
+# HK_MISE routes hk's git-hook subprocesses through `mise x`, so each hook step
+# uses the versions pinned below — even for committers who never activated mise.
+[env]
+HK_MISE = 1
+
+[tools]
+# hk evaluates hk.pkl through pkl, so both are required. pkl also powers the
+# Pkl(Format) / Pkl(Lint) steps (`pkl format` and `pkl eval`).
+hk  = "latest"
+pkl = "latest"
+
+# Cross-language baseline — recommended in every project. `uv` backs the pipx
+# install of rumdl.
+uv                    = "latest" # so the pipx backend installs rumdl via uv
+"aqua:google/yamlfmt" = "latest" # YAML format
+taplo                 = "latest" # TOML format + lint (config in taplo.toml)
+shellcheck            = "latest" # Shell lint
+shfmt                 = "latest" # Shell format
+"pipx:rumdl"          = "latest" # Markdown lint + format (config in .rumdl.toml)
+
+# Lua toolchain for the Neovim plugin.
+stylua                    = "latest" # Lua format (config in stylua.toml)
+"aqua:Kampfkarren/selene" = "latest" # Lua lint hygiene (config in selene.toml)
+lua-language-server       = "latest" # LuaCATS type-check (config in .luarc.json)
+neovim                    = "latest" # headless test runtime (mini.test)
+
+# (Re)register git hooks whenever tools are installed or updated.
+[hooks]
+postinstall = "hk install --mise"

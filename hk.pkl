@@ -1,0 +1,96 @@
+amends "package://github.com/jdx/hk/releases/download/v1.46.0/hk@1.46.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.46.0/hk@1.46.0#/Builtins.pkl"
+
+// Keep the amends/import version in lockstep with the `hk` version in mise.toml,
+// and only pin a version mise can actually install (`mise ls-remote hk`).
+//
+// Two mappings keep the mise tasks single-purpose:
+//   mise run format -> the `fix` hook   -> `formatters` (write mode)
+//   mise run lint   -> the `check` hook -> `linters` (read-only rule checks)
+// The `pre-commit` hook runs BOTH, so every commit stays formatted and clean.
+//
+// Step keys use a uniform `Language(Action)  [[builtins.tool]]` scheme,
+// column-aligned on the bracket tag, so hk's per-run output reads consistently.
+
+// Formatters — rewrite files into canonical form.
+local formatters = new Mapping<String, Step> {
+  // rumdl owns Markdown — one tool for both lint and format. The format step runs
+  // `rumdl fmt` (applies fixes, formatter exit codes — won't fail the commit on
+  // leftover lint). yamlfmt owns YAML, taplo TOML, stylua Lua.
+  ["Markdown(Format)  [[builtins.rumdl]]"] = (Builtins.rumdl) {
+    check = "rumdl fmt --check {{ files }}"
+    fix = "rumdl fmt {{ files }}"
+  }
+
+  ["YAML(Format)      [[builtins.yamlfmt]]"] = Builtins.yamlfmt
+
+  ["TOML(Format)      [[builtins.taplo_format]]"] = Builtins.taplo_format
+
+  ["Pkl(Format)       [[builtins.pkl_format]]"] = Builtins.pkl_format
+
+  ["Shell(Format)     [[builtins.shfmt]]"] = Builtins.shfmt
+
+  ["Lua(Format)       [[builtins.stylua]]"] = Builtins.stylua
+}
+
+// Linters — check rules without rewriting.
+local linters = new Mapping<String, Step> {
+  ["Shell(Lint)       [[builtins.shellcheck]]"] = Builtins.shellcheck
+
+  // Same tool, read-only lint: `rumdl check` reports violations (exit 1);
+  // pre-commit autofixes via the builtin's `rumdl check --fix`. Config: .rumdl.toml.
+  ["Markdown(Lint)    [[builtins.rumdl]]"] = (Builtins.rumdl) {
+    check = "rumdl check {{ files }}"
+  }
+
+  ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo
+
+  // pkl lints by evaluating the file (`pkl eval`), which resolves the remote
+  // amends/import package (cached after first run).
+  ["Pkl(Lint)         [[builtins.pkl]]"] = Builtins.pkl
+
+  // selene owns Lua lint hygiene (unused vars, shadowing, undefined globals).
+  // Config: selene.toml + neovim.yml std.
+  ["Lua(Lint)         [[builtins.selene]]"] = Builtins.selene
+
+  // lua-language-server owns LuaCATS type correctness. It type-checks the whole
+  // workspace (types span files), so the step runs once when any Lua file
+  // changes rather than per-file. The wrapper resolves $VIMRUNTIME, runs
+  // `lua-language-server --check`, and fails on any diagnostic. Config: .luarc.json.
+  ["Lua(TypeCheck)    [[lua-language-server]]"] = new Step {
+    glob = List("lua/**/*.lua", "tests/**/*.lua", "plugin/**/*.lua", "*.lua")
+    check = "./scripts/luals-check.sh"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = new Mapping<String, Step> {
+      ...formatters
+      ...linters
+    }
+  }
+
+  // `git push` runs the test suite first.
+  ["pre-push"] {
+    steps = new Mapping<String, Step> {
+      ["Lua(Test)         [[mini.test]]"] = new Step {
+        check = "mise run test"
+        exclusive = true
+      }
+    }
+  }
+
+  // `mise run format` — formatters only, in write mode.
+  ["fix"] {
+    fix = true
+    steps = formatters
+  }
+
+  // `mise run lint` — linters only (rule checks); read-only.
+  ["check"] {
+    steps = linters
+  }
+}

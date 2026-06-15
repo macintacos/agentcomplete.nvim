@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Run the test suite (headless Neovim + mini.test)"
+#USAGE flag "-f --file <file>" help="Run only this test file (e.g. tests/test_smoke.lua)"
+
+set -euo pipefail
+
+if [ -n "${usage_file:-}" ]; then
+  nvim --headless --noplugin -u tests/minimal_init.lua \
+    -c "lua MiniTest.run_file('${usage_file}')"
+else
+  nvim --headless --noplugin -u tests/minimal_init.lua \
+    -c "lua MiniTest.run()"
+fi

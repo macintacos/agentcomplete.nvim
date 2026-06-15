@@ -1,0 +1,5 @@
+# selene (Lua linter) config. Lint hygiene only — deep type/API correctness is
+# handled by lua-language-server (see .luarc.json). The "neovim" std (neovim.yml)
+# teaches selene that the `vim` global exists so it does not flag every `vim.*`
+# use. https://kampfkarren.github.io/selene/
+std = "neovim"

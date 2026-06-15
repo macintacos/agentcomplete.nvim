@@ -1,0 +1,11 @@
+# Minimal selene standard library for Neovim plugin development.
+#
+# selene only needs to know the `vim` global exists so it can focus on lint
+# hygiene (unused locals, shadowing, undefined globals). Deep `vim.*` API and
+# type correctness is the job of lua-language-server (.luarc.json), so `vim` is
+# declared permissively here to avoid duplicate / false "undefined" noise.
+base: lua51
+name: neovim
+globals:
+  vim:
+    any: true
