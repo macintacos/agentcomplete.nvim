@@ -1,0 +1,6 @@
+{
+  "name": "agentcomplete",
+  "description": "Writes a per-session state file so agentcomplete.nvim can detect Claude Code's external-editor prompt buffer and complete skills, commands, and files.",
+  "version": "0.1.0",
+  "author": { "name": "Julian Torres" }
+}

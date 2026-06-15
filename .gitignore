@@ -43,3 +43,6 @@ luac.out
 .tests/
 .luals-log/
 
+# Claude Code worktrees (created by EnterWorktree)
+.claude/worktrees/
+
