@@ -20,13 +20,12 @@ mise run setup      # install pinned tools, fetch test deps, register git hooks
 Day-to-day:
 
 | Command              | What it does                                       |
-| -------------------- | ------------------------------------------------- |
-| `mise run format`    | Format all files (stylua + baseline), write mode  |
+| -------------------- | -------------------------------------------------- |
+| `mise run format`    | Format all files (stylua + baseline), write mode   |
 | `mise run lint`      | Lint + type-check (selene, lua-language-server, …) |
-| `mise run test`      | Run the test suite (headless Neovim + mini.test)  |
-| `mise run preflight` | `lint` + `test` — run before pushing              |
+| `mise run test`      | Run the test suite (headless Neovim + mini.test)   |
+| `mise run preflight` | `lint` + `test` — run before pushing               |
 
-The Lua toolchain: **stylua** (format), **selene** (lint hygiene),
-**lua-language-server** (LuaCATS type-check), **mini.test** (tests). A
-`pre-commit` hook formats and lints staged files; a `pre-push` hook runs the
-tests.
+The Lua toolchain: **stylua** (format), **selene** (lint hygiene), **lua-language-server**
+(LuaCATS type-check), **mini.test** (tests). A `pre-commit` hook formats and lints staged
+files; a `pre-push` hook runs the tests.

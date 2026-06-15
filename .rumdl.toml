@@ -3,9 +3,9 @@
 # both via Builtins.rumdl. This is a per-project file — deploy it into the repo as
 # `.rumdl.toml` (leading dot). Reference: https://rumdl.dev
 [global]
-# Recommended baseline disables: MD013 (line length), MD033 (inline HTML),
+# Recommended baseline disables: MD033 (inline HTML),
 # MD034 (bare URLs). Opt-in rules (MD060, …) stay off unless added to extend-enable.
-disable = ["MD013", "MD033", "MD034"]
+disable = ["MD033", "MD034"]
 
 # Respect .gitignore when scanning directories (rumdl init default).
 respect-gitignore = true
@@ -26,3 +26,14 @@ exclude = [
 # Only flag duplicate headings that are siblings (share a parent), not across the
 # whole document. (This is also rumdl's default; kept explicit.)
 siblings-only = true
+
+[MD013]
+# Reflow holds prose to the line length, but code/digraph blocks can't be wrapped
+# to fit — exempt them so they don't fail an otherwise-clean file.
+line-length = 90
+reflow      = true
+reflow-mode = "normalize"
+code-blocks = false
+
+[MD060]
+enabled = true
