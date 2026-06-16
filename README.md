@@ -36,6 +36,13 @@ by registering another detector without touching the completion engine.
 
 ### 1. The Neovim plugin
 
+With Neovim's built-in [`vim.pack`](https://neovim.io/doc/user/pack.html) (Neovim 0.12+):
+
+```lua
+vim.pack.add({ "https://github.com/macintacos/agentcomplete.nvim" })
+require("agentcomplete").setup({})
+```
+
 With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
