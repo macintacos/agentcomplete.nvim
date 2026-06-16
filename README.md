@@ -9,32 +9,28 @@ built-in completion.
 
 ## How it works
 
-When you press `Ctrl+G` in Claude Code, it writes your prompt to a temporary file and
-opens it in `$VISUAL`/`$EDITOR`. The editor it spawns inherits Claude Code's environment —
-including `CLAUDE_CODE_SESSION_ID` — and its working directory (your project root).
+When you press `Ctrl+G` in Claude Code, it writes your prompt to a temporary file
+(`…/claude-<uid>/claude-prompt-<uuid>.md`) and opens it in `$VISUAL`/`$EDITOR`, with the
+editor's working directory set to your project root.
 
-agentcomplete ships two halves:
+agentcomplete recognizes that buffer **by name** and attaches completion, rooting `@file`
+completion at the editor's working directory. `/` completes skills and commands discovered
+from your global `~/.claude/{skills,commands}`, every enabled Claude Code plugin (read
+from `~/.claude/plugins/installed_plugins.json`), and the project-local
+`<cwd>/.claude/{skills,commands}`.
 
-1. **A companion Claude Code plugin** whose hooks maintain a small per-session state file
-   at `${XDG_CACHE_HOME:-~/.cache}/agentcomplete/<session_id>.json` recording the agent's
-   current working directory.
-2. **The Neovim plugin**, which on startup reads `CLAUDE_CODE_SESSION_ID` and, if that
-   state file exists, recognizes the buffer as a Claude Code prompt and attaches
-   completion — rooting `@file` completion at the recorded cwd.
-
-Detection lives behind a per-tool registry, so support for other agent CLIs can be added
-by registering another detector without touching the completion engine.
+No environment variable, companion plugin, or external dependency is required — the editor
+already has everything detection needs. Detection lives behind a per-tool registry, so
+support for other agent CLIs can be added by registering another detector without touching
+the completion engine.
 
 ## Requirements
 
 - Neovim 0.10+
-- [`jq`](https://jqlang.github.io/jq/) (used by the companion plugin's hook)
 - Optional: [blink.cmp](https://github.com/Saghen/blink.cmp) v2 (otherwise the built-in
   completion backend is used)
 
 ## Install
-
-### 1. The Neovim plugin
 
 With Neovim's built-in [`vim.pack`](https://neovim.io/doc/user/pack.html) (Neovim 0.12+):
 
@@ -52,23 +48,9 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 }
 ```
 
-Or call `require("agentcomplete").setup({})` with your plugin manager of choice.
-
-### 2. The companion Claude Code plugin
-
-The companion plugin lives in this same repository under `.claude-plugin/`. Point Claude
-Code at it:
-
-```sh
-# one-off, for a single session
-claude --plugin-dir /path/to/agentcomplete.nvim
-
-# or symlink it into your plugins directory so it loads every session
-ln -s /path/to/agentcomplete.nvim ~/.claude/plugins/agentcomplete
-```
-
-Without the companion plugin the state file is never written, so the Neovim plugin will
-not auto-attach. You can still force it on with `:AgentCompleteAttach`.
+Or call `require("agentcomplete").setup({})` with your plugin manager of choice. That is
+the only setup required — there is no companion Claude Code plugin to install. If
+detection ever misses (e.g. an unusual launch), force it on with `:AgentCompleteAttach`.
 
 ## Configuration
 
@@ -113,6 +95,20 @@ require("blink.cmp").setup({
 When blink.cmp is absent (or `backend = "native"`), agentcomplete attaches a buffer-local
 `completefunc` and auto-opens the popup as you type `/` or `@`. No extra configuration is
 required.
+
+### Project root
+
+`@file` completion is rooted at the editor's working directory, which Claude Code sets to
+your project root — so this needs no configuration in the common case. To override it
+(monorepos, unusual launch dirs), set either (env wins over the Vim global):
+
+```sh
+AGENTCOMPLETE_CWD=/path/to/project             # per-launch, exported before `claude`
+```
+
+```lua
+vim.g.agentcomplete_cwd = "/path/to/project"   -- static, in your Neovim config
+```
 
 ## Commands
 
