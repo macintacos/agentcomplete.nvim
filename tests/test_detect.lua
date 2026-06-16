@@ -125,6 +125,14 @@ T["claude_code"]["empty AGENTCOMPLETE_CWD is ignored (treated as unset)"] = func
   expect.equality(s.cwd, "/tmp/projG")
 end
 
+T["claude_code"]["empty vim.g.agentcomplete_cwd falls through to the editor cwd"] = function()
+  vim.env.AGENTCOMPLETE_CWD = nil
+  vim.g.agentcomplete_cwd = ""
+  local cc = require "agentcomplete.detect.claude_code"
+  local s = assert(cc.detect(named_buf "/tmp/ac-h/claude-prompt-h.md"))
+  expect.equality(s.cwd, vim.loop.cwd())
+end
+
 T["claude_code"]["derives project-local skill/command dirs from the resolved cwd"] = function()
   vim.env.AGENTCOMPLETE_CWD = "/tmp/projX"
   vim.g.agentcomplete_cwd = nil
