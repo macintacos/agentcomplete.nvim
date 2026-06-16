@@ -101,4 +101,65 @@ function M.files(cwd)
   return files
 end
 
+---Resolve Claude Code's config home (honors `$CLAUDE_CONFIG_DIR`).
+---@return string
+local function claude_home()
+  local base = vim.env.CLAUDE_CONFIG_DIR
+  if not base or base == "" then
+    base = vim.fn.expand "~/.claude"
+  end
+  return base
+end
+
+---Install paths of every enabled plugin, read from
+---`<home>/plugins/installed_plugins.json` (`{ plugins = { "<name>@<mp>" = { { installPath } } } }`).
+---This is the authoritative source for enabled plugins; a `marketplaces/*` glob would
+---over-include disabled plugins and duplicate cached versions. Missing/garbled file ⇒ `{}`.
+---@param home string
+---@return string[]
+local function enabled_plugin_roots(home)
+  local roots = {}
+  local file = home .. "/plugins/installed_plugins.json"
+  if vim.fn.filereadable(file) == 0 then
+    return roots
+  end
+  local ok, data = pcall(function()
+    return vim.json.decode(table.concat(vim.fn.readfile(file), "\n"))
+  end)
+  if not ok or type(data) ~= "table" or type(data.plugins) ~= "table" then
+    return roots
+  end
+  for _, records in pairs(data.plugins) do
+    if type(records) == "table" then
+      for _, record in ipairs(records) do
+        if type(record) == "table" and type(record.installPath) == "string" and record.installPath ~= "" then
+          table.insert(roots, record.installPath)
+        end
+      end
+    end
+  end
+  return roots
+end
+
+---Skill and command search dirs for a Claude Code session rooted at `cwd`:
+---global (`<home>/{skills,commands}`), each enabled plugin's `<installPath>/{skills,commands}`,
+---then project-local `<cwd>/.claude/{skills,commands}`. Names are unqualified (not
+---`plugin:skill`-namespaced); matching Claude Code's exact slash-menu namespacing is a future
+---refinement. Absent dirs are harmless — `M.skills`/`M.commands` skip them.
+---@param cwd string
+---@return string[] skill_dirs
+---@return string[] command_dirs
+function M.claude_dirs(cwd)
+  local home = claude_home()
+  local skill_dirs = { home .. "/skills" }
+  local command_dirs = { home .. "/commands" }
+  for _, root in ipairs(enabled_plugin_roots(home)) do
+    table.insert(skill_dirs, root .. "/skills")
+    table.insert(command_dirs, root .. "/commands")
+  end
+  table.insert(skill_dirs, cwd .. "/.claude/skills")
+  table.insert(command_dirs, cwd .. "/.claude/commands")
+  return skill_dirs, command_dirs
+end
+
 return M

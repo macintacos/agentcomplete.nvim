@@ -9,6 +9,7 @@ local M = {}
 
 local detect = require "agentcomplete.detect"
 local backends = require "agentcomplete.backends"
+local scan = require "agentcomplete.scan"
 
 ---Default configuration.
 ---@type AgentComplete.Config
@@ -25,14 +26,14 @@ M.config = vim.deepcopy(defaults)
 ---Synthesize a session for manual/forced attach when no detector matched.
 ---@return AgentComplete.Session
 local function fallback_session()
-  local cwd = vim.loop.cwd()
-  local home = vim.fn.expand "~/.claude"
+  local cwd = vim.loop.cwd() or vim.fn.getcwd()
+  local skill_dirs, command_dirs = scan.claude_dirs(cwd)
   return {
     tool = "manual",
     cwd = cwd,
     session_id = nil,
-    skill_dirs = { home .. "/skills", cwd .. "/.claude/skills" },
-    command_dirs = { home .. "/commands", cwd .. "/.claude/commands" },
+    skill_dirs = skill_dirs,
+    command_dirs = command_dirs,
   }
 end
 
