@@ -1,25 +1,29 @@
 -- Tests for agentcomplete.detect: the per-tool detector registry and the
--- Claude Code detector (env session-id + companion-plugin state file).
+-- Claude Code detector (prompt-buffer name + editor cwd).
 local MiniTest = require "mini.test"
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
-local function tmpdir()
-  local d = vim.fn.tempname()
-  vim.fn.mkdir(d, "p")
-  return d
+-- Create a scratch buffer with the given absolute name; returns its bufnr.
+-- Names must be unique across cases (Neovim forbids two buffers sharing a name).
+local function named_buf(name)
+  local buf = vim.api.nvim_create_buf(false, true)
+  if name ~= "" then
+    vim.api.nvim_buf_set_name(buf, name)
+  end
+  return buf
 end
 
 local saved = {}
 local T = new_set {
   hooks = {
     pre_case = function()
-      saved.sid = vim.env.CLAUDE_CODE_SESSION_ID
-      saved.xdg = vim.env.XDG_CACHE_HOME
+      saved.env = vim.env.AGENTCOMPLETE_CWD
+      saved.g = vim.g.agentcomplete_cwd
     end,
     post_case = function()
-      vim.env.CLAUDE_CODE_SESSION_ID = saved.sid
-      vim.env.XDG_CACHE_HOME = saved.xdg
+      vim.env.AGENTCOMPLETE_CWD = saved.env
+      vim.g.agentcomplete_cwd = saved.g
     end,
   },
 }
@@ -76,46 +80,66 @@ end
 
 T["claude_code"] = new_set()
 
-T["claude_code"]["returns nil when the session-id env var is unset"] = function()
-  vim.env.XDG_CACHE_HOME = tmpdir()
-  vim.env.CLAUDE_CODE_SESSION_ID = nil
+T["claude_code"]["matches a claude-prompt-<uuid>.md buffer, rooted at cwd"] = function()
+  vim.env.AGENTCOMPLETE_CWD = nil
+  vim.g.agentcomplete_cwd = nil
+  local buf = named_buf "/private/tmp/claude-502/claude-prompt-abc12345.md"
   local cc = require "agentcomplete.detect.claude_code"
-  expect.equality(cc.detect(0), nil)
-end
-
-T["claude_code"]["returns nil when no state file exists for the session"] = function()
-  vim.env.XDG_CACHE_HOME = tmpdir()
-  vim.env.CLAUDE_CODE_SESSION_ID = "sess-1"
-  local cc = require "agentcomplete.detect.claude_code"
-  expect.equality(cc.detect(0), nil)
-end
-
-T["claude_code"]["returns a session using the state-file cwd and derived dirs"] = function()
-  local cache = tmpdir()
-  vim.env.XDG_CACHE_HOME = cache
-  vim.env.CLAUDE_CODE_SESSION_ID = "sess-2"
-  vim.fn.mkdir(cache .. "/agentcomplete", "p")
-  vim.fn.writefile({ vim.json.encode { cwd = "/tmp/projX" } }, cache .. "/agentcomplete/sess-2.json")
-
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(0))
+  local s = assert(cc.detect(buf))
   expect.equality(s.tool, "claude-code")
-  expect.equality(s.session_id, "sess-2")
-  expect.equality(s.cwd, "/tmp/projX")
+  expect.equality(s.session_id, nil)
+  expect.equality(s.cwd, vim.loop.cwd())
+  expect.equality(#s.skill_dirs > 0, true)
+  expect.equality(#s.command_dirs > 0, true)
+end
+
+T["claude_code"]["ignores buffers that are not a claude prompt"] = function()
+  local cc = require "agentcomplete.detect.claude_code"
+  expect.equality(cc.detect(named_buf "/tmp/ac-a/notes.md"), nil)
+  expect.equality(cc.detect(named_buf "/tmp/ac-b/claude-prompt.txt"), nil) -- wrong extension
+  expect.equality(cc.detect(named_buf "/tmp/ac-c/prompt-x.md"), nil) -- wrong prefix
+  expect.equality(cc.detect(named_buf ""), nil) -- unnamed buffer
+end
+
+T["claude_code"]["AGENTCOMPLETE_CWD env wins over vim.g and cwd"] = function()
+  vim.env.AGENTCOMPLETE_CWD = "/tmp/projEnv"
+  vim.g.agentcomplete_cwd = "/tmp/projG"
+  local cc = require "agentcomplete.detect.claude_code"
+  local s = assert(cc.detect(named_buf "/tmp/ac-d/claude-prompt-d.md"))
+  expect.equality(s.cwd, "/tmp/projEnv")
+end
+
+T["claude_code"]["vim.g.agentcomplete_cwd wins over cwd when env is unset"] = function()
+  vim.env.AGENTCOMPLETE_CWD = nil
+  vim.g.agentcomplete_cwd = "/tmp/projG"
+  local cc = require "agentcomplete.detect.claude_code"
+  local s = assert(cc.detect(named_buf "/tmp/ac-e/claude-prompt-e.md"))
+  expect.equality(s.cwd, "/tmp/projG")
+end
+
+T["claude_code"]["empty AGENTCOMPLETE_CWD is ignored (treated as unset)"] = function()
+  vim.env.AGENTCOMPLETE_CWD = ""
+  vim.g.agentcomplete_cwd = "/tmp/projG"
+  local cc = require "agentcomplete.detect.claude_code"
+  local s = assert(cc.detect(named_buf "/tmp/ac-f/claude-prompt-f.md"))
+  expect.equality(s.cwd, "/tmp/projG")
+end
+
+T["claude_code"]["empty vim.g.agentcomplete_cwd falls through to the editor cwd"] = function()
+  vim.env.AGENTCOMPLETE_CWD = nil
+  vim.g.agentcomplete_cwd = ""
+  local cc = require "agentcomplete.detect.claude_code"
+  local s = assert(cc.detect(named_buf "/tmp/ac-h/claude-prompt-h.md"))
+  expect.equality(s.cwd, vim.loop.cwd())
+end
+
+T["claude_code"]["derives project-local skill/command dirs from the resolved cwd"] = function()
+  vim.env.AGENTCOMPLETE_CWD = "/tmp/projX"
+  vim.g.agentcomplete_cwd = nil
+  local cc = require "agentcomplete.detect.claude_code"
+  local s = assert(cc.detect(named_buf "/tmp/ac-g/claude-prompt-g.md"))
   expect.equality(vim.tbl_contains(s.skill_dirs, "/tmp/projX/.claude/skills"), true)
   expect.equality(vim.tbl_contains(s.command_dirs, "/tmp/projX/.claude/commands"), true)
-  expect.equality(vim.tbl_contains(s.skill_dirs, vim.fn.expand "~/.claude" .. "/skills"), true)
-end
-
-T["claude_code"]["falls back to vim.loop.cwd() when the state file lacks a cwd"] = function()
-  local cache = tmpdir()
-  vim.env.XDG_CACHE_HOME = cache
-  vim.env.CLAUDE_CODE_SESSION_ID = "sess-3"
-  vim.fn.mkdir(cache .. "/agentcomplete", "p")
-  vim.fn.writefile({ "{}" }, cache .. "/agentcomplete/sess-3.json")
-
-  local cc = require "agentcomplete.detect.claude_code"
-  expect.equality(assert(cc.detect(0)).cwd, vim.loop.cwd())
 end
 
 return T

@@ -19,6 +19,7 @@ end
 -- scan.files' git calls at the surrounding repository.
 local GIT_ENV = { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY" }
 local saved_git = {}
+local saved_claude_config
 local T = new_set {
   hooks = {
     pre_case = function()
@@ -26,11 +27,13 @@ local T = new_set {
         saved_git[k] = vim.env[k]
         vim.env[k] = nil
       end
+      saved_claude_config = vim.env.CLAUDE_CONFIG_DIR
     end,
     post_case = function()
       for _, k in ipairs(GIT_ENV) do
         vim.env[k] = saved_git[k]
       end
+      vim.env.CLAUDE_CONFIG_DIR = saved_claude_config
     end,
   },
 }
@@ -103,6 +106,62 @@ T["files"]["respects .gitignore inside a git work-tree"] = function()
   -- .gitignore is itself tracked-able but uninteresting; assert the ignored file is excluded and the kept one present.
   expect.equality(vim.tbl_contains(files, "keep.lua"), true)
   expect.equality(vim.tbl_contains(files, "ignored.log"), false)
+end
+
+T["claude_dirs"] = new_set()
+
+T["claude_dirs"]["always includes global (CLAUDE_CONFIG_DIR) and project-local dirs"] = function()
+  local scan = require "agentcomplete.scan"
+  local home = tmpdir()
+  vim.env.CLAUDE_CONFIG_DIR = home
+  local skill_dirs, command_dirs = scan.claude_dirs "/tmp/projY"
+  expect.equality(vim.tbl_contains(skill_dirs, home .. "/skills"), true)
+  expect.equality(vim.tbl_contains(command_dirs, home .. "/commands"), true)
+  expect.equality(vim.tbl_contains(skill_dirs, "/tmp/projY/.claude/skills"), true)
+  expect.equality(vim.tbl_contains(command_dirs, "/tmp/projY/.claude/commands"), true)
+end
+
+T["claude_dirs"]["includes enabled plugin dirs from installed_plugins.json"] = function()
+  local scan = require "agentcomplete.scan"
+  local home = tmpdir()
+  vim.env.CLAUDE_CONFIG_DIR = home
+  local install_path = home .. "/plugins/cache/mp/plug/1.0"
+  write(home .. "/plugins/installed_plugins.json", {
+    vim.json.encode {
+      version = 2,
+      plugins = { ["plug@mp"] = { { installPath = install_path, scope = "user" } } },
+    },
+  })
+  local skill_dirs, command_dirs = scan.claude_dirs "/tmp/projY"
+  expect.equality(vim.tbl_contains(skill_dirs, install_path .. "/skills"), true)
+  expect.equality(vim.tbl_contains(command_dirs, install_path .. "/commands"), true)
+end
+
+T["claude_dirs"]["tolerates a missing installed_plugins.json"] = function()
+  local scan = require "agentcomplete.scan"
+  local home = tmpdir() -- no plugins/ subtree
+  vim.env.CLAUDE_CONFIG_DIR = home
+  local skill_dirs = scan.claude_dirs "/tmp/projY"
+  expect.equality(vim.tbl_contains(skill_dirs, home .. "/skills"), true)
+end
+
+T["claude_dirs"]["de-duplicates when project-local equals global (claude launched from a config parent)"] = function()
+  local scan = require "agentcomplete.scan"
+  local root = tmpdir()
+  vim.env.CLAUDE_CONFIG_DIR = root .. "/.claude"
+  -- cwd == root ⇒ project-local `<root>/.claude/skills` is the same path as global.
+  local skill_dirs, command_dirs = scan.claude_dirs(root)
+  local function count(list, want)
+    local n = 0
+    for _, v in ipairs(list) do
+      if v == want then
+        n = n + 1
+      end
+    end
+    return n
+  end
+  expect.equality(count(skill_dirs, root .. "/.claude/skills"), 1)
+  expect.equality(count(command_dirs, root .. "/.claude/commands"), 1)
 end
 
 return T

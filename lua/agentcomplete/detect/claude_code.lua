@@ -1,54 +1,51 @@
 ---Claude Code detector.
 ---
----When Claude Code opens its prompt via `chat:externalEditor`, the editor it
----spawns inherits `CLAUDE_CODE_SESSION_ID`. The companion plugin's hooks write a
----per-session state file at `<cache>/agentcomplete/<session_id>.json`; its
----presence is what makes detection specific to "agentcomplete is installed for
----this session" rather than just "some Claude Code subprocess".
+---Claude Code opens its prompt via `chat:externalEditor` (Ctrl+G): it writes the
+---prompt to `<tmpdir>/claude-<uid>/claude-prompt-<uuid>.md` and opens that file in
+---`$EDITOR`. The spawned editor does **not** inherit `CLAUDE_CODE_SESSION_ID`, so
+---detection keys on the prompt buffer's name, and roots completion at the editor's
+---working directory (which is the project root). The cwd is overridable via
+---`$AGENTCOMPLETE_CWD` (per-launch) or `vim.g.agentcomplete_cwd` (static config) for
+---non-standard launches.
 local M = { name = "claude-code" }
 
----Resolve the companion plugin's state directory (honors $XDG_CACHE_HOME).
----@return string
-local function cache_dir()
-  local base = vim.env.XDG_CACHE_HOME
-  if not base or base == "" then
-    base = vim.fn.expand "~/.cache"
-  end
-  return base .. "/agentcomplete"
+local scan = require "agentcomplete.scan"
+
+---Whether the buffer is Claude Code's external-editor prompt, judged by name.
+---@param bufnr integer
+---@return boolean
+local function is_claude_prompt(bufnr)
+  local base = vim.api.nvim_buf_get_name(bufnr):match "[^/]+$" or ""
+  return base:match "^claude%-prompt%-.+%.md$" ~= nil
 end
 
----@param _bufnr integer
+---Resolve the project cwd: explicit override (env, then `vim.g`) else the editor cwd.
+---@return string
+local function resolve_cwd()
+  local env = vim.env.AGENTCOMPLETE_CWD
+  if env and env ~= "" then
+    return env
+  end
+  if vim.g.agentcomplete_cwd and vim.g.agentcomplete_cwd ~= "" then
+    return vim.g.agentcomplete_cwd
+  end
+  return vim.loop.cwd() or vim.fn.getcwd()
+end
+
+---@param bufnr integer
 ---@return AgentComplete.Session|nil
-function M.detect(_bufnr)
-  local sid = vim.env.CLAUDE_CODE_SESSION_ID
-  if not sid or sid == "" then
+function M.detect(bufnr)
+  if not is_claude_prompt(bufnr) then
     return nil
   end
-
-  local state_file = cache_dir() .. "/" .. sid .. ".json"
-  if vim.fn.filereadable(state_file) == 0 then
-    return nil
-  end
-
-  -- The editor already inherits the project cwd; the state file's cwd (the
-  -- session's working directory, refreshed by the companion hooks) is preferred
-  -- when present.
-  local cwd = vim.loop.cwd()
-  local ok, data = pcall(function()
-    return vim.json.decode(table.concat(vim.fn.readfile(state_file), "\n"))
-  end)
-  if ok and type(data) == "table" and type(data.cwd) == "string" and data.cwd ~= "" then
-    cwd = data.cwd
-  end
-
-  local home_claude = vim.fn.expand "~/.claude"
-  local proj_claude = cwd .. "/.claude"
+  local cwd = resolve_cwd()
+  local skill_dirs, command_dirs = scan.claude_dirs(cwd)
   return {
     tool = "claude-code",
     cwd = cwd,
-    session_id = sid,
-    skill_dirs = { home_claude .. "/skills", proj_claude .. "/skills" },
-    command_dirs = { home_claude .. "/commands", proj_claude .. "/commands" },
+    session_id = nil,
+    skill_dirs = skill_dirs,
+    command_dirs = command_dirs,
   }
 end
 
