@@ -145,4 +145,23 @@ T["claude_dirs"]["tolerates a missing installed_plugins.json"] = function()
   expect.equality(vim.tbl_contains(skill_dirs, home .. "/skills"), true)
 end
 
+T["claude_dirs"]["de-duplicates when project-local equals global (claude launched from a config parent)"] = function()
+  local scan = require "agentcomplete.scan"
+  local root = tmpdir()
+  vim.env.CLAUDE_CONFIG_DIR = root .. "/.claude"
+  -- cwd == root ⇒ project-local `<root>/.claude/skills` is the same path as global.
+  local skill_dirs, command_dirs = scan.claude_dirs(root)
+  local function count(list, want)
+    local n = 0
+    for _, v in ipairs(list) do
+      if v == want then
+        n = n + 1
+      end
+    end
+    return n
+  end
+  expect.equality(count(skill_dirs, root .. "/.claude/skills"), 1)
+  expect.equality(count(command_dirs, root .. "/.claude/commands"), 1)
+end
+
 return T

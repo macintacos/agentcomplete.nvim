@@ -141,9 +141,25 @@ local function enabled_plugin_roots(home)
   return roots
 end
 
+---Order-preserving de-duplication of a path list.
+---@param list string[]
+---@return string[]
+local function dedup(list)
+  local seen, out = {}, {}
+  for _, v in ipairs(list) do
+    if not seen[v] then
+      seen[v] = true
+      out[#out + 1] = v
+    end
+  end
+  return out
+end
+
 ---Skill and command search dirs for a Claude Code session rooted at `cwd`:
 ---global (`<home>/{skills,commands}`), each enabled plugin's `<installPath>/{skills,commands}`,
----then project-local `<cwd>/.claude/{skills,commands}`. Names are unqualified (not
+---then project-local `<cwd>/.claude/{skills,commands}`. The lists are de-duplicated so a path
+---reached two ways (e.g. claude launched from `~` ⇒ global == project-local, or a plugin
+---listed at two scopes) does not double its completions. Names are unqualified (not
 ---`plugin:skill`-namespaced); matching Claude Code's exact slash-menu namespacing is a future
 ---refinement. Absent dirs are harmless — `M.skills`/`M.commands` skip them.
 ---@param cwd string
@@ -159,7 +175,7 @@ function M.claude_dirs(cwd)
   end
   table.insert(skill_dirs, cwd .. "/.claude/skills")
   table.insert(command_dirs, cwd .. "/.claude/commands")
-  return skill_dirs, command_dirs
+  return dedup(skill_dirs), dedup(command_dirs)
 end
 
 return M
