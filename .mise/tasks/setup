@@ -7,6 +7,13 @@ set -euo pipefail
 # runs `hk install --mise` to (re)register the git hooks.
 mise install
 
+# git exports GIT_DIR / GIT_WORK_TREE into hook environments (the pre-push hook
+# runs this task via `mise run test`). They override the `-C <dir>` targets below,
+# redirecting the vendored-dep updates at this repo instead of the clones — which
+# aborts the first push of any new branch. Clear them so each `git -C` hits its
+# named dir. See EXC-658.
+unset GIT_DIR GIT_WORK_TREE
+
 # mini.test ships inside mini.nvim. Clone it into a gitignored deps dir so the
 # headless test runtime can find it (see tests/minimal_init.lua).
 mini_dir=".tests/site/pack/deps/start/mini.nvim"
