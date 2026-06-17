@@ -178,4 +178,40 @@ function M.claude_dirs(cwd)
   return dedup(skill_dirs), dedup(command_dirs)
 end
 
+---OpenCode's config base directories for a session rooted at `cwd`: the global config
+---home (`$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`), an optional extra base from
+---`$OPENCODE_CONFIG_DIR`, and the project-local `<cwd>/.opencode`.
+---@param cwd string
+---@return string[]
+local function opencode_config_dirs(cwd)
+  local xdg = vim.env.XDG_CONFIG_HOME
+  local global = (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
+  local bases = { global }
+  local extra = vim.env.OPENCODE_CONFIG_DIR
+  if extra and extra ~= "" then
+    table.insert(bases, extra)
+  end
+  table.insert(bases, cwd .. "/.opencode")
+  return bases
+end
+
+---Skill and command search dirs for an OpenCode session rooted at `cwd`. OpenCode discovers
+---skills as `{skill,skills}/**/SKILL.md` and supports markdown command files under
+---`<base>/command`, across the global config home, an optional `$OPENCODE_CONFIG_DIR`, and the
+---project-local `<cwd>/.opencode`. Lists are de-duplicated so a base reached two ways (e.g.
+---cwd's `.opencode` also set as `$OPENCODE_CONFIG_DIR`) does not double its completions.
+---Config-defined commands (the `opencode.json[c]` `command` map) are not discovered here.
+---@param cwd string
+---@return string[] skill_dirs
+---@return string[] command_dirs
+function M.opencode_dirs(cwd)
+  local skill_dirs, command_dirs = {}, {}
+  for _, base in ipairs(opencode_config_dirs(cwd)) do
+    table.insert(skill_dirs, base .. "/skill")
+    table.insert(skill_dirs, base .. "/skills")
+    table.insert(command_dirs, base .. "/command")
+  end
+  return dedup(skill_dirs), dedup(command_dirs)
+end
+
 return M
