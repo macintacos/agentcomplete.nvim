@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Run the test suite (headless Neovim + mini.test)"
+#MISE depends=["setup"]
 #USAGE flag "-f --file <file>" help="Run only this test file (e.g. tests/test_smoke.lua)"
 
 set -euo pipefail
