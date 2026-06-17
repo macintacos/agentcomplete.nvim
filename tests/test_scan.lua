@@ -21,6 +21,7 @@ local GIT_ENV = { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "G
 local saved_git = {}
 local saved_claude_config
 local saved_opencode_config
+local saved_opencode_config_file
 local saved_xdg_config
 local T = new_set {
   hooks = {
@@ -31,6 +32,7 @@ local T = new_set {
       end
       saved_claude_config = vim.env.CLAUDE_CONFIG_DIR
       saved_opencode_config = vim.env.OPENCODE_CONFIG_DIR
+      saved_opencode_config_file = vim.env.OPENCODE_CONFIG
       saved_xdg_config = vim.env.XDG_CONFIG_HOME
     end,
     post_case = function()
@@ -39,6 +41,7 @@ local T = new_set {
       end
       vim.env.CLAUDE_CONFIG_DIR = saved_claude_config
       vim.env.OPENCODE_CONFIG_DIR = saved_opencode_config
+      vim.env.OPENCODE_CONFIG = saved_opencode_config_file
       vim.env.XDG_CONFIG_HOME = saved_xdg_config
     end,
   },
@@ -222,6 +225,99 @@ T["opencode_dirs"]["de-duplicates when project-local equals OPENCODE_CONFIG_DIR"
   end
   expect.equality(count(skill_dirs, root .. "/.opencode/skill"), 1)
   expect.equality(count(command_dirs, root .. "/.opencode/command"), 1)
+end
+
+T["opencode_commands"] = new_set()
+
+-- Isolate the global config home to an empty dir so tests never read the dev's
+-- real ~/.config/opencode, and clear the file/dir overrides.
+local function isolate_opencode_config()
+  vim.env.XDG_CONFIG_HOME = tmpdir()
+  vim.env.OPENCODE_CONFIG = nil
+  vim.env.OPENCODE_CONFIG_DIR = nil
+end
+
+T["opencode_commands"]["reads the command map from opencode.json at the project root"] = function()
+  local scan = require "agentcomplete.scan"
+  isolate_opencode_config()
+  local root = tmpdir()
+  write(root .. "/opencode.json", {
+    "{",
+    '  "command": {',
+    '    "deploy": { "description": "Ship it", "template": "deploy $ARGUMENTS" },',
+    '    "test": { "template": "run tests" }',
+    "  }",
+    "}",
+  })
+  local cmds = scan.opencode_commands(root)
+  local by = {}
+  for _, c in ipairs(cmds) do
+    by[c.name] = c
+  end
+  expect.equality(by.deploy.description, "Ship it")
+  expect.equality(by.test ~= nil, true)
+end
+
+T["opencode_commands"]["tolerates JSONC comments and trailing commas"] = function()
+  local scan = require "agentcomplete.scan"
+  isolate_opencode_config()
+  local root = tmpdir()
+  write(root .. "/opencode.jsonc", {
+    "{",
+    "  // user commands",
+    '  "command": {',
+    '    "build": { "description": "Build", }, /* block comment */',
+    "  },",
+    "}",
+  })
+  local cmds = scan.opencode_commands(root)
+  expect.equality(#cmds, 1)
+  expect.equality(cmds[1].name, "build")
+  expect.equality(cmds[1].description, "Build")
+end
+
+T["opencode_commands"]["preserves commas/brackets inside string values"] = function()
+  local scan = require "agentcomplete.scan"
+  isolate_opencode_config()
+  local root = tmpdir()
+  -- The description contains `,]` — trailing-comma stripping must not touch it.
+  write(root .. "/opencode.json", { '{ "command": { "x": { "description": "tuple [a,] ok" } } }' })
+  local cmds = scan.opencode_commands(root)
+  expect.equality(cmds[1].description, "tuple [a,] ok")
+end
+
+T["opencode_commands"]["empty when there is no config or no command map"] = function()
+  local scan = require "agentcomplete.scan"
+  isolate_opencode_config()
+  local root = tmpdir()
+  expect.equality(scan.opencode_commands(root), {})
+  write(root .. "/opencode.json", { '{ "model": "anthropic/claude" }' })
+  expect.equality(scan.opencode_commands(root), {})
+end
+
+T["opencode_commands"]["malformed config yields empty, not an error"] = function()
+  local scan = require "agentcomplete.scan"
+  isolate_opencode_config()
+  local root = tmpdir()
+  write(root .. "/opencode.json", { "{ this is not json" })
+  expect.equality(scan.opencode_commands(root), {})
+end
+
+T["opencode_commands"]["de-duplicates a command defined in both global and project config"] = function()
+  local scan = require "agentcomplete.scan"
+  isolate_opencode_config()
+  local xdg = tmpdir()
+  vim.env.XDG_CONFIG_HOME = xdg
+  local root = tmpdir()
+  write(xdg .. "/opencode/opencode.json", { '{ "command": { "deploy": { "description": "global" } } }' })
+  write(root .. "/opencode.json", { '{ "command": { "deploy": { "description": "project" } } }' })
+  local n = 0
+  for _, c in ipairs(scan.opencode_commands(root)) do
+    if c.name == "deploy" then
+      n = n + 1
+    end
+  end
+  expect.equality(n, 1)
 end
 
 return T

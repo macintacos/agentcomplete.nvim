@@ -14,6 +14,17 @@ local function named_buf(name)
   return buf
 end
 
+local function tmpdir()
+  local d = vim.fn.tempname()
+  vim.fn.mkdir(d, "p")
+  return d
+end
+
+local function write(path, lines)
+  vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+  vim.fn.writefile(lines, path)
+end
+
 local saved = {}
 local T = new_set {
   hooks = {
@@ -22,12 +33,18 @@ local T = new_set {
       saved.g = vim.g.agentcomplete_cwd
       saved.opencode = vim.env.OPENCODE
       saved.opencode_pid = vim.env.OPENCODE_PID
+      saved.xdg = vim.env.XDG_CONFIG_HOME
+      saved.oc_config = vim.env.OPENCODE_CONFIG
+      saved.oc_config_dir = vim.env.OPENCODE_CONFIG_DIR
     end,
     post_case = function()
       vim.env.AGENTCOMPLETE_CWD = saved.env
       vim.g.agentcomplete_cwd = saved.g
       vim.env.OPENCODE = saved.opencode
       vim.env.OPENCODE_PID = saved.opencode_pid
+      vim.env.XDG_CONFIG_HOME = saved.xdg
+      vim.env.OPENCODE_CONFIG = saved.oc_config
+      vim.env.OPENCODE_CONFIG_DIR = saved.oc_config_dir
     end,
   },
 }
@@ -196,6 +213,25 @@ T["opencode"]["derives project-local skill/command dirs from the resolved cwd"] 
   local s = assert(oc.detect(named_buf "/private/tmp/1718646000004.md"))
   expect.equality(vim.tbl_contains(s.skill_dirs, "/tmp/projXO/.opencode/skill"), true)
   expect.equality(vim.tbl_contains(s.command_dirs, "/tmp/projXO/.opencode/command"), true)
+end
+
+T["opencode"]["populates extra_commands from the project opencode.json command map"] = function()
+  vim.env.OPENCODE = "1"
+  vim.g.agentcomplete_cwd = nil
+  vim.env.XDG_CONFIG_HOME = tmpdir() -- isolate the global config home
+  vim.env.OPENCODE_CONFIG = nil
+  vim.env.OPENCODE_CONFIG_DIR = nil
+  local proj = tmpdir()
+  write(proj .. "/opencode.json", { '{ "command": { "release": { "description": "Cut a release" } } }' })
+  vim.env.AGENTCOMPLETE_CWD = proj
+  local oc = require "agentcomplete.detect.opencode"
+  local s = assert(oc.detect(named_buf "/private/tmp/1718646000005.md"))
+  local by = {}
+  for _, c in ipairs(s.extra_commands or {}) do
+    by[c.name] = c
+  end
+  expect.equality(by.release ~= nil, true)
+  expect.equality(by.release.description, "Cut a release")
 end
 
 return T

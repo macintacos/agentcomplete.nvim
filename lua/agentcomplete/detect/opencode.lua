@@ -51,6 +51,7 @@ function M.detect(bufnr)
     session_id = vim.env.OPENCODE_PID,
     skill_dirs = skill_dirs,
     command_dirs = command_dirs,
+    extra_commands = scan.opencode_commands(cwd),
   }
 end
 

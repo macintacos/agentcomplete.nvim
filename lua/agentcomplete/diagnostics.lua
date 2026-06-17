@@ -235,7 +235,7 @@ function M.collect(opts)
   if session then
     discovery = {
       skills = #scan.skills(session.skill_dirs),
-      commands = #scan.commands(session.command_dirs),
+      commands = #scan.commands(session.command_dirs) + #(session.extra_commands or {}),
       files = #scan.files(session.cwd),
     }
   end
