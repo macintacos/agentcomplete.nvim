@@ -120,7 +120,7 @@ M._installed = nil
 ---Wrap blink's global `sources.default` and `per_filetype` entries so detected
 ---buffers resolve to agentcomplete only (plus registered `allowed_sources`),
 ---while every other buffer keeps the user's original lists. This mutates blink's
----global config by design (the v1 API has no per-buffer config); the wrap is
+---global config by design (blink.cmp has no per-buffer source config); the wrap is
 ---behaviour-preserving for non-detected buffers and requires `setup()` to run
 ---after `blink.cmp.setup()`. Idempotent: a prior wrap is restored first so a
 ---re-run re-captures pristine originals. Returns false (no-op) when blink is
@@ -154,19 +154,25 @@ function M.install_suppression(config, bcfg, detected_fn)
     )
   end
 
-  local orig_default = bcfg.sources.default
+  -- Capture pristine originals into M._installed BEFORE mutating, so an error
+  -- mid-wrap still leaves a restorable state. `per_filetype` is defaulted like
+  -- `providers` above; iterating the captured copy avoids iterate-while-mutate.
+  local per_filetype = bcfg.sources.per_filetype or {}
   ---@type AgentComplete.Backend.Blink.Saved
-  local saved = { default = orig_default, per_filetype = {} }
-  bcfg.sources.default = function()
-    return M.resolve_sources(orig_default, effective, detected_fn())
-  end
-  for ft, entry in pairs(bcfg.sources.per_filetype) do
+  local saved = { default = bcfg.sources.default, per_filetype = {} }
+  for ft, entry in pairs(per_filetype) do
     saved.per_filetype[ft] = entry
-    bcfg.sources.per_filetype[ft] = function()
-      return M.resolve_sources(entry, effective, detected_fn())
-    end
   end
   M._installed = saved
+
+  bcfg.sources.default = function()
+    return M.resolve_sources(saved.default, effective, detected_fn())
+  end
+  for ft, orig in pairs(saved.per_filetype) do
+    per_filetype[ft] = function()
+      return M.resolve_sources(orig, effective, detected_fn())
+    end
+  end
   return true
 end
 
@@ -194,8 +200,7 @@ function M.new(opts)
 end
 
 function M:enabled()
-  local detect = require "agentcomplete.detect"
-  return detect.detect(vim.api.nvim_get_current_buf()) ~= nil
+  return M._detected()
 end
 
 function M:get_trigger_characters()
