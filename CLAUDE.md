@@ -1,3 +1,28 @@
+# agentcomplete.nvim — agent guidance
+
+agentcomplete completes an agent CLI's skills, commands, and files inside the prompt
+buffer that CLI opens in Neovim (Claude Code via `Ctrl+G`, OpenCode via `/editor`).
+Detailed references live in [`docs/agents/`](docs/agents/) and load **on demand** — the
+Routing section below is the router that decides which a given task needs. The CodeGraph
+and Verifying-changes sections beneath it are always-on context for this project.
+
+## Routing
+
+Read the digraph as a checklist, not a single path: start from what you're doing and load
+every reference whose edge matches. Read the matching `docs/agents/*.md` file into context
+*before* you act on that area, not after.
+
+```graphviz
+digraph agentcomplete_router {
+    "Working on agentcomplete.nvim" [shape=doublecircle];
+    "What are you doing?" [shape=diamond];
+    "Load docs/agents/diagnostics.md" [shape=box];
+
+    "Working on agentcomplete.nvim" -> "What are you doing?";
+    "What are you doing?" -> "Load docs/agents/diagnostics.md" [label="debugging detection or completion in a prompt buffer (:luafile scripts/diagnostics.lua, mise run diag); understanding how each agent CLI is detected"];
+}
+```
+
 ## CodeGraph
 
 **First check.** If `.codegraph/` doesn't exist in this repo, ask once:
@@ -46,30 +71,18 @@ after editing a file in the same turn — give it a beat, or trust your edit.
 
 ## Verifying changes
 
-`mise run preflight` is the pre-push gate — lint, unit + e2e tests, and build, run
-concurrently. When **you** (an agent) run it, pass `--json`. `mise run preflight --json`
-replaces the live human display with two compact JSON documents on stdout, one per line: a
-`start` document (the planned tasks plus the filters in effect) and a `result` document
-carrying each task's status and an overall `ok` boolean. The exit code is unchanged (`0`
-pass, `1` fail).
+`mise run preflight` is the pre-push gate. It is a thin wrapper declared as
+`depends=["lint", "test"]`, so mise runs `lint` then `test`; reaching the end prints
+`preflight: lint + test passed`. There is no `--json` mode, no build step, and no extra
+flags — when a task fails, run it directly to see its full output and narrow the failure:
 
-`mise run preflight --json` is the call you want almost every time.
-**Failures show their output by default**, so you can act immediately — and if a task's
-output is large it's abbreviated to its last 20 lines with `totalLines` and
-`"truncated": true` so you know there's more. Passing tasks stay status-only to keep the
-result small. The flags below turn that up; they compose and only apply with `--json`:
+- `mise run lint` — read-only checks via `hk check --all`: stylua (format), selene (lint
+  hygiene), lua-language-server (LuaCATS type-check), plus rumdl (markdown), taplo (TOML),
+  and shellcheck (shell).
+- `mise run test` — the headless Neovim + mini.test suite. `mise run test -f <file>` runs
+  a single file (e.g. `mise run test -f tests/test_detect.lua`).
+- `mise run format` — apply formatting in write mode (the counterpart to `lint`'s check).
+- `mise run diag` — print the diagnostics report headlessly; see
+  [`docs/agents/diagnostics.md`](docs/agents/diagnostics.md).
 
-- `-v` / `-vv` — turn up verbosity. `-v` makes any **truncated** failure full and adds a
-  snippet of each passing task; `-vv` shows every task's full output. Reach for `-v` when
-  a failure's tail was truncated and you need the whole log, or when you want to inspect a
-  passing task.
-- `--grep <regex>` — replace `output` with only the lines matching the pattern (plus
-  `matchedLines`), scanning every in-scope task. Reach for it to pull specific lines (an
-  error code, a file path) out of a large log without `-v`.
-- `--task <name>` (repeatable) — scope output to the named task(s); they show full output
-  (or, with `--grep`, the matching lines) and other tasks report status only. Reach for it
-  when you know which task you're debugging.
-
-An invalid `--grep` pattern emits an `{"event":"error"}` document and exits `2` without
-running. Plain `mise run preflight`, the human-readable form, is the one documented in the
-README.
+A `pre-commit` hook formats and lints staged files; a `pre-push` hook runs the tests.

@@ -13,6 +13,7 @@ local M = {}
 ---@field session_id string|nil Tool session id, when available.
 ---@field skill_dirs string[] Directories this tool keeps skills in.
 ---@field command_dirs string[] Directories this tool keeps commands in.
+---@field extra_commands? AgentComplete.Command[] Tool-specific commands appended to those discovered from `command_dirs` (e.g. OpenCode's `opencode.json[c]` config-map commands).
 ---@field sources? { slash: boolean, file: boolean } Enabled source toggles (set by the orchestrator; both on if absent).
 
 ---@class AgentComplete.Detector

@@ -66,7 +66,7 @@ T["diagnose_suppression"]["wrap installed but current buffer not detected"] = fu
   local r = diag.diagnose_suppression(state { detected = false })
   expect.equality(r.wrap_installed, true)
   expect.equality(r.detected, false)
-  expect.equality(has(r.cause, "not detected as a Claude Code prompt buffer"), true)
+  expect.equality(has(r.cause, "not detected as an agent prompt buffer"), true)
 end
 
 T["diagnose_suppression"]["installed and detected: agentcomplete is the only source"] = function()
@@ -162,6 +162,24 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
   expect.equality(has(out, "# agentcomplete.nvim diagnostics"), true)
   -- No session ⇒ the detection section says so rather than erroring on nil.
   expect.equality(has(out, "(none)"), true)
+end
+
+T["render"]["surfaces OpenCode env signals and the session's search dirs"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.session.tool = "opencode"
+  report.session.skill_dirs = { "/proj/.opencode/skill" }
+  report.session.command_dirs = { "/proj/.opencode/command" }
+  report.env.OPENCODE = "1"
+  report.env.OPENCODE_PID = "999"
+  report.env.OPENCODE_CONFIG_DIR = "/cfg/opencode"
+  local out = diag.render(report)
+  expect.equality(has(out, "OPENCODE:"), true)
+  expect.equality(has(out, "OPENCODE_PID:"), true)
+  expect.equality(has(out, "OPENCODE_CONFIG_DIR:"), true)
+  -- The session's search dirs tell a debugger WHERE discovery looked.
+  expect.equality(has(out, "/proj/.opencode/skill"), true)
+  expect.equality(has(out, "/proj/.opencode/command"), true)
 end
 
 return T

@@ -40,14 +40,25 @@ local function fallback_session()
 end
 
 ---Register built-in detectors (idempotent — safe across repeated setup calls).
+---Order is significant (first match wins); Claude Code before OpenCode. The two are
+---mutually exclusive in practice, so the order is harmless either way.
 local function ensure_detectors()
-  local cc = require "agentcomplete.detect.claude_code"
-  for _, d in ipairs(detect.detectors) do
-    if d.name == cc.name then
-      return
+  local builtins = {
+    require "agentcomplete.detect.claude_code",
+    require "agentcomplete.detect.opencode",
+  }
+  for _, d in ipairs(builtins) do
+    local present = false
+    for _, existing in ipairs(detect.detectors) do
+      if existing.name == d.name then
+        present = true
+        break
+      end
+    end
+    if not present then
+      detect.register(d)
     end
   end
-  detect.register(cc)
 end
 
 ---Attach completion to a buffer if a session is detected (or forced).

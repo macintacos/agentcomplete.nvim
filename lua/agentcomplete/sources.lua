@@ -64,10 +64,23 @@ function M.items(session, ctx)
         table.insert(out, { label = "/" .. s.name, insert_text = s.name, kind = "skill", detail = s.description })
       end
     end
-    for _, c in ipairs(scan.commands(session.command_dirs)) do
+    -- Markdown commands (from command_dirs) then any tool-specific extra_commands
+    -- (e.g. OpenCode config-map commands), de-duplicated by name across both.
+    local seen_cmd = {}
+    local function add_command(c)
+      if seen_cmd[c.name] then
+        return
+      end
+      seen_cmd[c.name] = true
       if matches(c.name, ctx.query) then
         table.insert(out, { label = "/" .. c.name, insert_text = c.name, kind = "command", detail = c.description })
       end
+    end
+    for _, c in ipairs(scan.commands(session.command_dirs)) do
+      add_command(c)
+    end
+    for _, c in ipairs(session.extra_commands or {}) do
+      add_command(c)
     end
   elseif ctx.trigger == "@" and enabled.file ~= false then
     for _, f in ipairs(scan.files(session.cwd)) do

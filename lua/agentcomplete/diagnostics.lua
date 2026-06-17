@@ -66,7 +66,7 @@ function M.diagnose_suppression(state)
       "The suppression wrap is NOT installed even though 'agentcomplete' is registered. The usual cause is load order: agentcomplete.setup() ran before blink.cmp.setup(), so the wrap was skipped or captured a config blink later overwrote. Ensure agentcomplete.setup() runs AFTER blink.cmp.setup()."
   elseif not state.detected then
     cause =
-      "The suppression wrap IS installed, but the current buffer is not detected as a Claude Code prompt buffer, so blink uses your original (unsuppressed) source list here. Run this from the actual claude-prompt-<uuid>.md buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."
+      "The suppression wrap IS installed, but the current buffer is not detected as an agent prompt buffer (a Claude Code 'claude-prompt-<uuid>.md' or an OpenCode '<digits>.md' under $OPENCODE), so blink uses your original (unsuppressed) source list here. Run this from the real prompt buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."
   else
     cause = "Suppression is installed AND this buffer is detected, so agentcomplete should be the only source (plus allowed_sources: "
       .. table.concat(effective, ", ")
@@ -114,7 +114,7 @@ end
 ---@field nvim_version string
 ---@field config { backend: string, resolved_backend: string, detect: string, enabled: boolean, sources: { slash: boolean, file: boolean }, allowed_sources: string[] }
 ---@field buffer { nr: integer, name: string, detected: boolean, native_attached: boolean, session_source: string }
----@field session { tool: string, cwd: string, session_id: string|nil }|nil
+---@field session { tool: string, cwd: string, session_id: string|nil, skill_dirs: string[], command_dirs: string[] }|nil
 ---@field discovery { skills: integer, commands: integer, files: integer }|nil
 ---@field blink AgentComplete.Diagnostics.Suppression
 ---@field env table<string, string|nil>
@@ -159,6 +159,8 @@ function M.render(report)
     add("- session.tool:             " .. val(s.tool))
     add("- session.cwd:              " .. val(s.cwd))
     add("- session.session_id:       " .. val(s.session_id))
+    add("- session.skill_dirs:       " .. list(s.skill_dirs))
+    add("- session.command_dirs:     " .. list(s.command_dirs))
   else
     add "- session:                  (none)"
   end
@@ -194,6 +196,11 @@ function M.render(report)
   add("- vim.g.agentcomplete_cwd: " .. val(env.agentcomplete_cwd_g))
   add("- CLAUDE_CONFIG_DIR:       " .. val(env.CLAUDE_CONFIG_DIR))
   add("- CLAUDE_CODE_SESSION_ID:  " .. val(env.CLAUDE_CODE_SESSION_ID))
+  add("- OPENCODE:                " .. val(env.OPENCODE))
+  add("- OPENCODE_PID:            " .. val(env.OPENCODE_PID))
+  add("- AGENT:                   " .. val(env.AGENT))
+  add("- OPENCODE_CONFIG_DIR:     " .. val(env.OPENCODE_CONFIG_DIR))
+  add("- XDG_CONFIG_HOME:         " .. val(env.XDG_CONFIG_HOME))
   add("- EDITOR:                  " .. val(env.EDITOR))
   add("- VISUAL:                  " .. val(env.VISUAL))
   add("- cwd:                     " .. val(env.cwd))
@@ -228,7 +235,7 @@ function M.collect(opts)
   if session then
     discovery = {
       skills = #scan.skills(session.skill_dirs),
-      commands = #scan.commands(session.command_dirs),
+      commands = #scan.commands(session.command_dirs) + #(session.extra_commands or {}),
       files = #scan.files(session.cwd),
     }
   end
@@ -263,7 +270,13 @@ function M.collect(opts)
       native_attached = attached_native ~= nil,
       session_source = session_source,
     },
-    session = session and { tool = session.tool, cwd = session.cwd, session_id = session.session_id } or nil,
+    session = session and {
+      tool = session.tool,
+      cwd = session.cwd,
+      session_id = session.session_id,
+      skill_dirs = session.skill_dirs,
+      command_dirs = session.command_dirs,
+    } or nil,
     discovery = discovery,
     blink = suppression,
     env = {
@@ -271,6 +284,11 @@ function M.collect(opts)
       agentcomplete_cwd_g = vim.g.agentcomplete_cwd,
       CLAUDE_CONFIG_DIR = vim.env.CLAUDE_CONFIG_DIR,
       CLAUDE_CODE_SESSION_ID = vim.env.CLAUDE_CODE_SESSION_ID,
+      OPENCODE = vim.env.OPENCODE,
+      OPENCODE_PID = vim.env.OPENCODE_PID,
+      AGENT = vim.env.AGENT,
+      OPENCODE_CONFIG_DIR = vim.env.OPENCODE_CONFIG_DIR,
+      XDG_CONFIG_HOME = vim.env.XDG_CONFIG_HOME,
       EDITOR = vim.env.EDITOR,
       VISUAL = vim.env.VISUAL,
       cwd = vim.loop.cwd() or vim.fn.getcwd(),

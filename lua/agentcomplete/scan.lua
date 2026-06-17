@@ -178,4 +178,150 @@ function M.claude_dirs(cwd)
   return dedup(skill_dirs), dedup(command_dirs)
 end
 
+---OpenCode's config base directories for a session rooted at `cwd`: the global config
+---home (`$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`), an optional extra base from
+---`$OPENCODE_CONFIG_DIR`, and the project-local `<cwd>/.opencode`.
+---@param cwd string
+---@return string[]
+local function opencode_config_dirs(cwd)
+  local xdg = vim.env.XDG_CONFIG_HOME
+  local global = (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
+  local bases = { global }
+  local extra = vim.env.OPENCODE_CONFIG_DIR
+  if extra and extra ~= "" then
+    table.insert(bases, extra)
+  end
+  table.insert(bases, cwd .. "/.opencode")
+  return bases
+end
+
+---Skill and command search dirs for an OpenCode session rooted at `cwd`. OpenCode keeps skills
+---under `<base>/{skill,skills}/<name>/SKILL.md` and markdown commands under `<base>/command`,
+---across the global config home, an optional `$OPENCODE_CONFIG_DIR`, and the project-local
+---`<cwd>/.opencode`. `M.skills` discovers one level deep (`<base>/{skill,skills}/<name>/SKILL.md`,
+---the same depth used for Claude), so OpenCode's deeper `**/SKILL.md` skill nesting is not found;
+---`M.commands` recurses. Config-defined commands (the `opencode.json[c]` `command` map) are
+---discovered separately by `M.opencode_commands`. Lists are de-duplicated so a base reached two
+---ways (e.g. cwd's `.opencode` also set as `$OPENCODE_CONFIG_DIR`) is not doubled.
+---@param cwd string
+---@return string[] skill_dirs
+---@return string[] command_dirs
+function M.opencode_dirs(cwd)
+  local skill_dirs, command_dirs = {}, {}
+  for _, base in ipairs(opencode_config_dirs(cwd)) do
+    table.insert(skill_dirs, base .. "/skill")
+    table.insert(skill_dirs, base .. "/skills")
+    table.insert(command_dirs, base .. "/command")
+  end
+  return dedup(skill_dirs), dedup(command_dirs)
+end
+
+---Strip `//` line and `/* */` block comments and trailing commas from a JSONC string
+---so `vim.json.decode` can parse it. Single pass and string-aware: literals (including
+---escapes) are copied verbatim, so a `//`, `/*`, or `,]` inside a value is never touched.
+---A comma is buffered and only emitted once a following non-comment, non-whitespace token
+---proves it isn't trailing — a `,` directly before `]`/`}` is dropped.
+---@param s string
+---@return string
+local function strip_jsonc(s)
+  local out, i, n, in_str = {}, 1, #s, false
+  local pending_comma = false
+  local function flush_comma()
+    if pending_comma then
+      out[#out + 1] = ","
+      pending_comma = false
+    end
+  end
+  while i <= n do
+    local c = s:sub(i, i)
+    if in_str then
+      out[#out + 1] = c
+      if c == "\\" then
+        out[#out + 1] = s:sub(i + 1, i + 1) -- copy the escaped char verbatim
+        i = i + 2
+      else
+        if c == '"' then
+          in_str = false
+        end
+        i = i + 1
+      end
+    elseif c == '"' then
+      flush_comma()
+      in_str = true
+      out[#out + 1] = c
+      i = i + 1
+    elseif c == "/" and s:sub(i + 1, i + 1) == "/" then
+      local nl = s:find("\n", i)
+      i = nl or (n + 1)
+    elseif c == "/" and s:sub(i + 1, i + 1) == "*" then
+      local close = s:find("*/", i + 2, true)
+      i = close and (close + 2) or (n + 1)
+    elseif c == "," then
+      flush_comma() -- a prior comma followed by this one isn't trailing
+      pending_comma = true
+      i = i + 1
+    elseif c == "}" or c == "]" then
+      pending_comma = false -- drop the trailing comma
+      out[#out + 1] = c
+      i = i + 1
+    elseif c:match "%s" then
+      out[#out + 1] = c -- whitespace doesn't resolve a pending comma
+      i = i + 1
+    else
+      flush_comma()
+      out[#out + 1] = c
+      i = i + 1
+    end
+  end
+  flush_comma()
+  return table.concat(out)
+end
+
+---OpenCode config files to read for config-defined commands: an explicit
+---`$OPENCODE_CONFIG` file, the global config home's `opencode.json[c]`, and the
+---project-root `opencode.json[c]`. Walk-up ancestors are not searched.
+---@param cwd string
+---@return string[]
+local function opencode_config_files(cwd)
+  local files = {}
+  local explicit = vim.env.OPENCODE_CONFIG
+  if explicit and explicit ~= "" then
+    files[#files + 1] = explicit
+  end
+  local xdg = vim.env.XDG_CONFIG_HOME
+  local home = (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
+  for _, base in ipairs { home, cwd } do
+    files[#files + 1] = base .. "/opencode.json"
+    files[#files + 1] = base .. "/opencode.jsonc"
+  end
+  return files
+end
+
+---Config-defined commands for an OpenCode session: the `command` map in
+---`opencode.json` / `opencode.jsonc` (a name → spec table, whose `description` is
+---surfaced). Complements the markdown command files discovered via `opencode_dirs`.
+---De-duplicated by name (first file wins). A missing or malformed file is skipped.
+---@param cwd string
+---@return AgentComplete.Command[]
+function M.opencode_commands(cwd)
+  local out, seen = {}, {}
+  for _, file in ipairs(opencode_config_files(cwd)) do
+    if vim.fn.filereadable(file) == 1 then
+      local ok, data = pcall(function()
+        return vim.json.decode(strip_jsonc(table.concat(vim.fn.readfile(file), "\n")))
+      end)
+      if ok and type(data) == "table" and type(data.command) == "table" then
+        for name, spec in pairs(data.command) do
+          if type(name) == "string" and not seen[name] then
+            seen[name] = true
+            local desc = type(spec) == "table" and spec.description or nil
+            out[#out + 1] = { name = name, description = desc, path = file }
+          end
+        end
+      end
+    end
+  end
+  return out
+end
+
 return M

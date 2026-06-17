@@ -95,6 +95,34 @@ T["items"]["slash trigger returns skills + commands matching the query prefix"] 
   expect.equality(by_label["/deploy-helper"].kind, "skill")
 end
 
+T["items"]["slash trigger includes session.extra_commands, deduped against markdown commands"] = function()
+  local sources = require "agentcomplete.sources"
+  local session = fixture_session()
+  -- "ship" is config-only; "deploy" also exists as a markdown command (deploy.md).
+  session.extra_commands = {
+    { name = "ship", description = "From config" },
+    { name = "deploy", description = "config dup of the markdown command" },
+  }
+  local items = sources.items(session, { trigger = "/", query = "", start_col = 1 })
+  local labels = vim.tbl_map(function(i)
+    return i.label
+  end, items)
+  expect.equality(vim.tbl_contains(labels, "/ship"), true)
+  local n_deploy = 0
+  for _, l in ipairs(labels) do
+    if l == "/deploy" then
+      n_deploy = n_deploy + 1
+    end
+  end
+  expect.equality(n_deploy, 1) -- deduped: not listed twice
+  local by_label = {}
+  for _, i in ipairs(items) do
+    by_label[i.label] = i
+  end
+  expect.equality(by_label["/ship"].kind, "command")
+  expect.equality(by_label["/ship"].detail, "From config")
+end
+
 T["items"]["at trigger returns files under cwd matching the query"] = function()
   local sources = require "agentcomplete.sources"
   local session = fixture_session()

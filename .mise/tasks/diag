@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Print agentcomplete diagnostics from a headless Neovim (blink + path)"
+#MISE description="Print agentcomplete diagnostics from a headless Neovim (blink/path suppression + OpenCode detection)"
 
 set -euo pipefail
 
@@ -9,6 +9,7 @@ if [ ! -d "$blink_dir" ]; then
   exit 1
 fi
 
+echo "=== Claude Code / blink suppression pass ==="
 # Set blink up (with `path` as a source) BEFORE agentcomplete, so the suppression
 # wrap captures blink's real config, and name the buffer like a Claude prompt so it
 # is detected. The report should then show `path` removed from the effective
@@ -19,5 +20,18 @@ nvim --headless --noplugin -u tests/minimal_init.lua \
   -c 'lua require("agentcomplete").setup({})' \
   -c 'file claude-prompt-diag.md' \
   -c 'AgentCompleteAttach' \
+  -c 'luafile scripts/diagnostics.lua' \
+  -c 'qa!'
+
+echo
+echo "=== OpenCode detection pass ==="
+# Simulate an OpenCode external-editor session: OpenCode sets OPENCODE=1 in the
+# environment (inherited by the spawned editor) and writes the prompt to a bare
+# <epoch-millis>.md temp file. With those two signals the diagnostics report should
+# show `session.tool: opencode` and the resolved OpenCode skill/command search dirs —
+# the same `:luafile scripts/diagnostics.lua` flow a human runs from an OpenCode buffer.
+OPENCODE=1 OPENCODE_PID=99999 nvim --headless --noplugin -u tests/minimal_init.lua \
+  -c 'lua require("agentcomplete").setup({})' \
+  -c 'file 1700000000000.md' \
   -c 'luafile scripts/diagnostics.lua' \
   -c 'qa!'
