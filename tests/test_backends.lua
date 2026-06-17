@@ -128,4 +128,173 @@ T["attach"]["native attach sets a buffer-local completefunc; detach clears it"] 
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
+-- Suppression: pure decision functions (constrain, resolve_sources) and the
+-- install/uninstall glue that wraps blink's source lists. The glue is tested
+-- against an injected fake blink config; package.loaded is reset per case so
+-- module-level state (_detected stub, _installed) never leaks between tests.
+T["suppress"] = new_set {
+  hooks = {
+    post_case = function()
+      package.loaded["agentcomplete.backends.blink"] = nil
+    end,
+  },
+}
+
+T["suppress"]["constrain: empty allowed yields just agentcomplete"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local effective, dropped = blink.constrain({}, { agentcomplete = true, path = true })
+  expect.equality(effective, { "agentcomplete" })
+  expect.equality(dropped, {})
+end
+
+T["suppress"]["constrain: registered allowed kept in order, unregistered dropped"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local effective, dropped = blink.constrain(
+    { "path", "ghost", "lsp" },
+    { agentcomplete = true, path = true, lsp = true }
+  )
+  expect.equality(effective, { "agentcomplete", "path", "lsp" })
+  expect.equality(dropped, { "ghost" })
+end
+
+T["suppress"]["constrain: agentcomplete is never duplicated"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local effective = blink.constrain({ "agentcomplete", "path" }, { agentcomplete = true, path = true })
+  expect.equality(effective, { "agentcomplete", "path" })
+end
+
+T["suppress"]["resolve_sources: detected returns the constrained list, ignoring the original"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local effective = { "agentcomplete", "path" }
+  expect.equality(blink.resolve_sources({ "lsp", "buffer" }, effective, true), effective)
+  expect.equality(
+    blink.resolve_sources(function()
+      return { "lsp" }
+    end, effective, true),
+    effective
+  )
+end
+
+T["suppress"]["resolve_sources: not detected passes a list original through unchanged"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(blink.resolve_sources({ "lsp", "buffer" }, { "agentcomplete" }, false), { "lsp", "buffer" })
+end
+
+T["suppress"]["resolve_sources: not detected evaluates a function original"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local called = false
+  local original = function()
+    called = true
+    return { "lsp", "snippets" }
+  end
+  expect.equality(blink.resolve_sources(original, { "agentcomplete" }, false), { "lsp", "snippets" })
+  expect.equality(called, true)
+end
+
+T["suppress"]["install gates default + per_filetype on detection; uninstall restores"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local fake = {
+    sources = {
+      providers = { agentcomplete = true, path = true },
+      default = { "lsp", "path", "buffer" },
+      per_filetype = { markdown = { "lsp", "buffer" } },
+    },
+  }
+  local detected = false
+  expect.equality(
+    blink.install_suppression({ allowed_sources = { "path" } }, fake, function()
+      return detected
+    end),
+    true
+  )
+  -- Detected: only agentcomplete + allowed, beating BOTH default and per_filetype.markdown.
+  detected = true
+  expect.equality(fake.sources.default(), { "agentcomplete", "path" })
+  expect.equality(fake.sources.per_filetype.markdown(), { "agentcomplete", "path" })
+  -- Not detected: the user's original lists pass through untouched.
+  detected = false
+  expect.equality(fake.sources.default(), { "lsp", "path", "buffer" })
+  expect.equality(fake.sources.per_filetype.markdown(), { "lsp", "buffer" })
+  -- Uninstall restores the exact original values (not wrapped functions).
+  blink.uninstall_suppression(fake)
+  expect.equality(fake.sources.default, { "lsp", "path", "buffer" })
+  expect.equality(fake.sources.per_filetype.markdown, { "lsp", "buffer" })
+end
+
+T["suppress"]["install is idempotent: re-install re-captures pristine originals"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local fake = {
+    sources = {
+      providers = { agentcomplete = true, path = true, lsp = true },
+      default = { "lsp", "path" },
+      per_filetype = {},
+    },
+  }
+  local detected = false
+  local pred = function()
+    return detected
+  end
+  blink.install_suppression({ allowed_sources = { "path" } }, fake, pred)
+  blink.install_suppression({ allowed_sources = { "lsp" } }, fake, pred) -- second setup, different allowed
+  detected = true
+  expect.equality(fake.sources.default(), { "agentcomplete", "lsp" })
+  detected = false
+  expect.equality(fake.sources.default(), { "lsp", "path" }) -- pristine original, not double-wrapped
+end
+
+T["suppress"]["unregistered allowed_sources are dropped and warned once at WARN"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local fake =
+    { sources = { providers = { agentcomplete = true, path = true }, default = { "lsp" }, per_filetype = {} } }
+  local notes = {}
+  local orig_notify = vim.notify
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.notify = function(msg, level)
+    table.insert(notes, { msg = msg, level = level })
+  end
+  local ok = blink.install_suppression({ allowed_sources = { "path", "ghost", "phantom" } }, fake, function()
+    return true
+  end)
+  vim.notify = orig_notify
+  expect.equality(ok, true)
+  expect.equality(fake.sources.default(), { "agentcomplete", "path" }) -- ghost/phantom dropped
+  expect.equality(#notes, 1)
+  expect.equality(notes[1].level, vim.log.levels.WARN)
+  expect.equality(notes[1].msg:find("ghost", 1, true) ~= nil, true)
+  expect.equality(notes[1].msg:find("phantom", 1, true) ~= nil, true)
+end
+
+T["suppress"]["agentcomplete not registered: returns false, leaves config untouched, warns"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local original_default = { "lsp", "path" }
+  local fake = { sources = { providers = { path = true }, default = original_default, per_filetype = {} } }
+  local notes = {}
+  local orig_notify = vim.notify
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.notify = function(msg, level)
+    table.insert(notes, { msg = msg, level = level })
+  end
+  local ok = blink.install_suppression({ allowed_sources = {} }, fake)
+  vim.notify = orig_notify
+  expect.equality(ok, false)
+  expect.equality(fake.sources.default, original_default) -- unchanged: still the raw list, not a function
+  expect.equality(#notes >= 1, true)
+  expect.equality(notes[1].level, vim.log.levels.WARN)
+end
+
+T["suppress"]["install_suppression is a no-op (false) when blink is absent"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(blink.install_suppression { allowed_sources = {} }, false) -- no injected bcfg, blink not installed
+end
+
+T["suppress"]["dispatcher: false when blink is not the active backend"] = function()
+  local backends = require "agentcomplete.backends"
+  expect.equality(backends.install_suppression { backend = "native" }, false)
+end
+
+T["suppress"]["dispatcher: backend=blink but blink absent returns false without error"] = function()
+  local backends = require "agentcomplete.backends"
+  expect.equality(backends.install_suppression { backend = "blink", allowed_sources = {} }, false)
+end
+
 return T

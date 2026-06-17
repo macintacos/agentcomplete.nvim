@@ -3,6 +3,7 @@
 ---@field backend "auto"|"blink"|"native" Completion backend ("auto" prefers blink.cmp when present).
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
+---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
 
 ---@class AgentComplete
 local M = {}
@@ -18,6 +19,7 @@ local defaults = {
   backend = "auto",
   detect = "auto",
   sources = { slash = true, file = true },
+  allowed_sources = {},
 }
 
 ---@type AgentComplete.Config
@@ -89,6 +91,7 @@ end
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
   ensure_detectors()
+  backends.install_suppression(M.config)
 
   vim.api.nvim_create_user_command("AgentCompleteAttach", function()
     M.attach(0, { force = true })

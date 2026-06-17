@@ -42,4 +42,15 @@ function M.detach(buf)
   native.detach(buf)
 end
 
+---Install blink source suppression when blink is the active backend.
+---No-op (returns false) for the native backend or when blink is absent.
+---@param config { backend?: "auto"|"blink"|"native", allowed_sources?: string[] }
+---@return boolean installed
+function M.install_suppression(config)
+  if M.select(config) ~= "blink" then
+    return false
+  end
+  return require("agentcomplete.backends.blink").install_suppression(config)
+end
+
 return M
