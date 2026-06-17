@@ -1,7 +1,8 @@
 # agentcomplete.nvim
 
-Completion of Claude Code skills, commands, and files inside the prompt buffer that Claude
-Code opens in Neovim via its `chat:externalEditor` command (`Ctrl+G`). Works through
+Completion of agent-CLI skills, commands, and files inside the prompt buffer that
+[Claude Code](https://docs.claude.com/en/docs/claude-code) (`Ctrl+G`) or
+[OpenCode](https://opencode.ai) (`/editor`) opens in Neovim. Works through
 [blink.cmp](https://github.com/Saghen/blink.cmp) v2 (preferred, auto-detected) or Neovim's
 built-in completion.
 
@@ -9,20 +10,33 @@ built-in completion.
 
 ## How it works
 
+### Claude Code
+
 When you press `Ctrl+G` in Claude Code, it writes your prompt to a temporary file
 (`…/claude-<uid>/claude-prompt-<uuid>.md`) and opens it in `$VISUAL`/`$EDITOR`, with the
-editor's working directory set to your project root.
-
-agentcomplete recognizes that buffer **by name** and attaches completion, rooting `@file`
-completion at the editor's working directory. `/` completes skills and commands discovered
-from your global `~/.claude/{skills,commands}`, every enabled Claude Code plugin (read
-from `~/.claude/plugins/installed_plugins.json`), and the project-local
+editor's working directory set to your project root. agentcomplete recognizes that buffer
+**by name** and attaches completion, rooting `@file` completion at the editor's working
+directory. `/` completes skills and commands discovered from your global
+`~/.claude/{skills,commands}`, every enabled Claude Code plugin (read from
+`~/.claude/plugins/installed_plugins.json`), and the project-local
 `<cwd>/.claude/{skills,commands}`.
 
-No environment variable, companion plugin, or external dependency is required — the editor
+### OpenCode
+
+OpenCode's external editor (`/editor`, default `<leader>e`) writes your prompt to a bare
+`<epoch-millis>.md` file in the system temp dir — a name with nothing OpenCode-specific in
+it. So instead of matching the name, agentcomplete keys on `OPENCODE=1`, which OpenCode
+sets in the environment for every command and the spawned editor inherits (corroborated by
+the `<digits>.md` buffer shape). `@file` is rooted at the editor's working directory (your
+project root). `/` completes skills (`{skill,skills}/**/SKILL.md`) and markdown commands
+discovered from the global `~/.config/opencode` (honoring `$XDG_CONFIG_HOME` /
+`$OPENCODE_CONFIG_DIR`) and the project-local `<cwd>/.opencode`. Config-defined commands
+(the `opencode.json[c]` `command` map) are not completed yet.
+
+No companion plugin or external dependency is required for either tool — the editor
 already has everything detection needs. Detection lives behind a per-tool registry, so
-support for other agent CLIs can be added by registering another detector without touching
-the completion engine.
+support for further agent CLIs can be added by registering another detector without
+touching the completion engine.
 
 ## Requirements
 
@@ -161,13 +175,13 @@ mise run setup      # install pinned tools, fetch test deps, register git hooks
 
 Day-to-day:
 
-| Command              | What it does                                         |
-| -------------------- | ---------------------------------------------------- |
-| `mise run format`    | Format all files (stylua + baseline), write mode     |
-| `mise run lint`      | Lint + type-check (selene, lua-language-server, …)   |
-| `mise run test`      | Run the test suite (headless Neovim + mini.test)     |
-| `mise run preflight` | `lint` + `test` — run before pushing                 |
-| `mise run diag`      | Print a diagnostics report (headless, sets up blink) |
+| Command              | What it does                                            |
+| -------------------- | ------------------------------------------------------- |
+| `mise run format`    | Format all files (stylua + baseline), write mode        |
+| `mise run lint`      | Lint + type-check (selene, lua-language-server, …)      |
+| `mise run test`      | Run the test suite (headless Neovim + mini.test)        |
+| `mise run preflight` | `lint` + `test` — run before pushing                    |
+| `mise run diag`      | Print a diagnostics report (headless: blink + OpenCode) |
 
 The Lua toolchain: **stylua** (format), **selene** (lint hygiene), **lua-language-server**
 (LuaCATS type-check), **mini.test** (tests). A `pre-commit` hook formats and lints staged
@@ -175,8 +189,8 @@ files; a `pre-push` hook runs the tests.
 
 ### Diagnostics
 
-To debug behavior inside the prompt buffer Claude Code opens, load the diagnostics script
-from that buffer:
+To debug behavior inside the prompt buffer Claude Code or OpenCode opens, load the
+diagnostics script from that buffer:
 
 ```vim
 :AgentCompleteAttach    " optional: force a session if the buffer wasn't auto-detected
@@ -188,9 +202,11 @@ discovered skills/commands/files, and the blink only-source suppression diagnosi
 likely-cause line) — prints it to `:messages`, and writes it to
 `.tmp/agentcomplete-diagnostics.md` under the editor's working directory.
 
-That file exists to hand state to a Claude Code agent session: an agent can't launch
-Neovim from its own session to watch the plugin, but it can read the report.
-`mise run diag` runs the same flow headlessly against a real blink setup (with `path` as a
-source) in a simulated prompt buffer, so it also validates that only-source suppression
-removes `path` (it uses a pinned blink v1 — v2 needs the compiled `blink.lib`, which can't
-build in CI — but the suppression wrap reads the same config on both).
+That file exists to hand state to an agent session: an agent can't launch Neovim from its
+own session to watch the plugin, but it can read the report. `mise run diag` runs the same
+flow headlessly in two passes: a Claude Code / blink pass against a real blink setup (with
+`path` as a source) in a simulated prompt buffer — validating that only-source suppression
+removes `path` (it uses a pinned blink v1; v2 needs the compiled `blink.lib`, which can't
+build in CI, but the suppression wrap reads the same config on both) — and an OpenCode
+pass that sets `OPENCODE=1` on a `<digits>.md` buffer and confirms detection reports
+`session.tool: opencode` with the resolved OpenCode search dirs.
