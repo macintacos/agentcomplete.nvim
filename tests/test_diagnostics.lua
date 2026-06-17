@@ -66,7 +66,7 @@ T["diagnose_suppression"]["wrap installed but current buffer not detected"] = fu
   local r = diag.diagnose_suppression(state { detected = false })
   expect.equality(r.wrap_installed, true)
   expect.equality(r.detected, false)
-  expect.equality(has(r.cause, "not detected as a Claude Code prompt buffer"), true)
+  expect.equality(has(r.cause, "not detected as an agent prompt buffer"), true)
 end
 
 T["diagnose_suppression"]["installed and detected: agentcomplete is the only source"] = function()

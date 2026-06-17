@@ -195,12 +195,14 @@ local function opencode_config_dirs(cwd)
   return bases
 end
 
----Skill and command search dirs for an OpenCode session rooted at `cwd`. OpenCode discovers
----skills as `{skill,skills}/**/SKILL.md` and supports markdown command files under
----`<base>/command`, across the global config home, an optional `$OPENCODE_CONFIG_DIR`, and the
----project-local `<cwd>/.opencode`. Lists are de-duplicated so a base reached two ways (e.g.
----cwd's `.opencode` also set as `$OPENCODE_CONFIG_DIR`) does not double its completions.
----Config-defined commands (the `opencode.json[c]` `command` map) are not discovered here.
+---Skill and command search dirs for an OpenCode session rooted at `cwd`. OpenCode keeps skills
+---under `<base>/{skill,skills}/<name>/SKILL.md` and markdown commands under `<base>/command`,
+---across the global config home, an optional `$OPENCODE_CONFIG_DIR`, and the project-local
+---`<cwd>/.opencode`. `M.skills` discovers one level deep (`<base>/{skill,skills}/<name>/SKILL.md`,
+---the same depth used for Claude), so OpenCode's deeper `**/SKILL.md` skill nesting is not found;
+---`M.commands` recurses. Config-defined commands (the `opencode.json[c]` `command` map) are not
+---discovered here. Lists are de-duplicated so a base reached two ways (e.g. cwd's `.opencode`
+---also set as `$OPENCODE_CONFIG_DIR`) is not doubled.
 ---@param cwd string
 ---@return string[] skill_dirs
 ---@return string[] command_dirs

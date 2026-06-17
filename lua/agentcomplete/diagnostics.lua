@@ -66,7 +66,7 @@ function M.diagnose_suppression(state)
       "The suppression wrap is NOT installed even though 'agentcomplete' is registered. The usual cause is load order: agentcomplete.setup() ran before blink.cmp.setup(), so the wrap was skipped or captured a config blink later overwrote. Ensure agentcomplete.setup() runs AFTER blink.cmp.setup()."
   elseif not state.detected then
     cause =
-      "The suppression wrap IS installed, but the current buffer is not detected as a Claude Code prompt buffer, so blink uses your original (unsuppressed) source list here. Run this from the actual claude-prompt-<uuid>.md buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."
+      "The suppression wrap IS installed, but the current buffer is not detected as an agent prompt buffer (a Claude Code 'claude-prompt-<uuid>.md' or an OpenCode '<digits>.md' under $OPENCODE), so blink uses your original (unsuppressed) source list here. Run this from the real prompt buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."
   else
     cause = "Suppression is installed AND this buffer is detected, so agentcomplete should be the only source (plus allowed_sources: "
       .. table.concat(effective, ", ")
