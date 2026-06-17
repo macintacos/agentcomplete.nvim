@@ -273,7 +273,7 @@ function M.collect(opts)
       CLAUDE_CODE_SESSION_ID = vim.env.CLAUDE_CODE_SESSION_ID,
       EDITOR = vim.env.EDITOR,
       VISUAL = vim.env.VISUAL,
-      cwd = vim.loop.cwd(),
+      cwd = vim.loop.cwd() or vim.fn.getcwd(),
     },
   }
 end
@@ -290,9 +290,11 @@ function M.run(opts)
 
   local path
   if opts.write ~= false then
-    path = opts.path or (vim.loop.cwd() .. "/.tmp/agentcomplete-diagnostics.md")
+    path = opts.path or ((vim.loop.cwd() or vim.fn.getcwd()) .. "/.tmp/agentcomplete-diagnostics.md")
     vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
-    local ok, err = pcall(vim.fn.writefile, vim.split(text, "\n"), path)
+    -- render() ends in a trailing newline; trimempty drops the resulting empty
+    -- final element so the file gets a single trailing newline, not a blank line.
+    local ok, err = pcall(vim.fn.writefile, vim.split(text, "\n", { trimempty = true }), path)
     if ok then
       text = text .. "\nWrote diagnostics to: " .. path .. "\n"
     else

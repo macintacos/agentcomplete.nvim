@@ -136,6 +136,8 @@ T["render"]["includes the title and every section header"] = function()
   end
   -- The diagnosis cause is surfaced in the body.
   expect.equality(has(out, "only source"), true)
+  -- The discovery counts from the report render (42 = files, distinctive here).
+  expect.equality(has(out, "42"), true)
 end
 
 T["render"]["a minimal report (no session, blink inactive) renders without error"] = function()
