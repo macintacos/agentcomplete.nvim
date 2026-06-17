@@ -28,8 +28,8 @@ OpenCode's external editor (`/editor`, default `<leader>e`) writes your prompt t
 it. So instead of matching the name, agentcomplete keys on `OPENCODE=1`, which OpenCode
 sets in the environment for every command and the spawned editor inherits (corroborated by
 the `<digits>.md` buffer shape). `@file` is rooted at the editor's working directory (your
-project root). `/` completes skills (`{skill,skills}/**/SKILL.md`) and markdown commands
-discovered from the global `~/.config/opencode` (honoring `$XDG_CONFIG_HOME` /
+project root). `/` completes skills (`{skill,skills}/<name>/SKILL.md`) and markdown
+commands discovered from the global `~/.config/opencode` (honoring `$XDG_CONFIG_HOME` /
 `$OPENCODE_CONFIG_DIR`) and the project-local `<cwd>/.opencode`. Config-defined commands
 (the `opencode.json[c]` `command` map) are not completed yet.
 

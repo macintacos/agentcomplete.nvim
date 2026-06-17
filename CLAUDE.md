@@ -1,4 +1,27 @@
-# Agent guidance for agentcomplete.nvim
+# agentcomplete.nvim — agent guidance
+
+agentcomplete completes an agent CLI's skills, commands, and files inside the prompt
+buffer that CLI opens in Neovim (Claude Code via `Ctrl+G`, OpenCode via `/editor`).
+Detailed references live in [`docs/agents/`](docs/agents/) and load **on demand** — the
+Routing section below is the router that decides which a given task needs. The CodeGraph
+and Verifying-changes sections beneath it are always-on context for this project.
+
+## Routing
+
+Read the digraph as a checklist, not a single path: start from what you're doing and load
+every reference whose edge matches. Read the matching `docs/agents/*.md` file into context
+*before* you act on that area, not after.
+
+```graphviz
+digraph agentcomplete_router {
+    "Working on agentcomplete.nvim" [shape=doublecircle];
+    "What are you doing?" [shape=diamond];
+    "Load docs/agents/diagnostics.md" [shape=box];
+
+    "Working on agentcomplete.nvim" -> "What are you doing?";
+    "What are you doing?" -> "Load docs/agents/diagnostics.md" [label="debugging detection or completion in a prompt buffer (:luafile scripts/diagnostics.lua, mise run diag); understanding how each agent CLI is detected"];
+}
+```
 
 ## CodeGraph
 
@@ -48,85 +71,18 @@ after editing a file in the same turn — give it a beat, or trust your edit.
 
 ## Verifying changes
 
-`mise run preflight` is the pre-push gate — lint, unit + e2e tests, and build, run
-concurrently. When **you** (an agent) run it, pass `--json`. `mise run preflight --json`
-replaces the live human display with two compact JSON documents on stdout, one per line: a
-`start` document (the planned tasks plus the filters in effect) and a `result` document
-carrying each task's status and an overall `ok` boolean. The exit code is unchanged (`0`
-pass, `1` fail).
+`mise run preflight` is the pre-push gate. It is a thin wrapper declared as
+`depends=["lint", "test"]`, so mise runs `lint` then `test`; reaching the end prints
+`preflight: lint + test passed`. There is no `--json` mode, no build step, and no extra
+flags — when a task fails, run it directly to see its full output and narrow the failure:
 
-`mise run preflight --json` is the call you want almost every time.
-**Failures show their output by default**, so you can act immediately — and if a task's
-output is large it's abbreviated to its last 20 lines with `totalLines` and
-`"truncated": true` so you know there's more. Passing tasks stay status-only to keep the
-result small. The flags below turn that up; they compose and only apply with `--json`:
+- `mise run lint` — read-only checks via `hk check --all`: stylua (format), selene (lint
+  hygiene), lua-language-server (LuaCATS type-check), plus rumdl (markdown), taplo (TOML),
+  and shellcheck (shell).
+- `mise run test` — the headless Neovim + mini.test suite. `mise run test -f <file>` runs
+  a single file (e.g. `mise run test -f tests/test_detect.lua`).
+- `mise run format` — apply formatting in write mode (the counterpart to `lint`'s check).
+- `mise run diag` — print the diagnostics report headlessly; see
+  [`docs/agents/diagnostics.md`](docs/agents/diagnostics.md).
 
-- `-v` / `-vv` — turn up verbosity. `-v` makes any **truncated** failure full and adds a
-  snippet of each passing task; `-vv` shows every task's full output. Reach for `-v` when
-  a failure's tail was truncated and you need the whole log, or when you want to inspect a
-  passing task.
-- `--grep <regex>` — replace `output` with only the lines matching the pattern (plus
-  `matchedLines`), scanning every in-scope task. Reach for it to pull specific lines (an
-  error code, a file path) out of a large log without `-v`.
-- `--task <name>` (repeatable) — scope output to the named task(s); they show full output
-  (or, with `--grep`, the matching lines) and other tasks report status only. Reach for it
-  when you know which task you're debugging.
-
-An invalid `--grep` pattern emits an `{"event":"error"}` document and exits `2` without
-running. Plain `mise run preflight`, the human-readable form, is the one documented in the
-README.
-
-## Diagnosing agentcomplete
-
-agentcomplete attaches completion to the prompt buffer an agent CLI opens in Neovim. An
-agent session can't launch a second Neovim from itself to watch the plugin, so when
-completion misbehaves there ("no completions", "wrong sources", "not detected") the
-diagnostics module dumps the live plugin state to a file the agent can read back. This is
-the loop to follow before guessing at a fix.
-
-```graphviz
-digraph diagnose_agentcomplete {
-    "Completion wrong in an agent prompt buffer?" [shape=doublecircle];
-    "Can you reach the live prompt buffer?" [shape=diamond];
-    "In that buffer: :luafile scripts/diagnostics.lua" [shape=box];
-    "No live buffer: mise run diag (headless Claude/blink + OpenCode passes)" [shape=box];
-    "Read .tmp/agentcomplete-diagnostics.md (under the editor cwd)" [shape=box];
-    "Inspect: session.tool, buffer detected, discovery counts, blink 'Likely cause'" [shape=box];
-    "Wrong tool / not detected?" [shape=diamond];
-    "Verify the detection signal (table below)" [shape=box];
-    "0 skills / commands / files?" [shape=diamond];
-    "Check session.skill_dirs / command_dirs — discovery looked in the wrong place" [shape=box];
-    "blink showing extra sources?" [shape=diamond];
-    "Read the 'Likely cause' line — it walks the suppression mechanism in failure order" [shape=box];
-
-    "Completion wrong in an agent prompt buffer?" -> "Can you reach the live prompt buffer?";
-    "Can you reach the live prompt buffer?" -> "In that buffer: :luafile scripts/diagnostics.lua" [label="yes"];
-    "Can you reach the live prompt buffer?" -> "No live buffer: mise run diag (headless Claude/blink + OpenCode passes)" [label="no"];
-    "In that buffer: :luafile scripts/diagnostics.lua" -> "Read .tmp/agentcomplete-diagnostics.md (under the editor cwd)";
-    "Read .tmp/agentcomplete-diagnostics.md (under the editor cwd)" -> "Inspect: session.tool, buffer detected, discovery counts, blink 'Likely cause'";
-    "No live buffer: mise run diag (headless Claude/blink + OpenCode passes)" -> "Inspect: session.tool, buffer detected, discovery counts, blink 'Likely cause'";
-    "Inspect: session.tool, buffer detected, discovery counts, blink 'Likely cause'" -> "Wrong tool / not detected?";
-    "Wrong tool / not detected?" -> "Verify the detection signal (table below)" [label="yes"];
-    "Wrong tool / not detected?" -> "0 skills / commands / files?" [label="no"];
-    "0 skills / commands / files?" -> "Check session.skill_dirs / command_dirs — discovery looked in the wrong place" [label="yes"];
-    "0 skills / commands / files?" -> "blink showing extra sources?" [label="no"];
-    "blink showing extra sources?" -> "Read the 'Likely cause' line — it walks the suppression mechanism in failure order" [label="yes"];
-}
-```
-
-### Detection signals
-
-How each tool's prompt buffer is recognized (detectors live under
-`lua/agentcomplete/detect/`):
-
-| Tool | Signal | cwd |
-| --- | --- | --- |
-| Claude Code | buffer name matches `claude-prompt-<uuid>.md` | editor cwd (project root) |
-| OpenCode | `vim.env.OPENCODE == "1"` (set for every OpenCode command, inherited by the spawned editor) **and** buffer basename matches `<digits>.md` | editor cwd (project root) |
-
-Both honor `$AGENTCOMPLETE_CWD` / `vim.g.agentcomplete_cwd` to override the cwd.
-OpenCode's temp file has no tool-specific name — it is a bare `<epoch-millis>.md` in the
-system temp dir — which is why detection keys on the inherited `OPENCODE` env var rather
-than the buffer name. The report's `## Environment` section surfaces the raw signals
-(`OPENCODE`, `OPENCODE_PID`, `CLAUDE_CODE_SESSION_ID`, …) and `## Detection` shows the
-resolved `session.tool` plus the `skill_dirs` / `command_dirs` discovery searched.
+A `pre-commit` hook formats and lints staged files; a `pre-push` hook runs the tests.
