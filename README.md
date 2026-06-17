@@ -31,7 +31,10 @@ the `<digits>.md` buffer shape). `@file` is rooted at the editor's working direc
 project root). `/` completes skills (`{skill,skills}/<name>/SKILL.md`), markdown commands,
 and config-defined commands (the `opencode.json[c]` `command` map), discovered from the
 global `~/.config/opencode` (honoring `$XDG_CONFIG_HOME` / `$OPENCODE_CONFIG_DIR`), the
-project-local `<cwd>/.opencode`, and `opencode.json[c]` at the project root.
+project-local `<cwd>/.opencode`, and `opencode.json[c]` at the project root — plus
+OpenCode's built-in TUI commands (`/init`, `/undo`, `/share`, …). Built-ins that are
+interactive TUI affordances (`/help`, `/models`, `/editor`, …) are hidden by default; set
+`opencode.show_all_builtin_commands = true` to complete those too.
 
 No companion plugin or external dependency is required for either tool — the editor
 already has everything detection needs. Detection lives behind a per-tool registry, so
@@ -80,6 +83,9 @@ require("agentcomplete").setup({
     file  = true,        -- complete @path/to/file
   },
   allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
+  opencode = {
+    show_all_builtin_commands = false, -- also complete interactive built-ins (/help, /models, /editor, …)
+  },
 })
 ```
 

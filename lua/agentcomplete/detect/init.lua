@@ -15,6 +15,7 @@ local M = {}
 ---@field command_dirs string[] Directories this tool keeps commands in.
 ---@field extra_commands? AgentComplete.Command[] Tool-specific commands appended to those discovered from `command_dirs` (e.g. OpenCode's `opencode.json[c]` config-map commands).
 ---@field sources? { slash: boolean, file: boolean } Enabled source toggles (set by the orchestrator; both on if absent).
+---@field show_all_builtin_commands? boolean When false/absent, built-in commands tagged `hidden` are filtered out of completion (set by the orchestrator from config).
 
 ---@class AgentComplete.Detector
 ---@field name string

@@ -149,4 +149,45 @@ T["items"]["honors session.sources toggles"] = function()
   expect.equality(sources.items(session, { trigger = "/", query = "", start_col = 1 }), {})
 end
 
+T["items"]["excludes hidden built-in commands by default"] = function()
+  local sources = require "agentcomplete.sources"
+  local scan = require "agentcomplete.scan"
+  local session = fixture_session()
+  session.extra_commands = scan.opencode_builtin_commands()
+  local labels = vim.tbl_map(function(i)
+    return i.label
+  end, sources.items(session, { trigger = "/", query = "", start_col = 1 }))
+  expect.equality(vim.tbl_contains(labels, "/init"), true) -- shown: a conversation/session action
+  expect.equality(vim.tbl_contains(labels, "/help"), false) -- hidden: opens a dialog
+  expect.equality(vim.tbl_contains(labels, "/editor"), false) -- hidden: you are already in the editor
+end
+
+T["items"]["includes hidden built-ins when session.show_all_builtin_commands is set"] = function()
+  local sources = require "agentcomplete.sources"
+  local scan = require "agentcomplete.scan"
+  local session = fixture_session()
+  session.extra_commands = scan.opencode_builtin_commands()
+  session.show_all_builtin_commands = true
+  local labels = vim.tbl_map(function(i)
+    return i.label
+  end, sources.items(session, { trigger = "/", query = "", start_col = 1 }))
+  expect.equality(vim.tbl_contains(labels, "/help"), true)
+  expect.equality(vim.tbl_contains(labels, "/editor"), true)
+end
+
+T["items"]["a user command overrides a hidden built-in of the same name"] = function()
+  local sources = require "agentcomplete.sources"
+  local scan = require "agentcomplete.scan"
+  local session = fixture_session()
+  -- user-defined "help" ordered before the hidden built-in, mirroring how the detector merges them
+  session.extra_commands = { { name = "help", description = "my help" } }
+  vim.list_extend(session.extra_commands, scan.opencode_builtin_commands())
+  local by = {}
+  for _, i in ipairs(sources.items(session, { trigger = "/", query = "help", start_col = 1 })) do
+    by[i.label] = i
+  end
+  expect.equality(by["/help"] ~= nil, true) -- shown because the user defined it (not hidden)
+  expect.equality(by["/help"].detail, "my help")
+end
+
 return T

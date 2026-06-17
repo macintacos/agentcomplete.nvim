@@ -72,6 +72,9 @@ function M.items(session, ctx)
         return
       end
       seen_cmd[c.name] = true
+      if c.hidden and not session.show_all_builtin_commands then
+        return
+      end
       if matches(c.name, ctx.query) then
         table.insert(out, { label = "/" .. c.name, insert_text = c.name, kind = "command", detail = c.description })
       end
