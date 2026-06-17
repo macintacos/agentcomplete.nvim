@@ -65,6 +65,7 @@ require("agentcomplete").setup({
     slash = true,        -- complete /skill and /command
     file  = true,        -- complete @path/to/file
   },
+  allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
 })
 ```
 
@@ -89,6 +90,36 @@ require("blink.cmp").setup({
   },
 })
 ```
+
+#### Only-source suppression
+
+In a detected prompt buffer, agentcomplete makes itself the **only** blink source — every
+other source (lsp, path, snippets, buffer, lazydev, …) is suppressed so the buffer offers
+nothing but `/` and `@` completions. Every other buffer keeps your full completion stack
+untouched. To keep specific sources in the prompt buffer too, list them in
+`allowed_sources`:
+
+```lua
+require("agentcomplete").setup({
+  allowed_sources = { "path" },  -- keep `path` alongside agentcomplete in detected buffers
+})
+```
+
+`allowed_sources` **re-permits, never registers**: every entry — and `agentcomplete`
+itself — must already be registered in your blink `sources.providers` (above); unknown
+names are dropped with a one-time warning. Because blink.cmp has no per-buffer source
+config, agentcomplete enforces this by wrapping blink's global `sources.default` /
+`per_filetype` at setup, so
+**`require("agentcomplete").setup()` must run after `require("blink.cmp").setup()`**. This
+is blink-only — the native backend has no competing sources and is unaffected.
+
+Two caveats. **Load order:** the wrap reads blink's config at setup time, so configure
+blink first — under lazy.nvim, add `dependencies = { "Saghen/blink.cmp" }` to the
+agentcomplete spec so its `setup()` runs after blink's; if agentcomplete loads first,
+suppression silently no-ops (with a one-time warning). **Runtime-added sources:** sources
+injected through blink's `require("blink.cmp").add_filetype_source()` API are appended
+outside `sources.default` / `per_filetype`, so they are **not** suppressed — register
+sources you want gated the normal way (in `sources.providers` and `default`) instead.
 
 ### Native completion
 
