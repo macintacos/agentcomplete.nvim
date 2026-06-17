@@ -20,10 +20,14 @@ local T = new_set {
     pre_case = function()
       saved.env = vim.env.AGENTCOMPLETE_CWD
       saved.g = vim.g.agentcomplete_cwd
+      saved.opencode = vim.env.OPENCODE
+      saved.opencode_pid = vim.env.OPENCODE_PID
     end,
     post_case = function()
       vim.env.AGENTCOMPLETE_CWD = saved.env
       vim.g.agentcomplete_cwd = saved.g
+      vim.env.OPENCODE = saved.opencode
+      vim.env.OPENCODE_PID = saved.opencode_pid
     end,
   },
 }
@@ -140,6 +144,58 @@ T["claude_code"]["derives project-local skill/command dirs from the resolved cwd
   local s = assert(cc.detect(named_buf "/tmp/ac-g/claude-prompt-g.md"))
   expect.equality(vim.tbl_contains(s.skill_dirs, "/tmp/projX/.claude/skills"), true)
   expect.equality(vim.tbl_contains(s.command_dirs, "/tmp/projX/.claude/commands"), true)
+end
+
+T["opencode"] = new_set()
+
+T["opencode"]["matches a <millis>.md buffer when OPENCODE=1, rooted at cwd"] = function()
+  vim.env.AGENTCOMPLETE_CWD = nil
+  vim.g.agentcomplete_cwd = nil
+  vim.env.OPENCODE = "1"
+  vim.env.OPENCODE_PID = "12345"
+  local buf = named_buf "/private/tmp/1718646000001.md"
+  local oc = require "agentcomplete.detect.opencode"
+  local s = assert(oc.detect(buf))
+  expect.equality(s.tool, "opencode")
+  expect.equality(s.session_id, "12345")
+  expect.equality(s.cwd, vim.loop.cwd())
+  expect.equality(#s.skill_dirs > 0, true)
+  expect.equality(#s.command_dirs > 0, true)
+end
+
+T["opencode"]["ignores every buffer when OPENCODE is not set"] = function()
+  vim.env.OPENCODE = nil
+  vim.env.OPENCODE_PID = nil
+  local oc = require "agentcomplete.detect.opencode"
+  expect.equality(oc.detect(named_buf "/private/tmp/1718646000002.md"), nil)
+end
+
+T["opencode"]["ignores non-opencode-shaped names even when OPENCODE=1"] = function()
+  vim.env.OPENCODE = "1"
+  local oc = require "agentcomplete.detect.opencode"
+  expect.equality(oc.detect(named_buf "/tmp/oc-a/notes.md"), nil) -- non-digit basename
+  expect.equality(oc.detect(named_buf "/tmp/oc-b/123.txt"), nil) -- wrong extension
+  expect.equality(oc.detect(named_buf "/tmp/oc-c/12a45.md"), nil) -- not all digits
+  expect.equality(oc.detect(named_buf ""), nil) -- unnamed buffer
+end
+
+T["opencode"]["AGENTCOMPLETE_CWD overrides the editor cwd"] = function()
+  vim.env.OPENCODE = "1"
+  vim.env.AGENTCOMPLETE_CWD = "/tmp/projEnvO"
+  vim.g.agentcomplete_cwd = nil
+  local oc = require "agentcomplete.detect.opencode"
+  local s = assert(oc.detect(named_buf "/private/tmp/1718646000003.md"))
+  expect.equality(s.cwd, "/tmp/projEnvO")
+end
+
+T["opencode"]["derives project-local skill/command dirs from the resolved cwd"] = function()
+  vim.env.OPENCODE = "1"
+  vim.env.AGENTCOMPLETE_CWD = "/tmp/projXO"
+  vim.g.agentcomplete_cwd = nil
+  local oc = require "agentcomplete.detect.opencode"
+  local s = assert(oc.detect(named_buf "/private/tmp/1718646000004.md"))
+  expect.equality(vim.tbl_contains(s.skill_dirs, "/tmp/projXO/.opencode/skill"), true)
+  expect.equality(vim.tbl_contains(s.command_dirs, "/tmp/projXO/.opencode/command"), true)
 end
 
 return T
