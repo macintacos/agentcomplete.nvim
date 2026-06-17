@@ -1,0 +1,167 @@
+-- Tests for agentcomplete.diagnostics: the pure suppression diagnosis (the
+-- EXC-653 root-cause heuristic) and the pure markdown renderer. The glue
+-- (collect/run, which read live editor state and write a file) is exercised by
+-- the headless smoke check in `mise run diag`, not here.
+local MiniTest = require "mini.test"
+local new_set = MiniTest.new_set
+local expect = MiniTest.expect
+
+-- A blink-suppression state snapshot with every field in its "healthy" value;
+-- each case overrides only the field it is exercising.
+local function state(overrides)
+  local s = {
+    resolved_backend = "blink",
+    config_reachable = true,
+    registered = { agentcomplete = true, path = true },
+    wrap_installed = true,
+    detected = true,
+    allowed_sources = {},
+  }
+  for k, v in pairs(overrides or {}) do
+    s[k] = v
+  end
+  return s
+end
+
+local function has(haystack, needle)
+  return haystack:find(needle, 1, true) ~= nil
+end
+
+local T = new_set()
+
+T["diagnose_suppression"] = new_set()
+
+T["diagnose_suppression"]["native backend: nothing to suppress"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { resolved_backend = "native" })
+  expect.equality(r.active, false)
+  expect.equality(has(r.cause, "native backend"), true)
+end
+
+T["diagnose_suppression"]["blink active but config not reachable"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { config_reachable = false, registered = nil })
+  expect.equality(r.active, true)
+  expect.equality(r.config_reachable, false)
+  expect.equality(has(r.cause, "not reachable"), true)
+end
+
+T["diagnose_suppression"]["agentcomplete not a registered provider"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { registered = { path = true } })
+  expect.equality(r.agentcomplete_registered, false)
+  expect.equality(has(r.cause, "not a registered blink provider"), true)
+end
+
+T["diagnose_suppression"]["registered but wrap not installed (load order)"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { wrap_installed = false })
+  expect.equality(r.agentcomplete_registered, true)
+  expect.equality(r.wrap_installed, false)
+  expect.equality(has(r.cause, "load order"), true)
+end
+
+T["diagnose_suppression"]["wrap installed but current buffer not detected"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { detected = false })
+  expect.equality(r.wrap_installed, true)
+  expect.equality(r.detected, false)
+  expect.equality(has(r.cause, "not detected as a Claude Code prompt buffer"), true)
+end
+
+T["diagnose_suppression"]["installed and detected: agentcomplete is the only source"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { allowed_sources = { "path" } })
+  expect.equality(r.effective, { "agentcomplete", "path" })
+  expect.equality(has(r.cause, "only source"), true)
+end
+
+T["diagnose_suppression"]["unregistered allowed_sources are reported as dropped"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local r = diag.diagnose_suppression(state { allowed_sources = { "path", "ghost" } })
+  expect.equality(r.effective, { "agentcomplete", "path" })
+  expect.equality(r.dropped, { "ghost" })
+end
+
+T["render"] = new_set()
+
+-- A fully-populated report, mirroring what collect() builds in a detected buffer.
+local function full_report()
+  local diag = require "agentcomplete.diagnostics"
+  return {
+    nvim_version = "0.11.0",
+    config = {
+      backend = "auto",
+      resolved_backend = "blink",
+      detect = "auto",
+      enabled = true,
+      sources = { slash = true, file = true },
+      allowed_sources = { "path" },
+    },
+    buffer = {
+      nr = 7,
+      name = "/tmp/claude-1/claude-prompt-abc.md",
+      detected = true,
+      native_attached = false,
+      session_source = "detected",
+    },
+    session = { tool = "claude-code", cwd = "/proj", session_id = nil },
+    discovery = { skills = 3, commands = 2, files = 42 },
+    blink = diag.diagnose_suppression(state { allowed_sources = { "path" } }),
+    env = {
+      AGENTCOMPLETE_CWD = nil,
+      agentcomplete_cwd_g = nil,
+      CLAUDE_CONFIG_DIR = nil,
+      CLAUDE_CODE_SESSION_ID = "sess-1",
+      EDITOR = "nvim",
+      VISUAL = nil,
+      cwd = "/proj",
+    },
+  }
+end
+
+T["render"]["includes the title and every section header"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local out = diag.render(full_report())
+  expect.equality(type(out), "string")
+  for _, header in ipairs {
+    "# agentcomplete.nvim diagnostics",
+    "## Config",
+    "## Detection",
+    "## Discovery",
+    "## blink suppression",
+    "## Environment",
+  } do
+    expect.equality(has(out, header), true)
+  end
+  -- The diagnosis cause is surfaced in the body.
+  expect.equality(has(out, "only source"), true)
+  -- The discovery counts from the report render (42 = files, distinctive here).
+  expect.equality(has(out, "42"), true)
+end
+
+T["render"]["a minimal report (no session, blink inactive) renders without error"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local out = diag.render {
+    nvim_version = "0.11.0",
+    config = {
+      backend = "native",
+      resolved_backend = "native",
+      detect = "auto",
+      enabled = true,
+      sources = { slash = true, file = true },
+      allowed_sources = {},
+    },
+    buffer = { nr = 1, name = "", detected = false, native_attached = false, session_source = "none" },
+    session = nil,
+    discovery = nil,
+    blink = diag.diagnose_suppression(state { resolved_backend = "native" }),
+    env = { cwd = "/proj" },
+  }
+  expect.equality(type(out), "string")
+  expect.equality(has(out, "# agentcomplete.nvim diagnostics"), true)
+  -- No session ⇒ the detection section says so rather than erroring on nil.
+  expect.equality(has(out, "(none)"), true)
+end
+
+return T

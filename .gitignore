@@ -46,3 +46,6 @@ luac.out
 # Claude Code worktrees (created by EnterWorktree)
 .claude/worktrees/
 
+# Diagnostics output (scripts/diagnostics.lua, mise run diag)
+.tmp/
+

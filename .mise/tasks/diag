@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Print agentcomplete diagnostics from a headless Neovim (blink + path)"
+
+set -euo pipefail
+
+blink_dir=".tests/site/pack/deps/start/blink.cmp"
+if [ ! -d "$blink_dir" ]; then
+  echo "blink.cmp not found at $blink_dir — run 'mise run setup' first." >&2
+  exit 1
+fi
+
+# Set blink up (with `path` as a source) BEFORE agentcomplete, so the suppression
+# wrap captures blink's real config, and name the buffer like a Claude prompt so it
+# is detected. The report should then show `path` removed from the effective
+# sources — i.e. only-source suppression validated end-to-end against real blink.
+nvim --headless --noplugin -u tests/minimal_init.lua \
+  -c "set rtp+=$blink_dir" \
+  -c "lua require('blink.cmp').setup({ fuzzy = { implementation = 'lua' }, sources = { default = { 'agentcomplete', 'path' }, providers = { agentcomplete = { name = 'agentcomplete', module = 'agentcomplete.backends.blink' } } } })" \
+  -c 'lua require("agentcomplete").setup({})' \
+  -c 'file claude-prompt-diag.md' \
+  -c 'AgentCompleteAttach' \
+  -c 'luafile scripts/diagnostics.lua' \
+  -c 'qa!'

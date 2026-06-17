@@ -15,3 +15,17 @@ if [ -d "$mini_dir/.git" ]; then
 else
   git clone --filter=blob:none https://github.com/echasnovski/mini.nvim "$mini_dir"
 fi
+
+# blink.cmp powers the `mise run diag` headless blink setup. Pinned to a v1 tag on
+# purpose: blink v2 hard-requires the compiled `blink.lib` (can't build in CI),
+# while v1's `sources` config shape matches what the suppression wrap reads — so it
+# validates only-source suppression headlessly. Real user setups on v2 are
+# unaffected (the plugin reads the same config fields on both). Not on the test
+# runtimepath, so the suite still exercises the blink-absent path.
+blink_dir=".tests/site/pack/deps/start/blink.cmp"
+blink_tag="v1.10.0"
+if [ ! -d "$blink_dir/.git" ]; then
+  git clone --filter=blob:none https://github.com/Saghen/blink.cmp "$blink_dir"
+fi
+git -C "$blink_dir" fetch --tags --quiet origin
+git -C "$blink_dir" checkout --quiet "$blink_tag"
