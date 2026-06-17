@@ -45,13 +45,17 @@ function M.detect(bufnr)
   end
   local cwd = resolve_cwd()
   local skill_dirs, command_dirs = scan.opencode_dirs(cwd)
+  -- Config-map commands first so a user's own command wins the name-dedup in `sources.items`
+  -- over a built-in of the same name; OpenCode's built-in TUI commands fill in the rest.
+  local extra_commands = scan.opencode_commands(cwd)
+  vim.list_extend(extra_commands, scan.opencode_builtin_commands())
   return {
     tool = "opencode",
     cwd = cwd,
     session_id = vim.env.OPENCODE_PID,
     skill_dirs = skill_dirs,
     command_dirs = command_dirs,
-    extra_commands = scan.opencode_commands(cwd),
+    extra_commands = extra_commands,
   }
 end
 

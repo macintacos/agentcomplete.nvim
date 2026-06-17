@@ -4,6 +4,7 @@
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
+---@field opencode { show_all_builtin_commands: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed.
 
 ---@class AgentComplete
 local M = {}
@@ -20,6 +21,7 @@ local defaults = {
   detect = "auto",
   sources = { slash = true, file = true },
   allowed_sources = {},
+  opencode = { show_all_builtin_commands = false },
 }
 
 ---@type AgentComplete.Config
@@ -81,6 +83,7 @@ function M.attach(bufnr, opts)
   end
   if session then
     session.sources = M.config.sources
+    session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
   end
   return session ~= nil

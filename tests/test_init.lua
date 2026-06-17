@@ -29,4 +29,17 @@ T["setup registers the Claude Code detector"] = function()
   expect.equality(vim.tbl_contains(names, "claude-code"), true)
 end
 
+T["setup preserves the opencode.show_all_builtin_commands default"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup {}
+  expect.equality(agentcomplete.config.opencode.show_all_builtin_commands, false)
+end
+
+T["setup merges the opencode option over the default"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { opencode = { show_all_builtin_commands = true } }
+  expect.equality(agentcomplete.config.opencode.show_all_builtin_commands, true)
+  expect.equality(agentcomplete.config.enabled, true) -- unrelated default preserved
+end
+
 return T

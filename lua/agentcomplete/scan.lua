@@ -13,7 +13,8 @@ local M = {}
 ---@class AgentComplete.Command
 ---@field name string Command name; nested files join path segments with `:`.
 ---@field description string|nil Frontmatter `description`, if present.
----@field path string Absolute path to the command markdown file.
+---@field path? string Absolute path to the command markdown file (nil for built-in commands).
+---@field hidden? boolean Built-in command not useful when composing in an editor buffer; completed only when the user opts in.
 
 ---Read a simple `key: value` YAML frontmatter block from a markdown file.
 ---Only the leading `---` … `---` block is parsed; values are unquoted.
@@ -322,6 +323,37 @@ function M.opencode_commands(cwd)
     end
   end
   return out
+end
+
+---OpenCode's built-in TUI slash commands. These are compiled into OpenCode, so they live
+---in neither the command markdown files nor the `opencode.json` command map that the other
+---OpenCode discovery helpers read — without this static list they never appear in completion.
+---The list is hard-coded from the OpenCode TUI commands docs (https://opencode.ai/docs/tui#commands).
+---`hidden = true` marks interactive TUI affordances — dialogs, pickers, display toggles, app
+---navigation/lifecycle, and the external-editor command itself — that are not useful when
+---composing a prompt in an editor buffer; `sources.items` filters them out unless the user opts
+---in. Commands that perform a discrete action on the conversation/session are shown by default.
+---@return AgentComplete.Command[]
+function M.opencode_builtin_commands()
+  return {
+    { name = "compact", description = "Compact the current session." },
+    { name = "connect", description = "Add a provider to OpenCode.", hidden = true },
+    { name = "details", description = "Toggle tool execution details.", hidden = true },
+    { name = "editor", description = "Open external editor for composing messages.", hidden = true },
+    { name = "exit", description = "Exit OpenCode.", hidden = true },
+    { name = "export", description = "Export the current conversation to Markdown." },
+    { name = "help", description = "Show the help dialog.", hidden = true },
+    { name = "init", description = "Guided setup for creating or updating AGENTS.md." },
+    { name = "models", description = "List available models.", hidden = true },
+    { name = "new", description = "Start a new session.", hidden = true },
+    { name = "redo", description = "Redo a previously undone message." },
+    { name = "sessions", description = "List and switch between sessions.", hidden = true },
+    { name = "share", description = "Share the current session." },
+    { name = "themes", description = "List available themes.", hidden = true },
+    { name = "thinking", description = "Toggle visibility of thinking/reasoning blocks.", hidden = true },
+    { name = "undo", description = "Undo the last message in the conversation." },
+    { name = "unshare", description = "Unshare the current session." },
+  }
 end
 
 return M

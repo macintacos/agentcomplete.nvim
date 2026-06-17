@@ -320,4 +320,43 @@ T["opencode_commands"]["de-duplicates a command defined in both global and proje
   expect.equality(n, 1)
 end
 
+T["opencode_builtin_commands"] = new_set()
+
+T["opencode_builtin_commands"]["includes built-in TUI commands (shown and hidden alike)"] = function()
+  local scan = require "agentcomplete.scan"
+  local by = {}
+  for _, c in ipairs(scan.opencode_builtin_commands()) do
+    by[c.name] = c
+  end
+  expect.equality(by.init ~= nil, true)
+  expect.equality(by.undo ~= nil, true)
+  expect.equality(by.help ~= nil, true)
+  expect.equality(by.editor ~= nil, true)
+end
+
+T["opencode_builtin_commands"]["hides interactive commands and shows conversation actions"] = function()
+  local scan = require "agentcomplete.scan"
+  local by = {}
+  for _, c in ipairs(scan.opencode_builtin_commands()) do
+    by[c.name] = c
+  end
+  -- discrete conversation/session actions are shown by default
+  expect.equality(by.init.hidden ~= true, true)
+  expect.equality(by.undo.hidden ~= true, true)
+  -- interactive TUI affordances (dialogs/pickers/toggles/lifecycle) are hidden by default
+  expect.equality(by.help.hidden, true)
+  expect.equality(by.editor.hidden, true)
+  expect.equality(by.models.hidden, true)
+end
+
+T["opencode_builtin_commands"]["every entry has a non-empty name and description"] = function()
+  local scan = require "agentcomplete.scan"
+  local cmds = scan.opencode_builtin_commands()
+  expect.equality(#cmds > 0, true)
+  for _, c in ipairs(cmds) do
+    expect.equality(type(c.name) == "string" and c.name ~= "", true)
+    expect.equality(type(c.description) == "string" and c.description ~= "", true)
+  end
+end
+
 return T

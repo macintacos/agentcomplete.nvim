@@ -234,4 +234,45 @@ T["opencode"]["populates extra_commands from the project opencode.json command m
   expect.equality(by.release.description, "Cut a release")
 end
 
+T["opencode"]["surfaces OpenCode built-in commands in extra_commands"] = function()
+  vim.env.OPENCODE = "1"
+  vim.g.agentcomplete_cwd = nil
+  vim.env.XDG_CONFIG_HOME = tmpdir() -- isolate the global config home (no commands)
+  vim.env.OPENCODE_CONFIG = nil
+  vim.env.OPENCODE_CONFIG_DIR = nil
+  vim.env.AGENTCOMPLETE_CWD = tmpdir() -- project with no opencode.json / command files
+  local oc = require "agentcomplete.detect.opencode"
+  local s = assert(oc.detect(named_buf "/private/tmp/1718646000006.md"))
+  local names = {}
+  for _, c in ipairs(s.extra_commands or {}) do
+    names[c.name] = true
+  end
+  expect.equality(names.init, true) -- `/init` is a built-in OpenCode command, not a file/config command
+end
+
+T["opencode"]["orders config-map commands before built-in commands"] = function()
+  vim.env.OPENCODE = "1"
+  vim.g.agentcomplete_cwd = nil
+  vim.env.XDG_CONFIG_HOME = tmpdir()
+  vim.env.OPENCODE_CONFIG = nil
+  vim.env.OPENCODE_CONFIG_DIR = nil
+  local proj = tmpdir()
+  write(proj .. "/opencode.json", { '{ "command": { "deploy": { "description": "Ship it" } } }' })
+  vim.env.AGENTCOMPLETE_CWD = proj
+  local oc = require "agentcomplete.detect.opencode"
+  local s = assert(oc.detect(named_buf "/private/tmp/1718646000007.md"))
+  -- config-map "deploy" must precede any built-in (e.g. "init") so a user's config command
+  -- wins the name-dedup in sources.items.
+  local idx_deploy, idx_init
+  for i, c in ipairs(s.extra_commands) do
+    if c.name == "deploy" then
+      idx_deploy = i
+    elseif c.name == "init" then
+      idx_init = i
+    end
+  end
+  expect.equality(idx_deploy ~= nil and idx_init ~= nil, true)
+  expect.equality(idx_deploy < idx_init, true)
+end
+
 return T
