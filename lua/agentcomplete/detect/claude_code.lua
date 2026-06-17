@@ -39,13 +39,14 @@ function M.detect(bufnr)
     return nil
   end
   local cwd = resolve_cwd()
-  local skill_dirs, command_dirs = scan.claude_dirs(cwd)
+  local skill_dirs, command_dirs, skill_namespaces = scan.claude_dirs(cwd)
   return {
     tool = "claude-code",
     cwd = cwd,
     session_id = nil,
     skill_dirs = skill_dirs,
     command_dirs = command_dirs,
+    skill_namespaces = skill_namespaces,
   }
 end
 

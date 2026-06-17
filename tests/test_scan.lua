@@ -73,6 +73,23 @@ T["skills"]["returns empty for a missing directory"] = function()
   expect.equality(scan.skills { "/nope/does/not/exist" }, {})
 end
 
+T["skills"]["qualifies a name with the plugin namespace from the dir → namespace map"] = function()
+  local scan = require "agentcomplete.scan"
+  local root = tmpdir()
+  write(root .. "/plug/skills/foo/SKILL.md", { "---", "name: foo", "---" })
+  write(root .. "/user/skills/foo/SKILL.md", { "---", "name: foo", "---" })
+  local plugin_skills = root .. "/plug/skills"
+  local user_skills = root .. "/user/skills"
+  local skills = scan.skills({ plugin_skills, user_skills }, { [plugin_skills] = "myplugin" })
+  local names = {}
+  for _, s in ipairs(skills) do
+    names[#names + 1] = s.name
+  end
+  table.sort(names)
+  -- plugin skill is namespaced; the user skill (not in the map) stays unqualified.
+  expect.equality(names, { "foo", "myplugin:foo" })
+end
+
 T["commands"] = new_set()
 
 T["commands"]["discovers flat and nested commands (nested joined with ':')"] = function()
@@ -144,6 +161,43 @@ T["claude_dirs"]["includes enabled plugin dirs from installed_plugins.json"] = f
   local skill_dirs, command_dirs = scan.claude_dirs "/tmp/projY"
   expect.equality(vim.tbl_contains(skill_dirs, install_path .. "/skills"), true)
   expect.equality(vim.tbl_contains(command_dirs, install_path .. "/commands"), true)
+end
+
+T["claude_dirs"]["returns a dir → namespace map for plugin skill dirs (plugin.json name is authoritative)"] = function()
+  local scan = require "agentcomplete.scan"
+  local home = tmpdir()
+  vim.env.CLAUDE_CONFIG_DIR = home
+  local install_path = home .. "/plugins/cache/mp/plug/1.0"
+  write(home .. "/plugins/installed_plugins.json", {
+    vim.json.encode {
+      version = 2,
+      plugins = { ["plug@mp"] = { { installPath = install_path, scope = "user" } } },
+    },
+  })
+  write(install_path .. "/.claude-plugin/plugin.json", { vim.json.encode { name = "superplug" } })
+  local skill_dirs, _command_dirs, namespaces = scan.claude_dirs "/tmp/projY"
+  expect.equality(type(namespaces), "table")
+  expect.equality(namespaces[install_path .. "/skills"], "superplug") -- plugin.json name wins
+  expect.equality(namespaces[home .. "/skills"], nil) -- global/user dir stays unqualified
+  expect.equality(namespaces["/tmp/projY/.claude/skills"], nil) -- project dir stays unqualified
+  expect.equality(vim.tbl_contains(skill_dirs, install_path .. "/skills"), true)
+end
+
+T["claude_dirs"]["falls back to the installed_plugins key prefix when plugin.json is absent"] = function()
+  local scan = require "agentcomplete.scan"
+  local home = tmpdir()
+  vim.env.CLAUDE_CONFIG_DIR = home
+  local install_path = home .. "/plugins/cache/mp/plug/1.0"
+  write(home .. "/plugins/installed_plugins.json", {
+    vim.json.encode {
+      version = 2,
+      plugins = { ["plug@mp"] = { { installPath = install_path, scope = "user" } } },
+    },
+  })
+  -- no .claude-plugin/plugin.json on disk
+  local _skill_dirs, _command_dirs, namespaces = scan.claude_dirs "/tmp/projY"
+  expect.equality(type(namespaces), "table")
+  expect.equality(namespaces[install_path .. "/skills"], "plug") -- key substring before "@"
 end
 
 T["claude_dirs"]["tolerates a missing installed_plugins.json"] = function()

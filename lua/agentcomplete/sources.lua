@@ -59,7 +59,7 @@ function M.items(session, ctx)
   local enabled = session.sources or {}
   local out = {}
   if ctx.trigger == "/" and enabled.slash ~= false then
-    for _, s in ipairs(scan.skills(session.skill_dirs)) do
+    for _, s in ipairs(scan.skills(session.skill_dirs, session.skill_namespaces)) do
       if matches(s.name, ctx.query) then
         table.insert(out, { label = "/" .. s.name, insert_text = s.name, kind = "skill", detail = s.description })
       end

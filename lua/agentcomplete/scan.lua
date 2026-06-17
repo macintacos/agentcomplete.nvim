@@ -40,18 +40,26 @@ local function read_frontmatter(path)
 end
 
 ---Discover skills under each of `dirs` (one `<dir>/<name>/SKILL.md` per skill).
+---When `namespaces[dir]` is set (a plugin-provided dir), discovered names are qualified
+---as `<namespace>:<name>` to match Claude Code's `<plugin>:<skill>` slash form; dirs absent
+---from the map (user/project, OpenCode) yield unqualified names.
 ---@param dirs string[]
+---@param namespaces? table<string, string> Map of dir path → plugin namespace.
 ---@return AgentComplete.Skill[]
-function M.skills(dirs)
+function M.skills(dirs, namespaces)
+  namespaces = namespaces or {}
   local out = {}
   for _, dir in ipairs(dirs or {}) do
     if vim.fn.isdirectory(dir) == 1 then
+      local ns = namespaces[dir]
       for name, kind in vim.fs.dir(dir) do
         if kind == "directory" then
           local skill_md = dir .. "/" .. name .. "/SKILL.md"
           if vim.fn.filereadable(skill_md) == 1 then
             local fm = read_frontmatter(skill_md)
-            table.insert(out, { name = fm.name or name, description = fm.description, path = skill_md })
+            local base = fm.name or name
+            local qualified = ns and (ns .. ":" .. base) or base
+            table.insert(out, { name = qualified, description = fm.description, path = skill_md })
           end
         end
       end
@@ -112,12 +120,33 @@ local function claude_home()
   return base
 end
 
----Install paths of every enabled plugin, read from
----`<home>/plugins/installed_plugins.json` (`{ plugins = { "<name>@<mp>" = { { installPath } } } }`).
----This is the authoritative source for enabled plugins; a `marketplaces/*` glob would
----over-include disabled plugins and duplicate cached versions. Missing/garbled file ⇒ `{}`.
+---Resolve a plugin's namespace (the `<plugin>` Claude Code uses to qualify its skills).
+---Authoritative source is the plugin's `<installPath>/.claude-plugin/plugin.json` `name`;
+---if that is unreadable, fall back to the `installed_plugins.json` key's `<plugin>` prefix
+---(the substring before `@<marketplace>`).
+---@param install_path string
+---@param key string The `installed_plugins.json` entry key (`<plugin>@<marketplace>`).
+---@return string
+local function plugin_name(install_path, key)
+  local manifest = install_path .. "/.claude-plugin/plugin.json"
+  if vim.fn.filereadable(manifest) == 1 then
+    local ok, data = pcall(function()
+      return vim.json.decode(table.concat(vim.fn.readfile(manifest), "\n"))
+    end)
+    if ok and type(data) == "table" and type(data.name) == "string" and data.name ~= "" then
+      return data.name
+    end
+  end
+  return (key:match "^(.-)@") or key
+end
+
+---Every enabled plugin, read from `<home>/plugins/installed_plugins.json`
+---(`{ plugins = { "<name>@<mp>" = { { installPath } } } }`). This is the authoritative source
+---for enabled plugins; a `marketplaces/*` glob would over-include disabled plugins and duplicate
+---cached versions. Each record carries the plugin's `name` (its namespace) alongside its install
+---path. Missing/garbled file ⇒ `{}`.
 ---@param home string
----@return string[]
+---@return { name: string, path: string }[]
 local function enabled_plugin_roots(home)
   local roots = {}
   local file = home .. "/plugins/installed_plugins.json"
@@ -130,11 +159,11 @@ local function enabled_plugin_roots(home)
   if not ok or type(data) ~= "table" or type(data.plugins) ~= "table" then
     return roots
   end
-  for _, records in pairs(data.plugins) do
-    if type(records) == "table" then
+  for key, records in pairs(data.plugins) do
+    if type(key) == "string" and type(records) == "table" then
       for _, record in ipairs(records) do
         if type(record) == "table" and type(record.installPath) == "string" and record.installPath ~= "" then
-          table.insert(roots, record.installPath)
+          table.insert(roots, { name = plugin_name(record.installPath, key), path = record.installPath })
         end
       end
     end
@@ -160,23 +189,28 @@ end
 ---global (`<home>/{skills,commands}`), each enabled plugin's `<installPath>/{skills,commands}`,
 ---then project-local `<cwd>/.claude/{skills,commands}`. The lists are de-duplicated so a path
 ---reached two ways (e.g. claude launched from `~` ⇒ global == project-local, or a plugin
----listed at two scopes) does not double its completions. Names are unqualified (not
----`plugin:skill`-namespaced); matching Claude Code's exact slash-menu namespacing is a future
----refinement. Absent dirs are harmless — `M.skills`/`M.commands` skip them.
+---listed at two scopes) does not double its completions. Absent dirs are harmless —
+---`M.skills`/`M.commands` skip them. The third return is a `skill-dir path → plugin namespace`
+---map so plugin skills complete as `<plugin>:<skill>` (matching Claude Code's slash form);
+---global/project skill dirs are absent from the map and stay unqualified.
 ---@param cwd string
 ---@return string[] skill_dirs
 ---@return string[] command_dirs
+---@return table<string, string> skill_namespaces
 function M.claude_dirs(cwd)
   local home = claude_home()
   local skill_dirs = { home .. "/skills" }
   local command_dirs = { home .. "/commands" }
-  for _, root in ipairs(enabled_plugin_roots(home)) do
-    table.insert(skill_dirs, root .. "/skills")
-    table.insert(command_dirs, root .. "/commands")
+  local namespaces = {}
+  for _, plugin in ipairs(enabled_plugin_roots(home)) do
+    local skill_dir = plugin.path .. "/skills"
+    table.insert(skill_dirs, skill_dir)
+    table.insert(command_dirs, plugin.path .. "/commands")
+    namespaces[skill_dir] = plugin.name
   end
   table.insert(skill_dirs, cwd .. "/.claude/skills")
   table.insert(command_dirs, cwd .. "/.claude/commands")
-  return dedup(skill_dirs), dedup(command_dirs)
+  return dedup(skill_dirs), dedup(command_dirs), namespaces
 end
 
 ---OpenCode's config base directories for a session rooted at `cwd`: the global config

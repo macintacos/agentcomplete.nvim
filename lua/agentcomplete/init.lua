@@ -31,13 +31,14 @@ M.config = vim.deepcopy(defaults)
 ---@return AgentComplete.Session
 local function fallback_session()
   local cwd = vim.loop.cwd() or vim.fn.getcwd()
-  local skill_dirs, command_dirs = scan.claude_dirs(cwd)
+  local skill_dirs, command_dirs, skill_namespaces = scan.claude_dirs(cwd)
   return {
     tool = "manual",
     cwd = cwd,
     session_id = nil,
     skill_dirs = skill_dirs,
     command_dirs = command_dirs,
+    skill_namespaces = skill_namespaces,
   }
 end
 
