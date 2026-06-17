@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Print agentcomplete diagnostics from a headless Neovim session"
+
+set -euo pipefail
+
+# Force a session (the headless scratch buffer never auto-detects), then load the
+# diagnostics script. Its `print` emits the report to stdout in headless mode.
+nvim --headless --noplugin -u tests/minimal_init.lua \
+  -c 'lua require("agentcomplete").setup({})' \
+  -c 'AgentCompleteAttach' \
+  -c 'luafile scripts/diagnostics.lua' \
+  -c 'qa!'

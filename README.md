@@ -167,7 +167,27 @@ Day-to-day:
 | `mise run lint`      | Lint + type-check (selene, lua-language-server, …) |
 | `mise run test`      | Run the test suite (headless Neovim + mini.test)   |
 | `mise run preflight` | `lint` + `test` — run before pushing               |
+| `mise run diag`      | Print a diagnostics report (headless)              |
 
 The Lua toolchain: **stylua** (format), **selene** (lint hygiene), **lua-language-server**
 (LuaCATS type-check), **mini.test** (tests). A `pre-commit` hook formats and lints staged
 files; a `pre-push` hook runs the tests.
+
+### Diagnostics
+
+To debug behavior inside the prompt buffer Claude Code opens, load the diagnostics script
+from that buffer:
+
+```vim
+:AgentCompleteAttach    " optional: force a session if the buffer wasn't auto-detected
+:luafile scripts/diagnostics.lua
+```
+
+It gathers the live plugin state — resolved backend, buffer detection and attach state,
+discovered skills/commands/files, and the blink only-source suppression diagnosis (with a
+likely-cause line) — prints it to `:messages`, and writes it to
+`.tmp/agentcomplete-diagnostics.md` under the editor's working directory.
+
+That file exists to hand state to a Claude Code agent session: an agent can't launch
+Neovim from its own session to watch the plugin, but it can read the report.
+`mise run diag` runs the same flow headlessly.
