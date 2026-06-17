@@ -161,13 +161,13 @@ mise run setup      # install pinned tools, fetch test deps, register git hooks
 
 Day-to-day:
 
-| Command              | What it does                                       |
-| -------------------- | -------------------------------------------------- |
-| `mise run format`    | Format all files (stylua + baseline), write mode   |
-| `mise run lint`      | Lint + type-check (selene, lua-language-server, …) |
-| `mise run test`      | Run the test suite (headless Neovim + mini.test)   |
-| `mise run preflight` | `lint` + `test` — run before pushing               |
-| `mise run diag`      | Print a diagnostics report (headless)              |
+| Command              | What it does                                         |
+| -------------------- | ---------------------------------------------------- |
+| `mise run format`    | Format all files (stylua + baseline), write mode     |
+| `mise run lint`      | Lint + type-check (selene, lua-language-server, …)   |
+| `mise run test`      | Run the test suite (headless Neovim + mini.test)     |
+| `mise run preflight` | `lint` + `test` — run before pushing                 |
+| `mise run diag`      | Print a diagnostics report (headless, sets up blink) |
 
 The Lua toolchain: **stylua** (format), **selene** (lint hygiene), **lua-language-server**
 (LuaCATS type-check), **mini.test** (tests). A `pre-commit` hook formats and lints staged
@@ -190,4 +190,7 @@ likely-cause line) — prints it to `:messages`, and writes it to
 
 That file exists to hand state to a Claude Code agent session: an agent can't launch
 Neovim from its own session to watch the plugin, but it can read the report.
-`mise run diag` runs the same flow headlessly.
+`mise run diag` runs the same flow headlessly against a real blink setup (with `path` as a
+source) in a simulated prompt buffer, so it also validates that only-source suppression
+removes `path` (it uses a pinned blink v1 — v2 needs the compiled `blink.lib`, which can't
+build in CI — but the suppression wrap reads the same config on both).
