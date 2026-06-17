@@ -164,4 +164,22 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
   expect.equality(has(out, "(none)"), true)
 end
 
+T["render"]["surfaces OpenCode env signals and the session's search dirs"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.session.tool = "opencode"
+  report.session.skill_dirs = { "/proj/.opencode/skill" }
+  report.session.command_dirs = { "/proj/.opencode/command" }
+  report.env.OPENCODE = "1"
+  report.env.OPENCODE_PID = "999"
+  report.env.OPENCODE_CONFIG_DIR = "/cfg/opencode"
+  local out = diag.render(report)
+  expect.equality(has(out, "OPENCODE:"), true)
+  expect.equality(has(out, "OPENCODE_PID:"), true)
+  expect.equality(has(out, "OPENCODE_CONFIG_DIR:"), true)
+  -- The session's search dirs tell a debugger WHERE discovery looked.
+  expect.equality(has(out, "/proj/.opencode/skill"), true)
+  expect.equality(has(out, "/proj/.opencode/command"), true)
+end
+
 return T
