@@ -70,7 +70,7 @@ function M.diagnose_suppression(state)
   else
     cause = "Suppression is installed AND this buffer is detected, so agentcomplete should be the only source (plus allowed_sources: "
       .. table.concat(effective, ", ")
-      .. "). If path completions still appear, that source was likely added at runtime via blink's add_filetype_source(), which the wrap cannot reach — register it under sources.providers/default instead."
+      .. "). If path completions still appear, that source was likely added at runtime via blink's add_filetype_source(), which the wrap cannot reach (register it under sources.providers/default instead), or blink.cmp.setup() re-ran after agentcomplete.setup() and replaced the wrapped source lists."
   end
 
   return {
