@@ -8,7 +8,7 @@ built-in completion.
 
 > Status: proof of concept.
 
-<!-- Screenshots: add demo images near the top here (the maintainer adds these in the PR). -->
+![agentcomplete.nvim demo](assets/demo.gif)
 
 ## Requirements
 
