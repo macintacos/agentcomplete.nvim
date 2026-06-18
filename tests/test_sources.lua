@@ -123,6 +123,33 @@ T["items"]["slash trigger includes session.extra_commands, deduped against markd
   expect.equality(by_label["/ship"].detail, "From config")
 end
 
+T["items"]["namespaces a plugin-sourced skill in label + insert_text; user skill stays bare"] = function()
+  local sources = require "agentcomplete.sources"
+  local root = tmpdir()
+  write(root .. "/plug/skills/browsing/SKILL.md", { "---", "name: browsing", "description: browse", "---" })
+  write(root .. "/user/skills/deploy/SKILL.md", { "---", "name: deploy", "description: deploy", "---" })
+  local plugin_skills = root .. "/plug/skills"
+  local user_skills = root .. "/user/skills"
+  local session = {
+    tool = "claude-code",
+    cwd = root,
+    skill_dirs = { plugin_skills, user_skills },
+    command_dirs = {},
+    skill_namespaces = { [plugin_skills] = "superplug" },
+  }
+  local by = {}
+  for _, i in ipairs(sources.items(session, { trigger = "/", query = "", start_col = 1 })) do
+    by[i.label] = i
+  end
+  -- plugin skill: both the displayed label and the inserted text carry the namespace
+  expect.equality(by["/superplug:browsing"] ~= nil, true)
+  expect.equality(by["/superplug:browsing"].insert_text, "superplug:browsing")
+  expect.equality(by["/superplug:browsing"].kind, "skill")
+  -- user/project skill (no namespace): stays unqualified
+  expect.equality(by["/deploy"] ~= nil, true)
+  expect.equality(by["/deploy"].insert_text, "deploy")
+end
+
 T["items"]["at trigger returns files under cwd matching the query"] = function()
   local sources = require "agentcomplete.sources"
   local session = fixture_session()
