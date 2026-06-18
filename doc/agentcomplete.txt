@@ -1,0 +1,322 @@
+*agentcomplete.txt*	Completion for agent-CLI prompt buffers in Neovim
+
+                                                               *agentcomplete*
+
+				   agentcomplete.nvim ~
+
+Complete an agent CLI's skills, commands, and files inside the prompt buffer
+that the CLI opens in Neovim: Claude Code (`Ctrl+G`) and OpenCode (`/editor`).
+Works through blink.cmp (auto-detected) or Neovim's built-in completion.
+
+This help covers the concepts and every option. To install the plugin, start
+with the README; to work on the plugin itself, see CONTRIBUTING.md.
+
+==============================================================================
+CONTENTS
+                                                      *agentcomplete-contents*
+
+    1. Introduction ............................. |agentcomplete-introduction|
+    2. How detection works ......................... |agentcomplete-detection|
+    3. Installation ............................. |agentcomplete-installation|
+    4. Configuration ........................... |agentcomplete-configuration|
+    5. blink.cmp integration ........................... |agentcomplete-blink|
+    6. Only-source suppression ................... |agentcomplete-suppression|
+    7. Native completion .............................. |agentcomplete-native|
+    8. Project root ............................. |agentcomplete-project-root|
+    9. Commands ..................................... |agentcomplete-commands|
+   10. Completion sources ............................ |agentcomplete-sources|
+   11. Diagnostics ............................... |agentcomplete-diagnostics|
+
+==============================================================================
+1. Introduction
+                                                  *agentcomplete-introduction*
+
+Agent CLIs let you compose a prompt in your editor. Claude Code opens an
+external editor on `Ctrl+G`; OpenCode opens one on `/editor`. agentcomplete
+attaches to that prompt buffer and offers exactly the completions that are
+useful while writing a prompt:
+
+	`/`	skills and commands available to the agent in this project
+	`@`	files under the project root
+
+It does nothing in any other buffer. Outside a detected prompt buffer your
+normal completion stack is untouched.
+
+Two completion backends are supported, chosen by the 'backend' option:
+
+	blink.cmp	preferred, auto-detected when installed
+	native		Neovim's built-in insert-mode completion
+
+agentcomplete is the only setup required — there is no companion Claude Code
+or OpenCode plugin to install on the agent side. The plugin reads the same
+skill and command directories the agent itself reads, so what it completes is
+what the agent can actually run.
+
+==============================================================================
+2. How detection works
+                                                     *agentcomplete-detection*
+
+agentcomplete recognizes a prompt buffer with per-tool detectors and then
+roots discovery at the project directory. The 'detect' option controls whether
+detection runs at all (see |agentcomplete-configuration|).
+
+Claude Code ~
+
+Claude Code (`chat:externalEditor`, `Ctrl+G`) writes the prompt to
+`<tmpdir>/claude-<uid>/claude-prompt-<uuid>.md` and opens it in `$EDITOR`. The
+spawned editor does NOT inherit `CLAUDE_CODE_SESSION_ID`, so detection keys on
+the buffer name matching `claude-prompt-<uuid>.md`. The project root is the
+editor's working directory.
+
+Skills and commands are discovered from, in order:
+
+	`~/.claude/{skills,commands}` (honors `$CLAUDE_CONFIG_DIR`)
+	installed Claude Code plugins (skills as `<plugin>:<skill>`)
+	`<project>/.claude/skills` and `<project>/.claude/commands`
+
+Skills are found one level deep, as `<dir>/<name>/SKILL.md`.
+
+OpenCode ~
+
+OpenCode (`/editor`, default `<leader>e`) writes the prompt to a bare
+`<tmpdir>/<epoch-millis>.md` file with no tool-specific name. Detection
+therefore keys on the environment variable `OPENCODE` being `1` — OpenCode
+sets it for every command and the spawned editor inherits it — corroborated by
+the buffer basename matching `<digits>.md`, so other files opened in the same
+Neovim are not misdetected.
+
+Skills and commands are discovered across OpenCode's config bases — the global
+config home (`$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`), an
+optional `$OPENCODE_CONFIG_DIR`, and the project-local `<project>/.opencode`:
+
+	skills under `<base>/{skill,skills}/<name>/SKILL.md`
+	markdown commands under `<base>/command` (searched recursively)
+	commands in `opencode.json[c]` (the `command` map)
+	OpenCode's built-in TUI commands (`/help`, `/models`, `/editor`, …)
+
+The built-in TUI commands are hidden by default; enable them with the
+`opencode.show_all_builtin_commands` option — see
+|agentcomplete-configuration|.
+
+In both tools the project root can be overridden — see
+|agentcomplete-project-root|.
+
+==============================================================================
+3. Installation
+                                                  *agentcomplete-installation*
+
+With Neovim's |vim.pack|: >lua
+	vim.pack.add({ "https://github.com/macintacos/agentcomplete.nvim" })
+	require("agentcomplete").setup({})
+< With lazy.nvim: >lua
+	{ "macintacos/agentcomplete.nvim", opts = {} }
+< Or call `require("agentcomplete").setup({})` with any plugin manager.
+
+                                                         *agentcomplete-setup*
+`require("agentcomplete").setup({opts})` merges {opts} over the defaults,
+registers the |:AgentCompleteAttach| and |:AgentCompleteDetach| commands, and
+when 'enabled' is true, installs an autocommand that attaches to detected
+prompt buffers on `VimEnter` and `BufReadPost`. Calling it with no arguments
+(`setup({})`) uses the defaults below.
+
+blink.cmp users have one extra, mandatory step: register the provider. See
+|agentcomplete-blink|. Native-backend users need nothing more.
+
+==============================================================================
+4. Configuration
+                                                 *agentcomplete-configuration*
+
+The full default configuration, with every option: >lua
+	require("agentcomplete").setup({
+	  enabled = true,        -- attach automatically on detected buffers
+	  backend = "auto",      -- "auto" (blink if present, else native) | "blink" | "native"
+	  detect = "auto",       -- "auto" (run detectors) | "always" (force on) | "never"
+	  sources = {
+	    slash = true,        -- complete /skill and /command
+	    file = true,         -- complete @path/to/file
+	  },
+	  allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
+	  opencode = {
+	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
+	  },
+	})
+<
+'enabled'		boolean (default `true`). When true, attach
+			automatically to detected prompt buffers. When false,
+			nothing attaches until you run |:AgentCompleteAttach|.
+
+'backend'		`"auto"` | `"blink"` | `"native"` (default `"auto"`).
+			`"auto"` routes through blink.cmp if installed,
+			otherwise uses native completion. Force either with
+			`"blink"` or `"native"`. See |agentcomplete-blink| and
+			|agentcomplete-native|.
+
+'detect'		`"auto"` | `"always"` | `"never"` (default `"auto"`).
+			`"auto"` uses the built-in detectors
+			(|agentcomplete-detection|). `"always"` forces it
+			onto the current buffer regardless of detection.
+			`"never"` disables detection entirely.
+
+'sources.slash'		boolean (default `true`). Complete `/skill` and
+			`/command` after a leading `/`.
+
+'sources.file'		boolean (default `true`). Complete `@path/to/file`
+			after a leading `@`.
+
+'allowed_sources'	string[] (default `{}`). blink only. Extra blink
+			source names to keep with agentcomplete in detected
+			buffers. See |agentcomplete-suppression|.
+
+'opencode.show_all_builtin_commands'
+			boolean (default `false`). When true, OpenCode's
+			interactive built-in TUI commands (`/help`, `/models`,
+			`/editor`, …) are also completed. They are hidden by
+			default because they are TUI affordances, not prompt
+			content.
+
+==============================================================================
+5. blink.cmp integration
+                                                         *agentcomplete-blink*
+
+When 'backend' is `"auto"` and blink.cmp is installed, agentcomplete routes
+through it. blink cannot register the provider for you, so you MUST add it to
+your blink configuration — otherwise the blink backend has no source and no
+completions appear: >lua
+	require("blink.cmp").setup({
+	  sources = {
+	    default = { "agentcomplete", "lsp", "path", "buffer" },
+	    providers = {
+	      agentcomplete = {
+	        name = "agentcomplete",
+	        module = "agentcomplete.backends.blink",
+	      },
+	    },
+	  },
+	})
+< Once registered the provider self-gates: it stays dormant in every buffer
+except a detected prompt buffer, so listing it in `default` is harmless
+elsewhere.
+
+                                                    *agentcomplete-load-order*
+Note: call `require("agentcomplete").setup()` AFTER `blink.cmp` is set up.
+With lazy.nvim, make agentcomplete depend on blink (or order the specs) so
+blink is configured first.
+
+Prefer zero configuration? Set `backend = "native"` and skip provider
+registration entirely (see |agentcomplete-native|).
+
+==============================================================================
+6. Only-source suppression
+                                                   *agentcomplete-suppression*
+
+In a detected prompt buffer the blink backend makes agentcomplete the ONLY
+source: every other source (lsp, path, snippets, buffer, lazydev, …) is
+suppressed, so the buffer offers nothing but `/` and `@` completions. Every
+other buffer keeps your full completion stack untouched.
+
+To keep specific sources with agentcomplete in detected buffers, list them in
+'allowed_sources': >lua
+	require("agentcomplete").setup({
+	  allowed_sources = { "path" }, -- keep `path` alongside agentcomplete
+	})
+< 'allowed_sources' re-permits, never registers: each name must already be a
+registered blink source in your config. Listing a source that you never
+registered has no effect — it cannot conjure a source that does not exist.
+
+==============================================================================
+7. Native completion
+                                                        *agentcomplete-native*
+
+When 'backend' is `"native"` (or `"auto"` with blink absent), agentcomplete
+drives Neovim's built-in insert-mode completion. It sets a buffer-local
+'completefunc' and a `TextChangedI` autotrigger that opens the popup via
+|complete()| as soon as a `/` or `@` trigger context exists. It also sets
+'completeopt' to `menuone,noselect` for that buffer only — your global
+'completeopt' is never touched. All of this is removed on detach.
+
+Only-source suppression (see |agentcomplete-suppression|) is a blink concept:
+the native backend drives 'completefunc' directly, so there is nothing to
+suppress and your other completion mechanisms are left alone.
+
+The native backend needs no provider registration, which makes it the
+zero-config choice. Prefix filtering is done by agentcomplete (Neovim does not
+fuzzy-filter `completefunc` results).
+
+==============================================================================
+8. Project root
+                                                  *agentcomplete-project-root*
+
+Detection roots skill, command, and file discovery at the editor's working
+directory, which is normally the agent's project root. For non-standard
+launches you can override it.
+
+Per launch, exported before starting the agent: >sh
+	AGENTCOMPLETE_CWD=/path/to/project
+< Statically, in your Neovim configuration: >lua
+	vim.g.agentcomplete_cwd = "/path/to/project"
+< The environment variable wins over `vim.g.agentcomplete_cwd`; both win over
+the editor's working directory.
+
+==============================================================================
+9. Commands
+                                                      *agentcomplete-commands*
+
+                                                        *:AgentCompleteAttach*
+:AgentCompleteAttach	Force completion onto the current buffer, bypassing
+			detection. Use it when a session is not auto-detected
+			(an unusual launch) or when 'enabled' is false.
+
+                                                        *:AgentCompleteDetach*
+:AgentCompleteDetach	Detach completion from the current buffer, removing
+			the backend and any buffer-local state it installed.
+
+==============================================================================
+10. Completion sources
+                                                       *agentcomplete-sources*
+
+A completion is offered only at the start of a non-whitespace run that begins
+with the trigger character, so `/` and `@` complete at the start of a word but
+not mid-token. Matching is case-insensitive prefix matching on the name.
+
+	`/`	Skills (`<dir>/<name>/SKILL.md`) and commands. The menu shows
+		the skill or command name and its description. OpenCode's
+		built-in TUI commands appear only when
+		`opencode.show_all_builtin_commands` is true. A user-defined
+		command of the same name as a built-in wins.
+
+	`@`	Files under the resolved project root.
+
+Which directories are searched for each tool is described in
+|agentcomplete-detection|.
+
+==============================================================================
+11. Diagnostics
+                                                   *agentcomplete-diagnostics*
+
+When completion misbehaves in a prompt buffer ("no completions", "wrong
+sources", "not detected"), dump the live plugin state and read it back. From
+the real prompt buffer the agent opened: >vim
+	:AgentCompleteAttach          " optional: force a session if not detected
+	:luafile scripts/diagnostics.lua
+< `scripts/diagnostics.lua` lives in the plugin's repository and is resolved
+relative to the editor's working directory, so run it from a checkout of
+agentcomplete (or give the full path to the script).
+
+This writes `.tmp/agentcomplete-diagnostics.md` under the editor's working
+directory and prints the report to |:messages|. The report contains:
+
+	Config		configured vs. resolved backend, detect mode,
+			'enabled', the 'sources' toggles, 'allowed_sources'
+	Detection	whether the buffer is detected, the resolved tool, and
+			the skill/command directories discovery searched
+	Discovery	counts of skills, commands, and files found
+	blink		the only-source suppression diagnosis, ending in a
+			single "Likely cause" line
+	Environment	the raw detection signals (`OPENCODE`, `AGENT`,
+			`CLAUDE_CODE_SESSION_ID`, `$AGENTCOMPLETE_CWD`, …)
+
+Contributors running the plugin from a checkout can produce the same report
+headlessly with `mise run diag`; see CONTRIBUTING.md.
+
+==============================================================================
+vim:tw=78:ts=4:noet:ft=help:norl:
