@@ -90,11 +90,12 @@ require("agentcomplete").setup({ backend = "native" })
 
 ### Heads up: the prompt buffer shows only `/` and `@`
 
-In a detected prompt buffer, agentcomplete makes itself the **only** completion source —
-your other sources (LSP, path, buffer, …) are suppressed there, so the buffer offers
-nothing but `/` (skills and commands) and `@` (files). Every other buffer keeps your full
-completion stack. To keep specific sources in the prompt buffer too, see
-`:help agentcomplete-suppression`.
+With blink.cmp, agentcomplete makes itself the **only** source in a detected prompt buffer
+— your other sources (LSP, path, buffer, …) are suppressed there, so it offers nothing but
+`/` (skills and commands) and `@` (files). Every other buffer keeps your full completion
+stack. To keep specific sources in the prompt buffer too, see
+`:help agentcomplete-suppression`. (The native backend doesn't suppress anything — it just
+adds `/` and `@` completion.)
 
 ## Learn more
 
