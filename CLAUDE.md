@@ -2,24 +2,26 @@
 
 agentcomplete completes an agent CLI's skills, commands, and files inside the prompt
 buffer that CLI opens in Neovim (Claude Code via `Ctrl+G`, OpenCode via `/editor`).
-Detailed references live in [`docs/agents/`](docs/agents/) and load **on demand** — the
+Detailed references live in [`doc/agents/`](doc/agents/) and load **on demand** — the
 Routing section below is the router that decides which a given task needs. The CodeGraph
 and Verifying-changes sections beneath it are always-on context for this project.
 
 ## Routing
 
 Read the digraph as a checklist, not a single path: start from what you're doing and load
-every reference whose edge matches. Read the matching `docs/agents/*.md` file into context
+every reference whose edge matches. Read the matching `doc/agents/*.md` file into context
 *before* you act on that area, not after.
 
 ```graphviz
 digraph agentcomplete_router {
     "Working on agentcomplete.nvim" [shape=doublecircle];
     "What are you doing?" [shape=diamond];
-    "Load docs/agents/diagnostics.md" [shape=box];
+    "Load doc/agents/diagnostics.md" [shape=box];
+    "Load doc/agents/documentation.md" [shape=box];
 
     "Working on agentcomplete.nvim" -> "What are you doing?";
-    "What are you doing?" -> "Load docs/agents/diagnostics.md" [label="debugging detection or completion in a prompt buffer (:luafile scripts/diagnostics.lua, mise run diag); understanding how each agent CLI is detected"];
+    "What are you doing?" -> "Load doc/agents/diagnostics.md" [label="debugging detection or completion in a prompt buffer (:luafile scripts/diagnostics.lua, mise run diag); understanding how each agent CLI is detected"];
+    "What are you doing?" -> "Load doc/agents/documentation.md" [label="adding or updating any documentation (README, the vimdoc, CONTRIBUTING, CLAUDE.md, doc/agents) — start here for which file changes and how"];
 }
 ```
 
@@ -83,6 +85,6 @@ flags — when a task fails, run it directly to see its full output and narrow t
   a single file (e.g. `mise run test -f tests/test_detect.lua`).
 - `mise run format` — apply formatting in write mode (the counterpart to `lint`'s check).
 - `mise run diag` — print the diagnostics report headlessly; see
-  [`docs/agents/diagnostics.md`](docs/agents/diagnostics.md).
+  [`doc/agents/diagnostics.md`](doc/agents/diagnostics.md).
 
 A `pre-commit` hook formats and lints staged files; a `pre-push` hook runs the tests.
