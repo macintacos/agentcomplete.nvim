@@ -19,13 +19,13 @@ CONTENTS
     2. How detection works ......................... |agentcomplete-detection|
     3. Installation ............................. |agentcomplete-installation|
     4. Configuration ........................... |agentcomplete-configuration|
-    5. blink.cmp integration .......................... |agentcomplete-blink|
-    6. Only-source suppression .................. |agentcomplete-suppression|
-    7. Native completion ............................. |agentcomplete-native|
-    8. Project root ........................... |agentcomplete-project-root|
-    9. Commands .................................... |agentcomplete-commands|
-   10. Completion sources ........................... |agentcomplete-sources|
-   11. Diagnostics ............................. |agentcomplete-diagnostics|
+    5. blink.cmp integration ........................... |agentcomplete-blink|
+    6. Only-source suppression ................... |agentcomplete-suppression|
+    7. Native completion .............................. |agentcomplete-native|
+    8. Project root ............................. |agentcomplete-project-root|
+    9. Commands ..................................... |agentcomplete-commands|
+   10. Completion sources ............................ |agentcomplete-sources|
+   11. Diagnostics ............................... |agentcomplete-diagnostics|
 
 ==============================================================================
 1. Introduction
@@ -108,11 +108,9 @@ In both tools the project root can be overridden — see
 With Neovim's |vim.pack|: >lua
 	vim.pack.add({ "https://github.com/macintacos/agentcomplete.nvim" })
 	require("agentcomplete").setup({})
-<
-With lazy.nvim: >lua
+< With lazy.nvim: >lua
 	{ "macintacos/agentcomplete.nvim", opts = {} }
-<
-Or call `require("agentcomplete").setup({})` with any plugin manager.
+< Or call `require("agentcomplete").setup({})` with any plugin manager.
 
                                                          *agentcomplete-setup*
 `require("agentcomplete").setup({opts})` merges {opts} over the defaults,
@@ -195,8 +193,7 @@ completions appear: >lua
 	    },
 	  },
 	})
-<
-Once registered the provider self-gates: it stays dormant in every buffer
+< Once registered the provider self-gates: it stays dormant in every buffer
 except a detected prompt buffer, so listing it in `default` is harmless
 elsewhere.
 
@@ -217,13 +214,12 @@ source: every other source (lsp, path, snippets, buffer, lazydev, …) is
 suppressed, so the buffer offers nothing but `/` and `@` completions. Every
 other buffer keeps your full completion stack untouched.
 
-To keep specific sources with agentcomplete in detected buffers, list them
-in 'allowed_sources': >lua
+To keep specific sources with agentcomplete in detected buffers, list them in
+'allowed_sources': >lua
 	require("agentcomplete").setup({
 	  allowed_sources = { "path" }, -- keep `path` alongside agentcomplete
 	})
-<
-'allowed_sources' re-permits, never registers: each name must already be a
+< 'allowed_sources' re-permits, never registers: each name must already be a
 registered blink source in your config. Listing a source that you never
 registered has no effect — it cannot conjure a source that does not exist.
 
@@ -243,8 +239,8 @@ the native backend drives 'completefunc' directly, so there is nothing to
 suppress and your other completion mechanisms are left alone.
 
 The native backend needs no provider registration, which makes it the
-zero-config choice. Prefix filtering is done by agentcomplete (Neovim does
-not fuzzy-filter `completefunc` results).
+zero-config choice. Prefix filtering is done by agentcomplete (Neovim does not
+fuzzy-filter `completefunc` results).
 
 ==============================================================================
 8. Project root
@@ -256,11 +252,9 @@ launches you can override it.
 
 Per launch, exported before starting the agent: >sh
 	AGENTCOMPLETE_CWD=/path/to/project
-<
-Statically, in your Neovim configuration: >lua
+< Statically, in your Neovim configuration: >lua
 	vim.g.agentcomplete_cwd = "/path/to/project"
-<
-The environment variable wins over `vim.g.agentcomplete_cwd`; both win over
+< The environment variable wins over `vim.g.agentcomplete_cwd`; both win over
 the editor's working directory.
 
 ==============================================================================
@@ -304,8 +298,7 @@ sources", "not detected"), dump the live plugin state and read it back. From
 the real prompt buffer the agent opened: >vim
 	:AgentCompleteAttach          " optional: force a session if not detected
 	:luafile scripts/diagnostics.lua
-<
-`scripts/diagnostics.lua` lives in the plugin's repository and is resolved
+< `scripts/diagnostics.lua` lives in the plugin's repository and is resolved
 relative to the editor's working directory, so run it from a checkout of
 agentcomplete (or give the full path to the script).
 
@@ -326,4 +319,4 @@ Contributors running the plugin from a checkout can produce the same report
 headlessly with `mise run diag`; see CONTRIBUTING.md.
 
 ==============================================================================
-vim:tw=78:ts=8:noet:ft=help:norl:
+vim:tw=78:ts=4:noet:ft=help:norl:
