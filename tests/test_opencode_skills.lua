@@ -86,17 +86,19 @@ end
 
 T["on_exit"] = new_set()
 
-T["on_exit"]["populates skills from stdout on a clean exit"] = function()
+T["on_exit"]["populates skills from the output file on a clean exit"] = function()
   local oc = require "agentcomplete.opencode_skills"
+  local path = vim.fn.tempname()
+  vim.fn.writefile(vim.split(SAMPLE, "\n"), path)
   local entry = { started = true, skills = {} }
-  oc._on_exit(entry, { code = 0, stdout = SAMPLE })
+  oc._on_exit(entry, { code = 0 }, path)
   expect.equality(#entry.skills, 3)
 end
 
 T["on_exit"]["leaves skills empty on a non-zero exit"] = function()
   local oc = require "agentcomplete.opencode_skills"
   local entry = { started = true, skills = {} }
-  oc._on_exit(entry, { code = 1, stdout = "" })
+  oc._on_exit(entry, { code = 1 }, vim.fn.tempname())
   expect.equality(entry.skills, {})
 end
 

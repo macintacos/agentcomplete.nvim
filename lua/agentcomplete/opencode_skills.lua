@@ -41,29 +41,39 @@ function M.parse(stdout)
   return out
 end
 
----Store parsed skills on `entry` when the command exited cleanly with output. A non-zero exit
----or empty stdout leaves the cache untouched (fail closed to the empty list it already holds).
+---On a clean exit, read the temp file the command wrote and store the parsed skills on
+---`entry`; the temp file is always removed. A non-zero exit or an unreadable/invalid file
+---leaves the cache untouched (fail closed to the empty list it already holds).
 ---@param entry { started: boolean, skills: AgentComplete.Skill[] }
----@param obj { code: integer, stdout: string? }
-function M._on_exit(entry, obj)
-  if obj.code == 0 and obj.stdout and obj.stdout ~= "" then
-    entry.skills = M.parse(obj.stdout) or {}
+---@param obj { code: integer }
+---@param path string Temp file the command's stdout was redirected to.
+function M._on_exit(entry, obj, path)
+  if obj.code == 0 then
+    local ok, lines = pcall(vim.fn.readfile, path)
+    if ok then
+      entry.skills = M.parse(table.concat(lines, "\n")) or {}
+    end
   end
+  pcall(vim.fn.delete, path)
 end
 
 ---Kick off the async `opencode debug skill` job for `cwd`, writing results into `entry`.
----`pcall`-guarded so a missing `opencode` (or any spawn error) never raises into the editor.
+---`opencode`'s Bun/Node runtime does non-blocking writes to a pipe and truncates large output
+---(~64KB) when read through one, so stdout is redirected to a temp file the callback reads
+---instead. `pcall`-guarded so a missing `opencode`/`sh` (or any spawn error) never raises into
+---the editor.
 ---@param cwd string
 ---@param entry { started: boolean, skills: AgentComplete.Skill[] }
 ---@param system? fun(cmd: string[], opts: table, on_exit: fun(obj: table)): any Defaults to `vim.system`; injected in tests.
 function M._spawn(cwd, entry, system)
   system = system or vim.system
+  local path = vim.fn.tempname()
   pcall(
     system,
-    { "opencode", "debug", "skill" },
-    { text = true, cwd = cwd, timeout = 5000 },
+    { "sh", "-c", "opencode debug skill > " .. vim.fn.shellescape(path) },
+    { cwd = cwd, timeout = 5000 },
     vim.schedule_wrap(function(obj)
-      M._on_exit(entry, obj)
+      M._on_exit(entry, obj, path)
     end)
   )
 end
