@@ -8,7 +8,7 @@ local M = {}
 ---@class AgentComplete.Skill
 ---@field name string Skill name (frontmatter `name`, else the directory name).
 ---@field description string|nil Frontmatter `description`, if present.
----@field path string Absolute path to the SKILL.md.
+---@field path? string Absolute path to the SKILL.md (nil for built-in skills resolved via the CLI).
 
 ---@class AgentComplete.Command
 ---@field name string Command name; nested files join path segments with `:`.
