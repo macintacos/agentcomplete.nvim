@@ -59,10 +59,23 @@ function M.items(session, ctx)
   local enabled = session.sources or {}
   local out = {}
   if ctx.trigger == "/" and enabled.slash ~= false then
-    for _, s in ipairs(scan.skills(session.skill_dirs, session.skill_namespaces)) do
+    -- Filesystem-scanned skills (instant) then any tool-specific extra_skills (e.g. OpenCode's
+    -- CLI-resolved set), de-duplicated by name across both — filesystem-first wins a name clash.
+    local seen_skill = {}
+    local function add_skill(s)
+      if seen_skill[s.name] then
+        return
+      end
+      seen_skill[s.name] = true
       if matches(s.name, ctx.query) then
         table.insert(out, { label = "/" .. s.name, insert_text = s.name, kind = "skill", detail = s.description })
       end
+    end
+    for _, s in ipairs(scan.skills(session.skill_dirs, session.skill_namespaces)) do
+      add_skill(s)
+    end
+    for _, s in ipairs(session.extra_skills or {}) do
+      add_skill(s)
     end
     -- Markdown commands (from command_dirs) then any tool-specific extra_commands
     -- (e.g. OpenCode config-map commands), de-duplicated by name across both.
