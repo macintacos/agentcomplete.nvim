@@ -50,8 +50,15 @@ end
 function M._on_exit(entry, obj, path)
   if obj.code == 0 then
     local ok, lines = pcall(vim.fn.readfile, path)
-    if ok then
-      entry.skills = M.parse(table.concat(lines, "\n")) or {}
+    local parsed = ok and M.parse(table.concat(lines, "\n"))
+    if parsed then
+      -- Mutate the existing list in place rather than reassigning, so a caller that captured
+      -- the reference from `get` (the native backend caches its session once at attach) observes
+      -- the resolved skills without re-fetching. Invalid output leaves the empty list untouched.
+      for i = #entry.skills, 1, -1 do
+        entry.skills[i] = nil
+      end
+      vim.list_extend(entry.skills, parsed)
     end
   end
   pcall(vim.fn.delete, path)

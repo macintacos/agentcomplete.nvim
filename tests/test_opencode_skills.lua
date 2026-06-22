@@ -86,13 +86,15 @@ end
 
 T["on_exit"] = new_set()
 
-T["on_exit"]["populates skills from the output file on a clean exit"] = function()
+T["on_exit"]["populates the skills table in place on a clean exit"] = function()
   local oc = require "agentcomplete.opencode_skills"
   local path = vim.fn.tempname()
   vim.fn.writefile(vim.split(SAMPLE, "\n"), path)
   local entry = { started = true, skills = {} }
+  local captured = entry.skills -- a caller (e.g. the native backend's cached session) holding the ref
   oc._on_exit(entry, { code = 0 }, path)
   expect.equality(#entry.skills, 3)
+  expect.equality(captured == entry.skills, true) -- mutated in place, not replaced, so the ref stays live
 end
 
 T["on_exit"]["leaves skills empty on a non-zero exit"] = function()
