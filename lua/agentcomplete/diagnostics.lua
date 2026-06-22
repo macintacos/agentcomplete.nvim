@@ -112,10 +112,10 @@ end
 
 ---@class AgentComplete.Diagnostics.Report
 ---@field nvim_version string
----@field config { backend: string, resolved_backend: string, detect: string, enabled: boolean, sources: { slash: boolean, file: boolean }, allowed_sources: string[], opencode: { show_all_builtin_commands: boolean } }
+---@field config { backend: string, resolved_backend: string, detect: string, enabled: boolean, sources: { slash: boolean, file: boolean }, allowed_sources: string[], opencode: { show_all_builtin_commands: boolean, resolve_skills_via_cli: boolean } }
 ---@field buffer { nr: integer, name: string, detected: boolean, native_attached: boolean, session_source: string }
 ---@field session { tool: string, cwd: string, session_id: string|nil, skill_dirs: string[], command_dirs: string[] }|nil
----@field discovery { skills: integer, commands: integer, files: integer }|nil
+---@field discovery { skills: integer, cli_skills: integer, commands: integer, files: integer }|nil
 ---@field blink AgentComplete.Diagnostics.Suppression
 ---@field env table<string, string|nil>
 
@@ -149,6 +149,7 @@ function M.render(report)
   add("- sources.file:         " .. yn(cfg.sources and cfg.sources.file))
   add("- allowed_sources:      " .. list(cfg.allowed_sources))
   add("- opencode.show_all_builtin_commands: " .. yn(cfg.opencode and cfg.opencode.show_all_builtin_commands))
+  add("- opencode.resolve_skills_via_cli:    " .. yn(cfg.opencode and cfg.opencode.resolve_skills_via_cli))
   add ""
 
   add "## Detection"
@@ -171,6 +172,7 @@ function M.render(report)
   local d = report.discovery
   if d then
     add("- skills:   " .. val(d.skills))
+    add("- skills (opencode debug skill): " .. val(d.cli_skills))
     add("- commands: " .. val(d.commands))
     add("- files:    " .. val(d.files))
   else
@@ -236,6 +238,7 @@ function M.collect(opts)
   if session then
     discovery = {
       skills = #scan.skills(session.skill_dirs),
+      cli_skills = #(session.extra_skills or {}),
       commands = #scan.commands(session.command_dirs) + #(session.extra_commands or {}),
       files = #scan.files(session.cwd),
     }

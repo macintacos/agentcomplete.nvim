@@ -123,6 +123,36 @@ T["items"]["slash trigger includes session.extra_commands, deduped against markd
   expect.equality(by_label["/ship"].detail, "From config")
 end
 
+T["items"]["slash trigger merges session.extra_skills, deduped by name against filesystem skills"] = function()
+  local sources = require "agentcomplete.sources"
+  local session = fixture_session()
+  -- "deploy-helper" also exists on disk (fixture); "from-cli" is CLI-only.
+  session.extra_skills = {
+    { name = "from-cli", description = "Resolved via opencode debug skill" },
+    { name = "deploy-helper", description = "CLI dup of the filesystem skill" },
+  }
+  local items = sources.items(session, { trigger = "/", query = "", start_col = 1 })
+  local labels = vim.tbl_map(function(i)
+    return i.label
+  end, items)
+  expect.equality(vim.tbl_contains(labels, "/from-cli"), true)
+  local n_helper = 0
+  for _, l in ipairs(labels) do
+    if l == "/deploy-helper" then
+      n_helper = n_helper + 1
+    end
+  end
+  expect.equality(n_helper, 1) -- deduped: not listed twice
+  local by_label = {}
+  for _, i in ipairs(items) do
+    by_label[i.label] = i
+  end
+  expect.equality(by_label["/from-cli"].kind, "skill")
+  expect.equality(by_label["/from-cli"].detail, "Resolved via opencode debug skill")
+  -- filesystem-first wins the dedup: detail comes from the on-disk skill
+  expect.equality(by_label["/deploy-helper"].detail, "Helps deploy")
+end
+
 T["items"]["namespaces a plugin-sourced skill in label + insert_text; user skill stays bare"] = function()
   local sources = require "agentcomplete.sources"
   local root = tmpdir()

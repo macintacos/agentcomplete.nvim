@@ -182,4 +182,15 @@ T["render"]["surfaces OpenCode env signals and the session's search dirs"] = fun
   expect.equality(has(out, "/proj/.opencode/command"), true)
 end
 
+T["render"]["surfaces the CLI skill resolver toggle and its resolved count"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.config.opencode = { show_all_builtin_commands = false, resolve_skills_via_cli = true }
+  report.discovery.cli_skills = 17
+  local out = diag.render(report)
+  expect.equality(has(out, "resolve_skills_via_cli"), true)
+  expect.equality(has(out, "opencode debug skill"), true)
+  expect.equality(has(out, "17"), true) -- the CLI-resolved skill count
+end
+
 return T

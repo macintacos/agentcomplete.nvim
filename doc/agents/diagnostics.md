@@ -60,7 +60,11 @@ than the buffer name.
 - `## Detection` — whether the current buffer is detected, the session source, the
   resolved `session.tool`, and the `skill_dirs` / `command_dirs` discovery actually
   searched.
-- `## Discovery` — counts of skills, commands, and files found for the active session.
+- `## Discovery` — counts of skills, commands, and files found for the active session. For
+  OpenCode it also reports a separate `skills (opencode debug skill)` count — the
+  CLI-resolved set (see `lua/agentcomplete/opencode_skills.lua`) merged into completion.
+  That count is async: it populates ~0.7s after the buffer attaches, so a live `:luafile`
+  run shows it, but a fresh `mise run diag` (which exits immediately) reports 0.
 - `## blink suppression` — the only-source suppression diagnosis, ending in a single
   "Likely cause" line that walks the mechanism in the order failures actually occur, so it
   points straight at the fix.
