@@ -3,7 +3,7 @@
 Completion of agent-CLI skills, commands, and files inside the prompt buffer that
 [Claude Code](https://docs.claude.com/en/docs/claude-code) (`Ctrl+G`) or
 [OpenCode](https://opencode.ai) (`/editor`) opens in Neovim. Works through
-[blink.cmp](https://github.com/Saghen/blink.cmp) v2 (preferred, auto-detected) or Neovim's
+[blink.cmp](https://github.com/Saghen/blink.cmp) v1 (preferred, auto-detected) or Neovim's
 built-in completion.
 
 > Status: proof of concept.
@@ -13,7 +13,7 @@ built-in completion.
 ## Requirements
 
 - Neovim 0.10+ (0.12+ for the `vim.pack` install below)
-- Optional: [blink.cmp](https://github.com/Saghen/blink.cmp) v2 — without it, the built-in
+- Optional: [blink.cmp](https://github.com/Saghen/blink.cmp) v1 — without it, the built-in
   completion backend is used
 
 ## Install
