@@ -25,7 +25,8 @@ CONTENTS
     8. Project root ............................. |agentcomplete-project-root|
     9. Commands ..................................... |agentcomplete-commands|
    10. Completion sources ............................ |agentcomplete-sources|
-   11. Diagnostics ............................... |agentcomplete-diagnostics|
+   11. Highlighting ............................. |agentcomplete-highlighting|
+   12. Diagnostics ............................... |agentcomplete-diagnostics|
 
 ==============================================================================
 1. Introduction
@@ -318,7 +319,36 @@ Which directories are searched for each tool is described in
 |agentcomplete-detection|.
 
 ==============================================================================
-11. Diagnostics
+11. Highlighting
+                                                  *agentcomplete-highlighting*
+
+In an attached prompt buffer, `/` and `@` tokens are highlighted — but only
+when they resolve. A token naming a skill, command, or path that does not
+exist stays uncolored. There is no "broken token" color: the absence of one is
+the signal, and it is how you catch a typo before sending the prompt. A
+highlight spans the whole token, the trigger character included.
+
+Two groups do the work: `AgentCompleteSkill` for resolving `/` tokens (skills
+and commands alike), linked to `Special` by default, and `AgentCompleteFile`
+for resolving `@` tokens, linked to `Directory`. Both links are defined with
+`default = true`, so your own |nvim_set_hl()| wins, and are re-established on
+`ColorScheme`, which would otherwise clear them.
+
+What `@` counts as resolving is deliberately broader than what `@` completion
+offers: anything on disk, directories and gitignored files included, where
+completion is gitignore-aware and files only. Resolution happens at paint
+time, not at attach, so a file or skill created after the buffer opened
+highlights on the next repaint; repaints are debounced by about 100ms.
+
+Highlighting is backend-agnostic — identical under blink.cmp and the native
+backend — and it follows the 'sources.slash' and 'sources.file' toggles.
+
+Highlighting has no setup() option. Restyle the groups directly: >lua
+	vim.api.nvim_set_hl(0, "AgentCompleteFile", { fg = "#7aa2f7" })
+<
+
+==============================================================================
+12. Diagnostics
                                                    *agentcomplete-diagnostics*
 
 When completion misbehaves in a prompt buffer ("no completions", "wrong
