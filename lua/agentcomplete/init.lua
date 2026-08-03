@@ -86,6 +86,7 @@ function M.attach(bufnr, opts)
     session.sources = M.config.sources
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
+    require("agentcomplete.highlight").attach(buf, session)
   end
   return session ~= nil
 end
@@ -98,6 +99,7 @@ function M.detach(bufnr)
     buf = vim.api.nvim_get_current_buf()
   end
   backends.detach(buf)
+  require("agentcomplete.highlight").detach(buf)
 end
 
 ---Set up agentcomplete.nvim.
