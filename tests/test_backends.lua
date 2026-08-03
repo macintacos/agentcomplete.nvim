@@ -1,6 +1,7 @@
 -- Tests for agentcomplete.backends: selection, the native mapping (prefix
--- filtered, vim complete-items) and the blink mapping (unfiltered, LSP items
--- with an explicit textEdit range), plus native attach/detach wiring.
+-- filtered, vim complete-items) and the blink mapping (LSP items with an
+-- explicit textEdit range, unfiltered for `/` and fuzzy-narrowed to the typed
+-- run for `@`), plus native attach/detach wiring.
 local MiniTest = require "mini.test"
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
@@ -31,6 +32,14 @@ local function fixture_session()
     skill_dirs = { root .. "/skills" },
     command_dirs = { root .. "/commands" },
   }
+end
+
+local function sorted_labels(items)
+  local out = vim.tbl_map(function(i)
+    return i.label
+  end, items)
+  table.sort(out)
+  return out
 end
 
 local function find(items, pred)
@@ -81,14 +90,14 @@ end
 
 T["blink"] = new_set()
 
-T["blink"]["build returns UNFILTERED items with an explicit textEdit range"] = function()
+T["blink"]["build returns / items UNFILTERED with an explicit textEdit range"] = function()
   local blink = require "agentcomplete.backends.blink"
   local res = blink.build(fixture_session(), "/dep", 0, 4)
   local labels = vim.tbl_map(function(i)
     return i.label
   end, res.items)
   table.sort(labels)
-  -- "zebra" is present even though "dep" wouldn't match it — blink does the filtering, not us.
+  -- "zebra" is present even though "dep" wouldn't match it — for "/", blink filters, not us.
   expect.equality(labels, { "/deploy", "/deploy-helper", "/zebra" })
 
   local deploy = assert(find(res.items, function(i)
@@ -112,27 +121,15 @@ T["blink"]["file items use the File kind"] = function()
   expect.equality(f.textEdit.newText, "src/main.lua")
 end
 
-local function file_labels(items)
-  local labels = {}
-  for _, i in ipairs(items) do
-    if i.kind == CIK.File then
-      table.insert(labels, i.label)
-    end
-  end
-  table.sort(labels)
-  return labels
-end
-
 T["blink"]["@ items are narrowed to the whole typed run, past any /"] = function()
   local blink = require "agentcomplete.backends.blink"
   -- blink's own needle stops at "/", so it cannot narrow "src/li" itself.
-  expect.equality(file_labels(blink.build(fixture_session(), "@src/li", 0, 7).items), { "@src/lib/util.lua" })
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@src/li", 0, 7).items), { "@src/lib/util.lua" })
 end
 
 T["blink"]["@ alone is not swallowed by the empty-query matchfuzzy"] = function()
   local blink = require "agentcomplete.backends.blink"
-  local session = fixture_session()
-  expect.equality(file_labels(blink.build(session, "@", 0, 1).items), {
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@", 0, 1).items), {
     "@commands/deploy.md",
     "@skills/deploy-helper/SKILL.md",
     "@skills/zebra/SKILL.md",
@@ -143,20 +140,21 @@ end
 
 T["blink"]["@ narrowing is fuzzy, not a prefix filter"] = function()
   local blink = require "agentcomplete.backends.blink"
-  expect.equality(file_labels(blink.build(fixture_session(), "@lib/ut", 0, 7).items), { "@src/lib/util.lua" })
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@lib/ut", 0, 7).items), { "@src/lib/util.lua" })
 end
 
 T["blink"]["@ narrowing is case-insensitive"] = function()
   local blink = require "agentcomplete.backends.blink"
-  expect.equality(file_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items), { "@src/lib/util.lua" })
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items), { "@src/lib/util.lua" })
 end
 
-T["blink"]["deleting back past a / widens the list again"] = function()
+T["blink"]["@ narrowing applies at every run length, so deleting back widens"] = function()
   local blink = require "agentcomplete.backends.blink"
-  local session = fixture_session()
-  expect.equality(file_labels(blink.build(session, "@src/li", 0, 7).items), { "@src/lib/util.lua" })
-  -- No narrowing is cached: the shorter run sees both src files again.
-  expect.equality(file_labels(blink.build(session, "@src", 0, 4).items), { "@src/lib/util.lua", "@src/main.lua" })
+  -- Narrows on a slash-free run too, and holds no state, so a shorter run widens.
+  expect.equality(
+    sorted_labels(blink.build(fixture_session(), "@src", 0, 4).items),
+    { "@src/lib/util.lua", "@src/main.lua" }
+  )
 end
 
 T["blink"]["no context yields no items"] = function()

@@ -28,8 +28,9 @@ local CIK = vim.lsp.protocol.CompletionItemKind
 
 local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File }
 
----Fuzzy-narrow items to `query`. `vim.fn.matchfuzzy` is case-sensitive and returns
----nothing for an empty query, so match on a folded key and map back by index.
+---Fuzzy-narrow items to `query`, which returns nothing for an empty query — so an
+---empty run must bypass it. `matchfuzzy` is smart-case (an uppercase needle demands
+---an exact-case match), hence the folded needle.
 ---@param items AgentComplete.Item[]
 ---@param query string
 ---@return AgentComplete.Item[]
@@ -37,15 +38,7 @@ local function narrow(items, query)
   if query == "" then
     return items
   end
-  local keyed = {}
-  for i, it in ipairs(items) do
-    keyed[i] = { idx = i, key = it.insert_text:lower() }
-  end
-  local out = {}
-  for _, m in ipairs(vim.fn.matchfuzzy(keyed, query:lower(), { key = "key" })) do
-    out[#out + 1] = items[m.idx]
-  end
-  return out
+  return vim.fn.matchfuzzy(items, query:lower(), { key = "insert_text" })
 end
 
 ---Pure: build blink completion items for a line + cursor (row/col 0-based).
@@ -59,7 +52,7 @@ function M.build(session, line, row, col)
   if not ctx then
     return { items = {} }
   end
-  -- query="" → return everything for the trigger; blink filters via filterText.
+  -- query="" → the trigger's full set; blink filters "/" via filterText, "@" narrows below.
   local all = sources.items(session, { trigger = ctx.trigger, query = "", start_col = ctx.start_col })
   if ctx.trigger == "@" then
     all = narrow(all, ctx.query)
@@ -254,6 +247,9 @@ function M:get_completions(ctx, callback)
   local col = (ctx and ctx.cursor and ctx.cursor[2]) or cur[2]
   local line = (ctx and ctx.line) or vim.api.nvim_get_current_line()
   local res = M.build(session, line, row, col)
+  -- Both `is_incomplete_*` must stay true: they are what make blink re-request per
+  -- keystroke. Flip either and it re-filters its cached list with the collapsed
+  -- needle instead, undoing the `@` narrowing above.
   callback { items = res.items, is_incomplete_backward = true, is_incomplete_forward = true }
 end
 
