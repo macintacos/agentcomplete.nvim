@@ -39,6 +39,28 @@ function M.context(line, col)
   return nil
 end
 
+---@class AgentComplete.Token
+---@field trigger '"/"'|'"@"' The trigger character that opens the token.
+---@field name string Text after the trigger (the skill/command name, or the path).
+---@field col integer 0-based byte column of the trigger character.
+---@field end_col integer 0-based byte column just past the token's last character.
+
+---Every trigger token on a line, left to right. A non-whitespace run is a token only
+---when `M.context` accepts it, so mid-word `/` and `@` (`foo/bar`, `a@b.dev`) are
+---excluded by the same rule that governs completion.
+---@param line string
+---@return AgentComplete.Token[]
+function M.tokens(line)
+  local out = {}
+  for s, e in line:gmatch "()%S+()" do
+    local ctx = M.context(line, e - 1)
+    if ctx then
+      out[#out + 1] = { trigger = ctx.trigger, name = ctx.query, col = s - 1, end_col = e - 1 }
+    end
+  end
+  return out
+end
+
 ---Case-insensitive prefix match (an empty query matches everything).
 ---@param name string
 ---@param query string
