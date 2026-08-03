@@ -377,6 +377,9 @@ directory and prints the report to |:messages|. The report contains:
 	Detection	whether the buffer is detected, the resolved tool, and
 			the skill/command directories discovery searched
 	Discovery	counts of skills, commands, and files found
+	Highlighting	whether highlighting attached, how many tokens are
+			painted, what each group resolves to, and the size
+			of the resolved / set
 	blink		the only-source suppression diagnosis, ending in a
 			single "Likely cause" line
 	Environment	the raw detection signals (`OPENCODE`, `AGENT`,
@@ -386,4 +389,4 @@ Contributors running the plugin from a checkout can produce the same report
 headlessly with `mise run diag`; see CONTRIBUTING.md.
 
 ==============================================================================
-vim:tw=78:ts=4:noet:ft=help:norl:
+vim:tw=78:ts=8:noet:ft=help:norl:

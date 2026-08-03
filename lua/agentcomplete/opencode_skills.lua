@@ -59,6 +59,13 @@ function M._on_exit(entry, obj, path)
         entry.skills[i] = nil
       end
       vim.list_extend(entry.skills, parsed)
+      -- Observing the new skills is not enough: highlighting repaints on the attached
+      -- buffer's own events, so this is the one moment resolution changes without one. The
+      -- repaint is driven from here rather than from `highlight.lua`, which knows nothing
+      -- about async backends. No debounce — `_on_exit` fires once per cwd, already inside
+      -- `_spawn`'s `vim.schedule_wrap`. `pcall`ed like every other outward call here, so a
+      -- raise cannot escape a `vim.system` callback or skip the temp-file delete below.
+      pcall(require("agentcomplete.highlight").repaint_all)
     end
   end
   pcall(vim.fn.delete, path)

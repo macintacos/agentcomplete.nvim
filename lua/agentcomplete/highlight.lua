@@ -46,7 +46,7 @@ end
 ---filtering, and the `sources.slash` toggle, with no second source of truth.
 ---@param session AgentComplete.Session
 ---@return table<string, true>
-local function slash_names(session)
+function M.slash_names(session)
   local set = {}
   for _, it in ipairs(sources.items(session, { trigger = "/", query = "", start_col = 1 })) do
     set[it.insert_text] = true
@@ -91,7 +91,7 @@ function M.marks(session, lines)
       -- up "". A lone `@` would likewise fs_stat the cwd itself and match.
       if tok.name ~= "" then
         if tok.trigger == "/" and enabled.slash ~= false then
-          slash = slash or slash_names(session)
+          slash = slash or M.slash_names(session)
           group = slash[tok.name] and "AgentCompleteSkill" or nil
         elseif tok.trigger == "@" and enabled.file ~= false then
           group = file_exists(session.cwd, tok.name) and "AgentCompleteFile" or nil
@@ -115,6 +115,15 @@ function M.repaint(buf)
   vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
   for _, m in ipairs(M.marks(session, vim.api.nvim_buf_get_lines(buf, 0, -1, false))) do
     vim.api.nvim_buf_set_extmark(buf, M.ns, m.row, m.col, { end_col = m.end_col, hl_group = m.hl_group })
+  end
+end
+
+---Repaint every attached buffer. For session state that changes outside any one buffer's
+---own autocmds — an asynchronous resolver landing after attach. The resolver decides when
+---to call this; this module stays ignorant of which backends have one.
+function M.repaint_all()
+  for buf in pairs(M._sessions) do
+    M.repaint(buf)
   end
 end
 

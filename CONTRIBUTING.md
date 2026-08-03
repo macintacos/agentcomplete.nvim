@@ -72,7 +72,8 @@ From a live prompt buffer (the real one an agent CLI opened):
 ```
 
 It gathers the resolved backend, buffer detection and attach state, discovered
-skills/commands/files, and the blink only-source suppression diagnosis (with a
+skills/commands/files, token-highlighting state (attached, tokens painted, what each
+highlight group resolves to), and the blink only-source suppression diagnosis (with a
 likely-cause line), prints it to `:messages`, and writes it to
 `.tmp/agentcomplete-diagnostics.md` under the editor's working directory.
 

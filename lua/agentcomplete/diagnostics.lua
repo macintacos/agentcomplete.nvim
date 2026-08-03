@@ -116,6 +116,7 @@ end
 ---@field buffer { nr: integer, name: string, detected: boolean, native_attached: boolean, session_source: string }
 ---@field session { tool: string, cwd: string, session_id: string|nil, skill_dirs: string[], command_dirs: string[] }|nil
 ---@field discovery { skills: integer, cli_skills: integer, commands: integer, files: integer }|nil
+---@field highlighting { attached: boolean, painted: integer, groups: { AgentCompleteSkill: string|nil, AgentCompleteFile: string|nil }, slash_set: integer|nil }
 ---@field blink AgentComplete.Diagnostics.Suppression
 ---@field env table<string, string|nil>
 
@@ -178,6 +179,16 @@ function M.render(report)
   else
     add "- (no active session to scan)"
   end
+  add ""
+
+  add "## Highlighting"
+  local h = report.highlighting or {}
+  local groups = h.groups or {}
+  add("- attached to this buffer:  " .. yn(h.attached))
+  add("- tokens currently painted: " .. val(h.painted))
+  add("- AgentCompleteSkill:       " .. val(groups.AgentCompleteSkill))
+  add("- AgentCompleteFile:        " .. val(groups.AgentCompleteFile))
+  add("- resolved / set size:      " .. (h.slash_set and tostring(h.slash_set) or "(no active session)"))
   add ""
 
   add "## blink suppression"
@@ -244,6 +255,33 @@ function M.collect(opts)
     }
   end
 
+  ---What a group currently resolves to: the group it links to, `(explicit)` when the user
+  ---set attributes directly (which is what displaces the `default = true` link), or nil
+  ---when nothing has defined it at all. `nvim_get_hl` reports only the first hop, so a link
+  ---to a group a thin colorscheme left empty still reads as healthy — `link = false`
+  ---resolves the chain, and an empty result is the quiet way tokens end up uncolored.
+  ---@param name string
+  ---@return string|nil
+  local function resolution(name)
+    local hl = vim.api.nvim_get_hl(0, { name = name })
+    local what = hl.link or (next(hl) and "(explicit)" or nil)
+    if what and not next(vim.api.nvim_get_hl(0, { name = name, link = false })) then
+      return what .. " (no effective attributes)"
+    end
+    return what
+  end
+
+  local highlight = require "agentcomplete.highlight"
+  local highlighting = {
+    attached = highlight._sessions[buf] ~= nil,
+    painted = #vim.api.nvim_buf_get_extmarks(buf, highlight.ns, 0, -1, {}),
+    groups = {
+      AgentCompleteSkill = resolution "AgentCompleteSkill",
+      AgentCompleteFile = resolution "AgentCompleteFile",
+    },
+    slash_set = session and vim.tbl_count(highlight.slash_names(session)) or nil,
+  }
+
   local ok, bcfg = pcall(require, "blink.cmp.config")
   bcfg = ok and bcfg or nil
   local registered = bcfg and bcfg.sources and bcfg.sources.providers or nil
@@ -283,6 +321,7 @@ function M.collect(opts)
       command_dirs = session.command_dirs,
     } or nil,
     discovery = discovery,
+    highlighting = highlighting,
     blink = suppression,
     env = {
       AGENTCOMPLETE_CWD = vim.env.AGENTCOMPLETE_CWD,
