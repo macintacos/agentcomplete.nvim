@@ -309,7 +309,10 @@ the native backend, and fuzzy-matches the whole relative path on blink (see
 
 	`@`	Files under the resolved project root. On blink, `@src/li`
 		finds `src/lib/util.lua`, and the menu keeps narrowing as
-		you type past each `/`.
+		you type past each `/`. Slashes you type are separators
+		rather than anchors — they need not line up with the ones
+		in the path — so `@.co/grig` still finds
+		`.codegraph/.gitignore`.
 
 Which directories are searched for each tool is described in
 |agentcomplete-detection|.

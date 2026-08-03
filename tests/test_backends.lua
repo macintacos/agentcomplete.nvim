@@ -165,6 +165,19 @@ T["blink"]["@ narrowing is fuzzy, not a prefix filter"] = function()
   expect.equality(sorted_labels(blink.build(fixture_session(), "@lib/ut", 0, 7).items), { "@src/lib/util.lua" })
 end
 
+T["blink"]["@ narrowing does not pin the typed / to a path separator"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  -- "rc" follows the typed "/" but lives in the segment before the real one, so
+  -- pinning the slash drops the item entirely.
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@s/rcli", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["@ with only slashes typed is not swallowed by matchfuzzy"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  -- The needle is empty once slashes are dropped, which matchfuzzy answers with {}.
+  expect.equality(#blink.build(fixture_session(), "@/", 0, 2).items, 5)
+end
+
 T["blink"]["@ narrowing is case-insensitive"] = function()
   local blink = require "agentcomplete.backends.blink"
   expect.equality(sorted_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items), { "@src/lib/util.lua" })
