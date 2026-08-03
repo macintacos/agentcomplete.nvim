@@ -59,6 +59,50 @@ T["context"]["no trigger for plain text"] = function()
   expect.equality(sources.context("hello world", 11), nil)
 end
 
+T["tokens"] = new_set()
+
+T["tokens"]["returns both trigger tokens on a line with their columns"] = function()
+  local sources = require "agentcomplete.sources"
+  local toks = sources.tokens "see /deploy and @src/init.lua"
+  expect.equality(#toks, 2)
+  expect.equality(toks[1], { trigger = "/", name = "deploy", col = 4, end_col = 11 })
+  expect.equality(toks[2], { trigger = "@", name = "src/init.lua", col = 16, end_col = 29 })
+end
+
+T["tokens"]["ignores mid-word triggers"] = function()
+  local sources = require "agentcomplete.sources"
+  expect.equality(sources.tokens "foo/bar julian@excessive.dev", {})
+end
+
+T["tokens"]["a bare trigger is a token with an empty name"] = function()
+  local sources = require "agentcomplete.sources"
+  local toks = sources.tokens "@"
+  expect.equality(#toks, 1)
+  expect.equality(toks[1], { trigger = "@", name = "", col = 0, end_col = 1 })
+end
+
+T["tokens"]["trailing prose punctuation is not part of the token"] = function()
+  local sources = require "agentcomplete.sources"
+  local toks = sources.tokens "see @src/init.lua, then run /deploy."
+  expect.equality(#toks, 2)
+  expect.equality(toks[1], { trigger = "@", name = "src/init.lua", col = 4, end_col = 17 })
+  expect.equality(toks[2], { trigger = "/", name = "deploy", col = 28, end_col = 35 })
+end
+
+T["tokens"]["trims a run of closing punctuation"] = function()
+  local sources = require "agentcomplete.sources"
+  local toks = sources.tokens "@src/init.lua))."
+  expect.equality(#toks, 1)
+  expect.equality(toks[1].name, "src/init.lua")
+end
+
+T["tokens"]["leading whitespace does not shift the columns"] = function()
+  local sources = require "agentcomplete.sources"
+  local toks = sources.tokens "   /deploy"
+  expect.equality(#toks, 1)
+  expect.equality(toks[1], { trigger = "/", name = "deploy", col = 3, end_col = 10 })
+end
+
 T["items"] = new_set()
 
 local function fixture_session()

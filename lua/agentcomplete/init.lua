@@ -11,6 +11,7 @@ local M = {}
 
 local detect = require "agentcomplete.detect"
 local backends = require "agentcomplete.backends"
+local highlight = require "agentcomplete.highlight"
 local scan = require "agentcomplete.scan"
 
 ---Default configuration.
@@ -64,7 +65,7 @@ local function ensure_detectors()
   end
 end
 
----Attach completion to a buffer if a session is detected (or forced).
+---Attach completion and token highlighting to a buffer if a session is detected (or forced).
 ---@param bufnr integer|nil 0/nil → current buffer.
 ---@param opts? { force: boolean }
 ---@return boolean attached
@@ -86,11 +87,12 @@ function M.attach(bufnr, opts)
     session.sources = M.config.sources
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
+    highlight.attach(buf, session)
   end
   return session ~= nil
 end
 
----Detach completion from a buffer.
+---Detach completion and token highlighting from a buffer.
 ---@param bufnr integer|nil 0/nil → current buffer.
 function M.detach(bufnr)
   local buf = bufnr or 0
@@ -98,6 +100,7 @@ function M.detach(bufnr)
     buf = vim.api.nvim_get_current_buf()
   end
   backends.detach(buf)
+  highlight.detach(buf)
 end
 
 ---Set up agentcomplete.nvim.
