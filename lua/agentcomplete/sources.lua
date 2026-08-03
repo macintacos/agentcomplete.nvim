@@ -42,20 +42,33 @@ end
 ---@class AgentComplete.Token
 ---@field trigger '"/"'|'"@"' The trigger character that opens the token.
 ---@field name string Text after the trigger (the skill/command name, or the path).
----@field col integer 0-based byte column of the trigger character.
+---@field col integer 0-based byte column of the trigger character — one before `Context.start_col`.
 ---@field end_col integer 0-based byte column just past the token's last character.
 
 ---Every trigger token on a line, left to right. A non-whitespace run is a token only
 ---when `M.context` accepts it, so mid-word `/` and `@` (`foo/bar`, `a@b.dev`) are
 ---excluded by the same rule that governs completion.
+---
+---Trailing punctuation is trimmed first, which is the one place this deliberately parts
+---company with `M.context`: completion runs mid-word with the cursor at the token's end,
+---so nothing has been typed after it yet, while this reads committed prose where
+---`@src/init.lua, then` is ordinary. Leaving the comma in reports a real path as
+---unresolvable — the false negative the whole feature exists to avoid. Leading wrappers
+---(`(@src/init.lua`) stay excluded: `M.context` rejects them, and re-implementing its
+---run-start scan to allow them would fork the grammar for a case that reads as text
+---rather than as a broken path.
 ---@param line string
 ---@return AgentComplete.Token[]
 function M.tokens(line)
   local out = {}
   for s, e in line:gmatch "()%S+()" do
-    local ctx = M.context(line, e - 1)
+    local last = e - 1 -- doubles as a 1-based index into `line` and a 0-based end column
+    while last > s and line:find("^[%.,;:!?)%]}]", last) do
+      last = last - 1
+    end
+    local ctx = M.context(line, last)
     if ctx then
-      out[#out + 1] = { trigger = ctx.trigger, name = ctx.query, col = s - 1, end_col = e - 1 }
+      out[#out + 1] = { trigger = ctx.trigger, name = ctx.query, col = s - 1, end_col = last }
     end
   end
   return out

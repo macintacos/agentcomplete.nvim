@@ -65,6 +65,15 @@ T["marks"]["a directory resolves, unlike @ completion"] = function()
   expect.equality(marks[1].hl_group, "AgentCompleteFile")
 end
 
+T["marks"]["an absolute path resolves without being joined to cwd"] = function()
+  local highlight = require "agentcomplete.highlight"
+  local session = fixture_session()
+  session.cwd = "/nowhere" -- the join would fail; only normalization can resolve this
+  local marks = highlight.marks(session, { "@" .. tmpdir() })
+  expect.equality(#marks, 1)
+  expect.equality(marks[1].hl_group, "AgentCompleteFile")
+end
+
 T["marks"]["a nonexistent path is not marked"] = function()
   local highlight = require "agentcomplete.highlight"
   expect.equality(highlight.marks(fixture_session(), { "@missing.lua" }), {})
@@ -181,6 +190,12 @@ T["attach"] = new_set {
       require("agentcomplete").setup { opencode = { resolve_skills_via_cli = false } }
     end,
     post_case = function()
+      -- Wipe the case's buffer so its augroup and `_sessions` entry do not outlive it.
+      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_get_name(buf):match "%.md$" then
+          vim.api.nvim_buf_delete(buf, { force = true })
+        end
+      end
       vim.g.agentcomplete_cwd = saved.cwd
       vim.env.AGENTCOMPLETE_CWD = saved.env_cwd
       vim.env.CLAUDE_CONFIG_DIR = saved.claude_home
@@ -240,6 +255,18 @@ T["ensure_groups"]["links both groups to distinct built-ins"] = function()
   expect.equality(type(skill.link), "string")
   expect.equality(type(file.link), "string")
   expect.equality(skill.link ~= file.link, true)
+end
+
+-- The property that lets the module ship without a `ColorScheme` autocmd: `:colorscheme`
+-- runs `:hi clear`, and a `default = true` link is exactly what survives it.
+T["ensure_groups"]["the default links survive a colorscheme change"] = function()
+  local highlight = require "agentcomplete.highlight"
+  local previous = vim.g.colors_name
+  highlight.ensure_groups()
+  vim.cmd "colorscheme habamax"
+  expect.equality(vim.api.nvim_get_hl(0, { name = "AgentCompleteSkill" }).link, "Special")
+  expect.equality(vim.api.nvim_get_hl(0, { name = "AgentCompleteFile" }).link, "Directory")
+  vim.cmd("colorscheme " .. (previous or "default"))
 end
 
 return T

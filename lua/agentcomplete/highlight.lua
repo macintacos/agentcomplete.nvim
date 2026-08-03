@@ -6,15 +6,17 @@
 ---
 ---Backend-agnostic: wired from `init.lua`'s attach/detach rather than from `backends/`,
 ---so it behaves identically under blink and native. The module splits the same way
----`backends/native.lua` does — `M.marks` is the pure core the tests drive directly,
----`M.repaint` and the autocmds are the editor glue around it.
+---`backends/native.lua` does — `M.marks` is the editor-state-free core the tests drive
+---directly, `M.repaint` and the autocmds are the glue around it.
 ---@class AgentComplete.Highlight
 local M = {}
 
 local sources = require "agentcomplete.sources"
 
----Extmark namespace for every token highlight this module applies.
-M.ns = vim.api.nvim_create_namespace "agentcomplete"
+---Extmark namespace for every token highlight this module applies. Namespaced to the
+---module, not the plugin: `M.detach` clears it wholesale, so a namespace shared with a
+---future feature would have that feature's marks deleted along with these.
+M.ns = vim.api.nvim_create_namespace "agentcomplete.highlight"
 
 ---@type table<integer, AgentComplete.Session>
 M._sessions = {}
@@ -28,24 +30,14 @@ M._timers = {}
 ---per skill — too much to redo on every keystroke.
 local DEBOUNCE_MS = 100
 
-local colorscheme_hooked = false
-
----Define the two highlight groups. Idempotent, and safe to call from any buffer's
----attach. `default = true` so a user's own `nvim_set_hl` wins; re-established on
----`ColorScheme` because `:colorscheme` runs `:hi clear`, which wipes the links.
+---Define the two highlight groups. Idempotent, and safe to call from any buffer's attach.
+---`default = true` so a user's own `nvim_set_hl` wins, and so the link itself survives the
+---`:hi clear` a colorscheme change runs — which is why no `ColorScheme` autocmd is needed
+---to re-establish them. A user's explicit override does *not* survive that clear, but
+---restoring it is theirs to do, not ours to guess at.
 function M.ensure_groups()
   vim.api.nvim_set_hl(0, "AgentCompleteSkill", { link = "Special", default = true })
   vim.api.nvim_set_hl(0, "AgentCompleteFile", { link = "Directory", default = true })
-  if colorscheme_hooked then
-    return
-  end
-  colorscheme_hooked = true
-  vim.api.nvim_create_autocmd("ColorScheme", {
-    group = vim.api.nvim_create_augroup("AgentCompleteHighlightGroups", { clear = true }),
-    callback = function()
-      M.ensure_groups()
-    end,
-  })
 end
 
 ---Every `/` name the session resolves, as a set. An empty query matches everything, so
@@ -94,7 +86,9 @@ function M.marks(session, lines)
   for row, line in ipairs(lines) do
     for _, tok in ipairs(sources.tokens(line)) do
       local group
-      -- An empty name never resolves — without this a lone `@` would fs_stat the cwd.
+      -- An empty name never resolves, and short-circuiting here is what keeps a bare `/`
+      -- — the first keystroke of every slash token — from walking each skill dir to look
+      -- up "". A lone `@` would likewise fs_stat the cwd itself and match.
       if tok.name ~= "" then
         if tok.trigger == "/" and enabled.slash ~= false then
           slash = slash or slash_names(session)
@@ -127,10 +121,7 @@ end
 ---Coalesce repaints for `buf` onto a single per-buffer timer.
 ---@param buf integer
 local function schedule(buf)
-  local timer = M._timers[buf] or vim.loop.new_timer()
-  if not timer then
-    return -- no timer available; the next edit tries again
-  end
+  local timer = M._timers[buf] or assert(vim.loop.new_timer())
   M._timers[buf] = timer
   timer:stop()
   timer:start(
@@ -149,6 +140,9 @@ function M.attach(buf, session)
   M.ensure_groups()
   local grp = vim.api.nvim_create_augroup("AgentCompleteHighlight_" .. buf, { clear = true })
   M._augroups[buf] = grp
+  -- `InsertLeave` is not redundant with the two `TextChanged` events: edits made while the
+  -- completion popup is open fire `TextChangedP`, so accepting a completion — the single
+  -- most likely way a token appears — is caught on the way out of insert mode or not at all.
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "BufEnter" }, {
     group = grp,
     buffer = buf,

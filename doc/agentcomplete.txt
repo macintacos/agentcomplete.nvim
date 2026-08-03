@@ -283,13 +283,15 @@ the editor's working directory.
                                                       *agentcomplete-commands*
 
                                                         *:AgentCompleteAttach*
-:AgentCompleteAttach	Force completion onto the current buffer, bypassing
-			detection. Use it when a session is not auto-detected
-			(an unusual launch) or when 'enabled' is false.
+:AgentCompleteAttach	Force completion and |agentcomplete-highlighting| onto
+			the current buffer, bypassing detection. Use it when a
+			session is not auto-detected (an unusual launch) or
+			when 'enabled' is false.
 
                                                         *:AgentCompleteDetach*
-:AgentCompleteDetach	Detach completion from the current buffer, removing
-			the backend and any buffer-local state it installed.
+:AgentCompleteDetach	Detach completion and highlighting from the current
+			buffer, removing the backend, the token highlights,
+			and any buffer-local state they installed.
 
 ==============================================================================
 10. Completion sources
@@ -331,8 +333,8 @@ highlight spans the whole token, the trigger character included.
 Two groups do the work: `AgentCompleteSkill` for resolving `/` tokens (skills
 and commands alike), linked to `Special` by default, and `AgentCompleteFile`
 for resolving `@` tokens, linked to `Directory`. Both links are defined with
-`default = true`, so your own |nvim_set_hl()| wins, and are re-established on
-`ColorScheme`, which would otherwise clear them.
+`default = true`, so your own |nvim_set_hl()| wins and the links themselves
+survive the `:hi` `clear` that a colorscheme change runs.
 
 What `@` counts as resolving is deliberately broader than what `@` completion
 offers: anything on disk, directories and gitignored files included, where
@@ -343,8 +345,15 @@ highlights on the next repaint; repaints are debounced by about 100ms.
 Highlighting is backend-agnostic — identical under blink.cmp and the native
 backend — and it follows the 'sources.slash' and 'sources.file' toggles.
 
-Highlighting has no setup() option. Restyle the groups directly: >lua
-	vim.api.nvim_set_hl(0, "AgentCompleteFile", { fg = "#7aa2f7" })
+Highlighting has no setup() option. Restyle the groups directly — but note
+that an explicit highlight, unlike the default links above, does not survive a
+colorscheme change, so set it from a |ColorScheme| autocommand if you switch
+colorschemes after startup: >lua
+	vim.api.nvim_create_autocmd("ColorScheme", {
+	  callback = function()
+	    vim.api.nvim_set_hl(0, "AgentCompleteFile", { fg = "#7aa2f7" })
+	  end,
+	})
 <
 
 ==============================================================================
