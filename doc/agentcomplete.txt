@@ -296,7 +296,9 @@ the editor's working directory.
 
 A completion is offered only at the start of a non-whitespace run that begins
 with the trigger character, so `/` and `@` complete at the start of a word but
-not mid-token. Matching is case-insensitive prefix matching on the name.
+not mid-token. Matching is case-insensitive, and how much of what you type it
+matches against depends on the trigger and the backend: `/` completion, and
+the whole native backend, match a prefix of the name.
 
 	`/`	Skills (`<dir>/<name>/SKILL.md`) and commands. The menu shows
 		the skill or command name and its description. OpenCode's
@@ -304,7 +306,10 @@ not mid-token. Matching is case-insensitive prefix matching on the name.
 		`opencode.show_all_builtin_commands` is true. A user-defined
 		command of the same name as a built-in wins.
 
-	`@`	Files under the resolved project root.
+	`@`	Files under the resolved project root. On the blink backend
+		these are matched fuzzily against the whole relative path, so
+		`@src/li` finds `src/lib/util.lua` and the menu keeps
+		narrowing as you type past each `/`.
 
 Which directories are searched for each tool is described in
 |agentcomplete-detection|.
