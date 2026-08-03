@@ -65,12 +65,14 @@ than the buffer name.
   CLI-resolved set (see `lua/agentcomplete/opencode_skills.lua`) merged into completion.
   That count is async: it populates ~0.7s after the buffer attaches, so a live `:luafile`
   run shows it, but a fresh `mise run diag` (which exits immediately) reports 0.
-- `## Highlighting` — whether token highlighting is attached to this buffer, what
-  `AgentCompleteSkill` and `AgentCompleteFile` currently resolve to (the group each links
-  to, or `(explicit)` when the user set attributes directly), and the size of the resolved
-  `/` set — the names a `/token` is checked against. Start here when tokens go uncolored:
-  an uncolored token is the plugin's signal for "does not resolve", so the question is
-  whether resolution or painting is at fault.
+- `## Highlighting` — whether token highlighting is attached to this buffer, how many
+  tokens are currently painted, what `AgentCompleteSkill` and `AgentCompleteFile` resolve
+  to (the group each links to, or `(explicit)` when the user set attributes directly —
+  suffixed `(no effective attributes)` when that chain ends somewhere empty), and the size
+  of the resolved `/` set, the names a `/token` is checked against. Start here when tokens
+  go uncolored: an uncolored token is the plugin's signal for "does not resolve", and the
+  painted count is what separates a token that never resolved from one painted in a group
+  the colorscheme renders invisibly.
 - `## blink suppression` — the only-source suppression diagnosis, ending in a single
   "Likely cause" line that walks the mechanism in the order failures actually occur, so it
   points straight at the fix.

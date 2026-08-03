@@ -10,6 +10,19 @@ local T = new_set {
     pre_case = function()
       package.loaded["agentcomplete.opencode_skills"] = nil
     end,
+    -- `highlight` is not reloaded between cases, so a buffer the repaint cases attached
+    -- would otherwise outlive its own — with a live augroup and a `_sessions` entry — for
+    -- the rest of the run. A hook rather than inline teardown because a failing `expect`
+    -- raises past inline cleanup, which is exactly when the leak matters.
+    post_case = function()
+      local highlight = require "agentcomplete.highlight"
+      for buf in pairs(highlight._sessions) do
+        highlight.detach(buf)
+        if vim.api.nvim_buf_is_valid(buf) then
+          vim.api.nvim_buf_delete(buf, { force = true })
+        end
+      end
+    end,
   },
 }
 
@@ -140,21 +153,18 @@ T["on_exit"]["repaints attached buffers so late-resolved skills paint"] = functi
 
   oc._on_exit(entry, { code = 0 }, path)
   expect.equality(painted(buf), { { row = 0, col = 0, end_col = 6, hl_group = "AgentCompleteSkill" } })
-
-  require("agentcomplete.highlight").detach(buf)
-  vim.api.nvim_buf_delete(buf, { force = true })
 end
 
-T["on_exit"]["a non-zero exit leaves the painted state alone"] = function()
+-- Only the exit code separates this from the case above — the payload is readable and
+-- would resolve `/alpha` — so a repaint that ignored `obj.code` paints here and fails.
+T["on_exit"]["a non-zero exit neither resolves nor paints"] = function()
   local oc = require "agentcomplete.opencode_skills"
-  local entry = { started = true, skills = { { name = "alpha" } } }
+  local path = vim.fn.tempname()
+  vim.fn.writefile(vim.split(SAMPLE, "\n"), path)
+  local entry = { started = true, skills = {} }
   local buf = attached_buf(entry, { "/alpha" })
-  local before = painted(buf)
-  oc._on_exit(entry, { code = 1 }, vim.fn.tempname())
-  expect.equality(painted(buf), before)
-
-  require("agentcomplete.highlight").detach(buf)
-  vim.api.nvim_buf_delete(buf, { force = true })
+  oc._on_exit(entry, { code = 1 }, path)
+  expect.equality(painted(buf), {})
 end
 
 T["spawn"] = new_set()

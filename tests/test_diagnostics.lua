@@ -109,6 +109,7 @@ local function full_report()
     discovery = { skills = 3, commands = 2, files = 42 },
     highlighting = {
       attached = true,
+      painted = 2,
       groups = { AgentCompleteSkill = "Special", AgentCompleteFile = "Directory" },
       slash_set = 5,
     },
@@ -161,7 +162,7 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
     buffer = { nr = 1, name = "", detected = false, native_attached = false, session_source = "none" },
     session = nil,
     discovery = nil,
-    highlighting = { attached = false, groups = {}, slash_set = nil },
+    highlighting = { attached = false, painted = 0, groups = {}, slash_set = nil },
     blink = diag.diagnose_suppression(state { resolved_backend = "native" }),
     env = { cwd = "/proj" },
   }
@@ -204,7 +205,16 @@ T["render"]["reports the size of the resolved / set"] = function()
   local diag = require "agentcomplete.diagnostics"
   local report = full_report()
   report.highlighting.slash_set = 23
-  expect.equality(has(diag.render(report), "23"), true)
+  expect.equality(has(diag.render(report), "set size:      23"), true)
+end
+
+-- The count is what separates "nothing resolves" from "it painted, look at your
+-- colorscheme" — the fork the diagnostics doc sends a reader here to settle.
+T["render"]["reports how many tokens are currently painted"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.highlighting.painted = 9
+  expect.equality(has(diag.render(report), "painted: 9"), true)
 end
 
 T["render"]["surfaces the CLI skill resolver toggle and its resolved count"] = function()
