@@ -28,17 +28,26 @@ local CIK = vim.lsp.protocol.CompletionItemKind
 
 local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File }
 
----Fuzzy-narrow items to `query`, which returns nothing for an empty query — so an
----empty run must bypass it. `matchfuzzy` is smart-case (an uppercase needle demands
----an exact-case match), hence the folded needle.
+---Fuzzy-narrow items to `query`, matching the whole relative path as one string.
+---
+---The typed `/` is dropped from the needle rather than matched literally: keeping it
+---pins the rest of the query to the far side of that separator, so `@.co/grig` misses
+---`.codegraph/.gitignore` (`gr` lives in `codegraph`, before the slash). Dropping it
+---lets a run span segments in either direction, which is what typing a path feels
+---like. Paths keep their slashes, so a needle without them still matches.
+---
+---`matchfuzzy` returns nothing for an empty query — so an empty run (`@` alone, or one
+---that was all slashes) must bypass it — and is smart-case, an uppercase needle
+---demanding an exact-case match, hence the folded needle.
 ---@param items AgentComplete.Item[]
 ---@param query string
 ---@return AgentComplete.Item[]
 local function narrow(items, query)
-  if query == "" then
+  local needle = (query:lower():gsub("/", ""))
+  if needle == "" then
     return items
   end
-  return vim.fn.matchfuzzy(items, query:lower(), { key = "insert_text" })
+  return vim.fn.matchfuzzy(items, needle, { key = "insert_text" })
 end
 
 ---Pure: build blink completion items for a line + cursor (row/col 0-based).
