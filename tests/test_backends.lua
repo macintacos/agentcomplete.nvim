@@ -26,6 +26,9 @@ local function fixture_session()
   write(root .. "/commands/deploy.md", { "---", "description: Deploy it", "---" })
   write(root .. "/src/main.lua", { "" })
   write(root .. "/src/lib/util.lua", { "" })
+  -- Own git repo, so `scan.files` lists these files and not the surrounding
+  -- repository's when the fixture root happens to sit inside one.
+  vim.fn.system { "git", "-C", root, "init", "-q" }
   return {
     tool = "claude-code",
     cwd = root,
@@ -50,7 +53,26 @@ local function find(items, pred)
   end
 end
 
-local T = new_set()
+-- Isolate each case from ambient git env (e.g. GIT_DIR set inside a pre-push
+-- hook), which would otherwise redirect the fixture's `git init` and
+-- scan.files' git calls at the surrounding repository.
+local GIT_ENV = { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY" }
+local saved_git = {}
+local T = new_set {
+  hooks = {
+    pre_case = function()
+      for _, k in ipairs(GIT_ENV) do
+        saved_git[k] = vim.env[k]
+        vim.env[k] = nil
+      end
+    end,
+    post_case = function()
+      for _, k in ipairs(GIT_ENV) do
+        vim.env[k] = saved_git[k]
+      end
+    end,
+  },
+}
 
 T["select"] = new_set()
 
