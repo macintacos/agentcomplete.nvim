@@ -24,6 +24,7 @@ local function fixture_session()
   write(root .. "/skills/zebra/SKILL.md", { "---", "name: zebra", "description: Stripes", "---" })
   write(root .. "/commands/deploy.md", { "---", "description: Deploy it", "---" })
   write(root .. "/src/main.lua", { "" })
+  write(root .. "/src/lib/util.lua", { "" })
   return {
     tool = "claude-code",
     cwd = root,
@@ -109,6 +110,53 @@ T["blink"]["file items use the File kind"] = function()
   end))
   expect.equality(f.kind, CIK.File)
   expect.equality(f.textEdit.newText, "src/main.lua")
+end
+
+local function file_labels(items)
+  local labels = {}
+  for _, i in ipairs(items) do
+    if i.kind == CIK.File then
+      table.insert(labels, i.label)
+    end
+  end
+  table.sort(labels)
+  return labels
+end
+
+T["blink"]["@ items are narrowed to the whole typed run, past any /"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  -- blink's own needle stops at "/", so it cannot narrow "src/li" itself.
+  expect.equality(file_labels(blink.build(fixture_session(), "@src/li", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["@ alone is not swallowed by the empty-query matchfuzzy"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local session = fixture_session()
+  expect.equality(file_labels(blink.build(session, "@", 0, 1).items), {
+    "@commands/deploy.md",
+    "@skills/deploy-helper/SKILL.md",
+    "@skills/zebra/SKILL.md",
+    "@src/lib/util.lua",
+    "@src/main.lua",
+  })
+end
+
+T["blink"]["@ narrowing is fuzzy, not a prefix filter"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(file_labels(blink.build(fixture_session(), "@lib/ut", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["@ narrowing is case-insensitive"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(file_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["deleting back past a / widens the list again"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local session = fixture_session()
+  expect.equality(file_labels(blink.build(session, "@src/li", 0, 7).items), { "@src/lib/util.lua" })
+  -- No narrowing is cached: the shorter run sees both src files again.
+  expect.equality(file_labels(blink.build(session, "@src", 0, 4).items), { "@src/lib/util.lua", "@src/main.lua" })
 end
 
 T["blink"]["no context yields no items"] = function()

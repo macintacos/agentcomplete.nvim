@@ -4,9 +4,19 @@
 ---
 ---The source self-gates via the detector registry (`enabled`/`get_completions`
 ---only produce items in a detected buffer), so a user registers it once and it
----stays dormant elsewhere. Items are returned UNFILTERED — blink.cmp does the
----fuzzy filtering against `filterText` — and replacement uses an explicit
----`textEdit` range so file paths containing `/` complete correctly.
+---stays dormant elsewhere. Replacement uses an explicit `textEdit` range so file
+---paths containing `/` complete correctly.
+---
+---`/` items are returned UNFILTERED — blink.cmp does the fuzzy filtering against
+---`filterText`. `@` file items are narrowed here to the whole typed run first,
+---because blink's fuzzy needle comes from a fixed keyword regex that always stops
+---at `/`: past the first slash blink filters on the trailing segment alone (on `""`
+---immediately after a slash), so it re-widens the menu to every file. Skill and
+---command names are `:`-namespaced, so the needle never collapses on them.
+---
+---`get_trigger_characters` keeps `/` deliberately: dropping it makes typing `/`
+---fall through blink's `on_char_added` to `trigger.hide()`, closing the menu
+---mid-path, and it does not affect the needle or the ranking either way.
 ---
 ---`kind` is mapped through `vim.lsp.protocol.CompletionItemKind` (the same
 ---integers blink uses) so this module loads even when blink is not installed.
@@ -17,6 +27,26 @@ local sources = require "agentcomplete.sources"
 local CIK = vim.lsp.protocol.CompletionItemKind
 
 local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File }
+
+---Fuzzy-narrow items to `query`. `vim.fn.matchfuzzy` is case-sensitive and returns
+---nothing for an empty query, so match on a folded key and map back by index.
+---@param items AgentComplete.Item[]
+---@param query string
+---@return AgentComplete.Item[]
+local function narrow(items, query)
+  if query == "" then
+    return items
+  end
+  local keyed = {}
+  for i, it in ipairs(items) do
+    keyed[i] = { idx = i, key = it.insert_text:lower() }
+  end
+  local out = {}
+  for _, m in ipairs(vim.fn.matchfuzzy(keyed, query:lower(), { key = "key" })) do
+    out[#out + 1] = items[m.idx]
+  end
+  return out
+end
 
 ---Pure: build blink completion items for a line + cursor (row/col 0-based).
 ---@param session AgentComplete.Session
@@ -31,6 +61,9 @@ function M.build(session, line, row, col)
   end
   -- query="" → return everything for the trigger; blink filters via filterText.
   local all = sources.items(session, { trigger = ctx.trigger, query = "", start_col = ctx.start_col })
+  if ctx.trigger == "@" then
+    all = narrow(all, ctx.query)
+  end
   local items = {}
   for _, it in ipairs(all) do
     table.insert(items, {
