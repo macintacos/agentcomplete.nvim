@@ -46,7 +46,7 @@ end
 ---filtering, and the `sources.slash` toggle, with no second source of truth.
 ---@param session AgentComplete.Session
 ---@return table<string, true>
-local function slash_names(session)
+function M.slash_names(session)
   local set = {}
   for _, it in ipairs(sources.items(session, { trigger = "/", query = "", start_col = 1 })) do
     set[it.insert_text] = true
@@ -91,7 +91,7 @@ function M.marks(session, lines)
       -- up "". A lone `@` would likewise fs_stat the cwd itself and match.
       if tok.name ~= "" then
         if tok.trigger == "/" and enabled.slash ~= false then
-          slash = slash or slash_names(session)
+          slash = slash or M.slash_names(session)
           group = slash[tok.name] and "AgentCompleteSkill" or nil
         elseif tok.trigger == "@" and enabled.file ~= false then
           group = file_exists(session.cwd, tok.name) and "AgentCompleteFile" or nil

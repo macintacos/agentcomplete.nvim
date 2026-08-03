@@ -107,6 +107,11 @@ local function full_report()
     },
     session = { tool = "claude-code", cwd = "/proj", session_id = nil },
     discovery = { skills = 3, commands = 2, files = 42 },
+    highlighting = {
+      attached = true,
+      groups = { AgentCompleteSkill = "Special", AgentCompleteFile = "Directory" },
+      slash_set = 5,
+    },
     blink = diag.diagnose_suppression(state { allowed_sources = { "path" } }),
     env = {
       AGENTCOMPLETE_CWD = nil,
@@ -129,6 +134,7 @@ T["render"]["includes the title and every section header"] = function()
     "## Config",
     "## Detection",
     "## Discovery",
+    "## Highlighting",
     "## blink suppression",
     "## Environment",
   } do
@@ -155,6 +161,7 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
     buffer = { nr = 1, name = "", detected = false, native_attached = false, session_source = "none" },
     session = nil,
     discovery = nil,
+    highlighting = { attached = false, groups = {}, slash_set = nil },
     blink = diag.diagnose_suppression(state { resolved_backend = "native" }),
     env = { cwd = "/proj" },
   }
@@ -162,6 +169,8 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
   expect.equality(has(out, "# agentcomplete.nvim diagnostics"), true)
   -- No session ⇒ the detection section says so rather than erroring on nil.
   expect.equality(has(out, "(none)"), true)
+  -- ...and Highlighting degrades the same way rather than sizing a set that isn't there.
+  expect.equality(has(out, "(no active session)"), true)
 end
 
 T["render"]["surfaces OpenCode env signals and the session's search dirs"] = function()
@@ -180,6 +189,22 @@ T["render"]["surfaces OpenCode env signals and the session's search dirs"] = fun
   -- The session's search dirs tell a debugger WHERE discovery looked.
   expect.equality(has(out, "/proj/.opencode/skill"), true)
   expect.equality(has(out, "/proj/.opencode/command"), true)
+end
+
+T["render"]["names both highlight groups and what each resolves to"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local out = diag.render(full_report())
+  expect.equality(has(out, "AgentCompleteSkill"), true)
+  expect.equality(has(out, "Special"), true)
+  expect.equality(has(out, "AgentCompleteFile"), true)
+  expect.equality(has(out, "Directory"), true)
+end
+
+T["render"]["reports the size of the resolved / set"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.highlighting.slash_set = 23
+  expect.equality(has(diag.render(report), "23"), true)
 end
 
 T["render"]["surfaces the CLI skill resolver toggle and its resolved count"] = function()
