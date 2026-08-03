@@ -104,6 +104,59 @@ T["on_exit"]["leaves skills empty on a non-zero exit"] = function()
   expect.equality(entry.skills, {})
 end
 
+---The extmarks actually applied to `buf`, in `highlight.marks` shape.
+local function painted(buf)
+  local ns = require("agentcomplete.highlight").ns
+  return vim.tbl_map(function(m)
+    return { row = m[2], col = m[3], end_col = m[4].end_col, hl_group = m[4].hl_group }
+  end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
+end
+
+---A scratch buffer holding `lines`, attached to a session whose `extra_skills` is
+---`entry.skills` — the reference the OpenCode detector hands out before the job lands.
+local function attached_buf(entry, lines)
+  local highlight = require "agentcomplete.highlight"
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  highlight.attach(buf, {
+    tool = "opencode",
+    cwd = vim.fn.tempname(),
+    skill_dirs = {},
+    command_dirs = {},
+    extra_skills = entry.skills,
+  })
+  return buf
+end
+
+-- The skills arrive after attach, so no buffer event repaints them: without an explicit
+-- repaint the token stays uncolored, which is this plugin's signal for "does not resolve".
+T["on_exit"]["repaints attached buffers so late-resolved skills paint"] = function()
+  local oc = require "agentcomplete.opencode_skills"
+  local path = vim.fn.tempname()
+  vim.fn.writefile(vim.split(SAMPLE, "\n"), path)
+  local entry = { started = true, skills = {} }
+  local buf = attached_buf(entry, { "/alpha" })
+  expect.equality(painted(buf), {}) -- pending: nothing resolves yet
+
+  oc._on_exit(entry, { code = 0 }, path)
+  expect.equality(painted(buf), { { row = 0, col = 0, end_col = 6, hl_group = "AgentCompleteSkill" } })
+
+  require("agentcomplete.highlight").detach(buf)
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
+T["on_exit"]["a non-zero exit leaves the painted state alone"] = function()
+  local oc = require "agentcomplete.opencode_skills"
+  local entry = { started = true, skills = { { name = "alpha" } } }
+  local buf = attached_buf(entry, { "/alpha" })
+  local before = painted(buf)
+  oc._on_exit(entry, { code = 1 }, vim.fn.tempname())
+  expect.equality(painted(buf), before)
+
+  require("agentcomplete.highlight").detach(buf)
+  vim.api.nvim_buf_delete(buf, { force = true })
+end
+
 T["spawn"] = new_set()
 
 T["spawn"]["a throwing system call is guarded: no error, skills stay empty"] = function()

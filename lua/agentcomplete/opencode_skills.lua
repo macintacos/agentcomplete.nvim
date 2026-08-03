@@ -59,6 +59,12 @@ function M._on_exit(entry, obj, path)
         entry.skills[i] = nil
       end
       vim.list_extend(entry.skills, parsed)
+      -- Observing the new skills is not enough: highlighting only repaints on the attached
+      -- buffer's own events, so a token typed before this landed would stay uncolored — the
+      -- plugin's signal for "does not resolve". The repaint belongs here, at the one moment
+      -- resolution changes, rather than in `highlight.lua`, which knows nothing about async
+      -- backends. Already inside `_spawn`'s `vim.schedule_wrap`, and fires once per cwd.
+      require("agentcomplete.highlight").repaint_all()
     end
   end
   pcall(vim.fn.delete, path)

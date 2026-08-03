@@ -118,6 +118,16 @@ function M.repaint(buf)
   end
 end
 
+---Repaint every attached buffer. The escape hatch for session state that changes outside
+---any one buffer's own autocmds — OpenCode's `opencode debug skill` resolving after attach
+---is the only such source today. Keeps this module ignorant of *which* backends resolve
+---asynchronously: it offers the verb, the resolver decides when to use it.
+function M.repaint_all()
+  for buf in pairs(M._sessions) do
+    M.repaint(buf)
+  end
+end
+
 ---Coalesce repaints for `buf` onto a single per-buffer timer.
 ---@param buf integer
 local function schedule(buf)
