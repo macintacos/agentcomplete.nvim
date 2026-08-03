@@ -38,7 +38,7 @@ digraph update_docs {
 | [`README.md`](../../README.md) | plugin users | Installation only: requirements, install snippets, the setup gotchas that block first-run success, and pointers onward. |
 | [`doc/agentcomplete.txt`](../../doc/agentcomplete.txt) | plugin users | The full reference (`:help agentcomplete`): detection, every config option, blink/native backends, suppression, commands, in-buffer diagnostics. |
 | [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | human developers | How to set up, test, and run the plugin from a checkout — mise, the task catalog, the Lua toolchain, git hooks, the headless diagnostics flow. |
-| [`CLAUDE.md`](../../CLAUDE.md) | agents | Agent guidance: the routing digraph plus always-on project context (CodeGraph, verifying changes). |
+| [`CLAUDE.md`](../../CLAUDE.md) | agents | Agent guidance: the routing digraph plus always-on project context (verifying changes). |
 | [`doc/agents/`](../) | agents | On-demand references loaded via the CLAUDE.md routing digraph (diagnostics, this documentation hub, and the `references/` files). |
 
 ## How to edit

@@ -12,9 +12,8 @@ Agent guidance only, in two kinds:
 - The **Routing** digraph — the on-demand router. Each edge points at a `doc/agents/*.md`
   reference and is labeled with the task that should load it. Detailed material lives in
   the reference, not inline; the digraph just decides which to read.
-- **Always-on project context** that every task needs — currently the CodeGraph habit and
-  the "Verifying changes" gate. Keep this short; anything task-specific belongs behind a
-  routing edge instead.
+- **Always-on project context** that every task needs — currently the "Verifying changes"
+  gate. Keep this short; anything task-specific belongs behind a routing edge instead.
 
 ## When to edit
 
