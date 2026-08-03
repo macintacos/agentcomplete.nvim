@@ -1,6 +1,7 @@
 -- Tests for agentcomplete.backends: selection, the native mapping (prefix
--- filtered, vim complete-items) and the blink mapping (unfiltered, LSP items
--- with an explicit textEdit range), plus native attach/detach wiring.
+-- filtered, vim complete-items) and the blink mapping (LSP items with an
+-- explicit textEdit range, unfiltered for `/` and fuzzy-narrowed to the typed
+-- run for `@`), plus native attach/detach wiring.
 local MiniTest = require "mini.test"
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
@@ -24,12 +25,24 @@ local function fixture_session()
   write(root .. "/skills/zebra/SKILL.md", { "---", "name: zebra", "description: Stripes", "---" })
   write(root .. "/commands/deploy.md", { "---", "description: Deploy it", "---" })
   write(root .. "/src/main.lua", { "" })
+  write(root .. "/src/lib/util.lua", { "" })
+  -- Own git repo, so `scan.files` lists these files and not the surrounding
+  -- repository's when the fixture root happens to sit inside one.
+  vim.fn.system { "git", "-C", root, "init", "-q" }
   return {
     tool = "claude-code",
     cwd = root,
     skill_dirs = { root .. "/skills" },
     command_dirs = { root .. "/commands" },
   }
+end
+
+local function sorted_labels(items)
+  local out = vim.tbl_map(function(i)
+    return i.label
+  end, items)
+  table.sort(out)
+  return out
 end
 
 local function find(items, pred)
@@ -40,7 +53,26 @@ local function find(items, pred)
   end
 end
 
-local T = new_set()
+-- Isolate each case from ambient git env (e.g. GIT_DIR set inside a pre-push
+-- hook), which would otherwise redirect the fixture's `git init` and
+-- scan.files' git calls at the surrounding repository.
+local GIT_ENV = { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY" }
+local saved_git = {}
+local T = new_set {
+  hooks = {
+    pre_case = function()
+      for _, k in ipairs(GIT_ENV) do
+        saved_git[k] = vim.env[k]
+        vim.env[k] = nil
+      end
+    end,
+    post_case = function()
+      for _, k in ipairs(GIT_ENV) do
+        vim.env[k] = saved_git[k]
+      end
+    end,
+  },
+}
 
 T["select"] = new_set()
 
@@ -80,14 +112,14 @@ end
 
 T["blink"] = new_set()
 
-T["blink"]["build returns UNFILTERED items with an explicit textEdit range"] = function()
+T["blink"]["build returns / items UNFILTERED with an explicit textEdit range"] = function()
   local blink = require "agentcomplete.backends.blink"
   local res = blink.build(fixture_session(), "/dep", 0, 4)
   local labels = vim.tbl_map(function(i)
     return i.label
   end, res.items)
   table.sort(labels)
-  -- "zebra" is present even though "dep" wouldn't match it — blink does the filtering, not us.
+  -- "zebra" is present even though "dep" wouldn't match it — for "/", blink filters, not us.
   expect.equality(labels, { "/deploy", "/deploy-helper", "/zebra" })
 
   local deploy = assert(find(res.items, function(i)
@@ -109,6 +141,42 @@ T["blink"]["file items use the File kind"] = function()
   end))
   expect.equality(f.kind, CIK.File)
   expect.equality(f.textEdit.newText, "src/main.lua")
+end
+
+T["blink"]["@ items are narrowed to the whole typed run, past any /"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  -- blink's own needle stops at "/", so it cannot narrow "src/li" itself.
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@src/li", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["@ alone is not swallowed by the empty-query matchfuzzy"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@", 0, 1).items), {
+    "@commands/deploy.md",
+    "@skills/deploy-helper/SKILL.md",
+    "@skills/zebra/SKILL.md",
+    "@src/lib/util.lua",
+    "@src/main.lua",
+  })
+end
+
+T["blink"]["@ narrowing is fuzzy, not a prefix filter"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@lib/ut", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["@ narrowing is case-insensitive"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  expect.equality(sorted_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items), { "@src/lib/util.lua" })
+end
+
+T["blink"]["@ narrowing applies at every run length, so deleting back widens"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  -- Narrows on a slash-free run too, and holds no state, so a shorter run widens.
+  expect.equality(
+    sorted_labels(blink.build(fixture_session(), "@src", 0, 4).items),
+    { "@src/lib/util.lua", "@src/main.lua" }
+  )
 end
 
 T["blink"]["no context yields no items"] = function()

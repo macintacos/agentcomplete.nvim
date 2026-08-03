@@ -1,6 +1,8 @@
 ---Backend-agnostic completion core: parse the trigger context at the cursor and
 ---assemble normalized completion items. Both the blink.cmp and native adapters
----consume this same module, which is what keeps their behavior identical.
+---consume this same module, which is what keeps context parsing and item assembly
+---identical between them. Filtering is not shared: the blink adapter narrows `@`
+---items further, for the reason given in `backends/blink.lua`.
 ---@class AgentComplete.Sources
 local M = {}
 

@@ -4,9 +4,19 @@
 ---
 ---The source self-gates via the detector registry (`enabled`/`get_completions`
 ---only produce items in a detected buffer), so a user registers it once and it
----stays dormant elsewhere. Items are returned UNFILTERED — blink.cmp does the
----fuzzy filtering against `filterText` — and replacement uses an explicit
----`textEdit` range so file paths containing `/` complete correctly.
+---stays dormant elsewhere. Replacement uses an explicit `textEdit` range so file
+---paths containing `/` complete correctly.
+---
+---`/` items are returned UNFILTERED — blink.cmp does the fuzzy filtering against
+---`filterText`. `@` file items are narrowed here to the whole typed run first,
+---because blink's fuzzy needle comes from a fixed keyword regex that always stops
+---at `/`: past the first slash blink filters on the trailing segment alone (on `""`
+---immediately after a slash), so it re-widens the menu to every file. Skill and
+---command names are `:`-namespaced, so the needle never collapses on them.
+---
+---`get_trigger_characters` keeps `/` deliberately: dropping it makes typing `/`
+---fall through blink's `on_char_added` to `trigger.hide()`, closing the menu
+---mid-path, and it does not affect the needle or the ranking either way.
 ---
 ---`kind` is mapped through `vim.lsp.protocol.CompletionItemKind` (the same
 ---integers blink uses) so this module loads even when blink is not installed.
@@ -17,6 +27,19 @@ local sources = require "agentcomplete.sources"
 local CIK = vim.lsp.protocol.CompletionItemKind
 
 local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File }
+
+---Fuzzy-narrow items to `query`, which returns nothing for an empty query — so an
+---empty run must bypass it. `matchfuzzy` is smart-case (an uppercase needle demands
+---an exact-case match), hence the folded needle.
+---@param items AgentComplete.Item[]
+---@param query string
+---@return AgentComplete.Item[]
+local function narrow(items, query)
+  if query == "" then
+    return items
+  end
+  return vim.fn.matchfuzzy(items, query:lower(), { key = "insert_text" })
+end
 
 ---Pure: build blink completion items for a line + cursor (row/col 0-based).
 ---@param session AgentComplete.Session
@@ -29,8 +52,11 @@ function M.build(session, line, row, col)
   if not ctx then
     return { items = {} }
   end
-  -- query="" → return everything for the trigger; blink filters via filterText.
+  -- query="" → the trigger's full set; blink filters "/" via filterText, "@" narrows below.
   local all = sources.items(session, { trigger = ctx.trigger, query = "", start_col = ctx.start_col })
+  if ctx.trigger == "@" then
+    all = narrow(all, ctx.query)
+  end
   local items = {}
   for _, it in ipairs(all) do
     table.insert(items, {
@@ -221,6 +247,9 @@ function M:get_completions(ctx, callback)
   local col = (ctx and ctx.cursor and ctx.cursor[2]) or cur[2]
   local line = (ctx and ctx.line) or vim.api.nvim_get_current_line()
   local res = M.build(session, line, row, col)
+  -- Both `is_incomplete_*` must stay true: they are what make blink re-request per
+  -- keystroke. Flip either and it re-filters its cached list with the collapsed
+  -- needle instead, undoing the `@` narrowing above.
   callback { items = res.items, is_incomplete_backward = true, is_incomplete_forward = true }
 end
 
