@@ -114,9 +114,9 @@ function M.repaint(buf)
   end
   vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
   for _, m in ipairs(M.marks(session, vim.api.nvim_buf_get_lines(buf, 0, -1, false))) do
-    -- `spell = false` is a rendering option, so it lives here rather than in `Mark`: filenames
-    -- and skill names are never dictionary words, and the mark spans exactly the token, so the
-    -- prose around it keeps its squiggles.
+    -- `spell = false` is constant across marks, so it stays here rather than in `Mark`, which
+    -- carries only what resolution decides. A token is an identifier, not prose, and the mark
+    -- spans exactly the token — so the prose around it keeps its squiggles.
     vim.api.nvim_buf_set_extmark(buf, M.ns, m.row, m.col, { end_col = m.end_col, hl_group = m.hl_group, spell = false })
   end
 end
