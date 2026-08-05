@@ -328,7 +328,10 @@ In an attached prompt buffer, `/` and `@` tokens are highlighted — but only
 when they resolve. A token naming a skill, command, or path that does not
 exist stays uncolored. There is no "broken token" color: the absence of one is
 the signal, and it is how you catch a typo before sending the prompt. A
-highlight spans the whole token, the trigger character included.
+highlight spans the whole token, the trigger character included. That span is
+also exempt from spell checking — it carries `spell = false` — so under
+'spell' a filename or skill name does not squiggle as a misspelling, while the
+prose around it, and any token that did not resolve, are still checked.
 
 Two groups do the work: `AgentCompleteSkill` for resolving `/` tokens (skills
 and commands alike), linked to `Special` by default, and `AgentCompleteFile`

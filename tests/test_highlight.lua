@@ -238,6 +238,15 @@ T["attach"]["a file created after attach paints on the next repaint"] = function
   expect.equality(painted(buf), { { row = 0, col = 0, end_col = 10, hl_group = "AgentCompleteFile" } })
 end
 
+T["attach"]["a highlighted token is exempt from spell checking, the prose around it is not"] = function()
+  local buf = attached_claude_buf { "run /deploy now" }
+  -- The mark spans exactly the token, so 'spell' still applies to the prose around it.
+  expect.equality(painted(buf), { { row = 0, col = 4, end_col = 11, hl_group = "AgentCompleteSkill" } })
+  local ns = require("agentcomplete.highlight").ns
+  local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+  expect.equality(marks[1][4].spell, false)
+end
+
 T["attach"]["detach clears every mark"] = function()
   local buf = attached_claude_buf { "@src/init.lua" }
   expect.equality(#painted(buf), 1)
