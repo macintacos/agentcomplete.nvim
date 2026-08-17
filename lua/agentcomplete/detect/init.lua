@@ -14,8 +14,9 @@ local M = {}
 ---@field skill_dirs string[] Directories this tool keeps skills in.
 ---@field command_dirs string[] Directories this tool keeps commands in.
 ---@field skill_namespaces? table<string, string> Map of skill-dir path → plugin namespace; dirs absent from the map (user/project, OpenCode) complete unqualified.
----@field extra_commands? AgentComplete.Command[] Tool-specific commands appended to those discovered from `command_dirs` (e.g. OpenCode's `opencode.json[c]` config-map commands).
----@field extra_skills? AgentComplete.Skill[] Tool-specific skills merged with (and de-duplicated against) those discovered from `skill_dirs` (e.g. OpenCode's `opencode debug skill` CLI-resolved set).
+---@field extra_commands? AgentComplete.Command[] Tool-specific commands appended to those discovered from `command_dirs` (e.g. OpenCode's `opencode.json[c]` config-map commands and its built-in TUI commands).
+---@field cli_commands? AgentComplete.Command[] Commands the tool's own CLI resolves (OpenCode's `opencode debug config` set), which is a superset of what any config-dir scan can see. A live table the async resolver fills in place, so hold the reference rather than copying it.
+---@field extra_skills? AgentComplete.Skill[] Tool-specific skills merged with (and de-duplicated against) those discovered from `skill_dirs` (e.g. OpenCode's `opencode debug skill` CLI-resolved set). Live table, as `cli_commands`.
 ---@field sources? { slash: boolean, file: boolean } Enabled source toggles (set by the orchestrator; both on if absent).
 ---@field show_all_builtin_commands? boolean When false/absent, built-in commands tagged `hidden` are filtered out of completion (set by the orchestrator from config).
 

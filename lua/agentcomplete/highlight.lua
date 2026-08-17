@@ -42,8 +42,8 @@ end
 
 ---Every `/` name the session resolves, as a set. An empty query matches everything, so
 ---one `sources.items` call yields the whole set — and inherits skills, commands, plugin
----namespacing, OpenCode's asynchronously-arriving `extra_skills`, hidden-built-in
----filtering, and the `sources.slash` toggle, with no second source of truth.
+---namespacing, OpenCode's asynchronously-arriving `extra_skills` / `cli_commands`,
+---hidden-built-in filtering, and the `sources.slash` toggle, with no second source of truth.
 ---@param session AgentComplete.Session
 ---@return table<string, true>
 function M.slash_names(session)

@@ -238,9 +238,12 @@ T["opencode_dirs"]["includes global (XDG) and project-local skill/command dirs"]
   -- OpenCode discovers skills as {skill,skills}/**/SKILL.md, so both subdir names are searched.
   expect.equality(vim.tbl_contains(skill_dirs, xdg .. "/opencode/skill"), true)
   expect.equality(vim.tbl_contains(skill_dirs, xdg .. "/opencode/skills"), true)
+  -- OpenCode reads commands from both `command` and `commands`, so both are searched.
   expect.equality(vim.tbl_contains(command_dirs, xdg .. "/opencode/command"), true)
+  expect.equality(vim.tbl_contains(command_dirs, xdg .. "/opencode/commands"), true)
   expect.equality(vim.tbl_contains(skill_dirs, "/tmp/projO/.opencode/skill"), true)
   expect.equality(vim.tbl_contains(command_dirs, "/tmp/projO/.opencode/command"), true)
+  expect.equality(vim.tbl_contains(command_dirs, "/tmp/projO/.opencode/commands"), true)
 end
 
 T["opencode_dirs"]["falls back to ~/.config/opencode when XDG_CONFIG_HOME is unset"] = function()

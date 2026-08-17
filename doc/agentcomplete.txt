@@ -91,22 +91,27 @@ config home (`$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`), an
 optional `$OPENCODE_CONFIG_DIR`, and the project-local `<project>/.opencode`:
 
 	skills under `<base>/{skill,skills}/<name>/SKILL.md`
-	markdown commands under `<base>/command` (searched recursively)
+	markdown commands under `<base>/{command,commands}` (recursively)
 	commands in `opencode.json[c]` (the `command` map)
 	OpenCode's built-in TUI commands (`/help`, `/models`, `/editor`, …)
+
+Both the singular and plural directory spellings are searched, because
+OpenCode itself accepts either.
 
 The built-in TUI commands are hidden by default; enable them with the
 `opencode.show_all_builtin_commands` option — see
 |agentcomplete-configuration|.
 
-OpenCode resolves more skills than that filesystem scan sees — built-ins,
-skills under `~/.claude/skills`, and deeply nested `**/SKILL.md`.
-agentcomplete asks it for the authoritative set by running
-`opencode debug skill` asynchronously (once per project, never blocking
-the editor), then merges the result with the filesystem scan,
+OpenCode resolves more than that filesystem scan can see: skills that are
+built in, live under `~/.claude/skills`, or nest deeply as `**/SKILL.md`,
+and — most notably — every command contributed by an installed OpenCode
+plugin, which lives in OpenCode's package cache and so is reachable by no
+config-directory scan at all. agentcomplete asks OpenCode for the
+authoritative sets by running `opencode debug skill` and
+`opencode debug config` asynchronously (once per project, never blocking
+the editor), then merges the results with the filesystem scan,
 de-duplicated by name. This is OpenCode-only; disable it with
-`opencode.resolve_skills_via_cli = false` — see
-|agentcomplete-configuration|.
+`opencode.resolve_via_cli = false` — see |agentcomplete-configuration|.
 
 In both tools the project root can be overridden — see
 |agentcomplete-project-root|.
@@ -148,7 +153,7 @@ The full default configuration, with every option: >lua
 	  allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
-	    resolve_skills_via_cli = true,     -- also source skills from `opencode debug skill`
+	    resolve_via_cli = true,            -- also source skills/commands from `opencode debug`
 	  },
 	})
 <
@@ -185,15 +190,19 @@ The full default configuration, with every option: >lua
 			default because they are TUI affordances, not prompt
 			content.
 
-'opencode.resolve_skills_via_cli'
+'opencode.resolve_via_cli'
 			boolean (default `true`). When true, OpenCode
 			prompt buffers also source skills from `opencode
-			debug skill`, run asynchronously and once per
-			project so the editor never blocks. Results merge
-			with the filesystem scan, de-duplicated by name,
-			surfacing built-ins and skills (e.g. under
-			`~/.claude/skills`) the scan alone misses. Set to
-			`false` to skip the subprocess. OpenCode-only.
+			debug skill` and commands from the `command` map of
+			`opencode debug config`, both run asynchronously and
+			once per project so the editor never blocks. Results
+			merge with the filesystem scan, de-duplicated by
+			name, surfacing what the scan alone misses: built-in
+			skills, skills under `~/.claude/skills`, and every
+			command an installed OpenCode plugin contributes.
+			Set to `false` to skip the subprocesses, leaving
+			completion to the filesystem scan and the
+			`opencode.json[c]` command map. OpenCode-only.
 
 ==============================================================================
 5. blink.cmp integration

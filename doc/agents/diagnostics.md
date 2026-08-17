@@ -60,11 +60,16 @@ than the buffer name.
 - `## Detection` — whether the current buffer is detected, the session source, the
   resolved `session.tool`, and the `skill_dirs` / `command_dirs` discovery actually
   searched.
-- `## Discovery` — counts of skills, commands, and files found for the active session. For
-  OpenCode it also reports a separate `skills (opencode debug skill)` count — the
-  CLI-resolved set (see `lua/agentcomplete/opencode_skills.lua`) merged into completion.
-  That count is async: it populates ~0.7s after the buffer attaches, so a live `:luafile`
-  run shows it, but a fresh `mise run diag` (which exits immediately) reports 0.
+- `## Discovery` — counts for the active session,
+  **one line per source rather than a total**, because a healthy-looking sum is how a
+  discovery path that searched the wrong directory hides (the static built-ins alone put
+  ~17 on the commands line while the filesystem scan found nothing). A zero beside a
+  source that should have items is the finding. Skills come from the filesystem scan and
+  `opencode debug skill`; commands from the filesystem scan, `opencode debug config`, and
+  the `opencode.json[c]` map plus static built-ins. The two CLI counts are async (see
+  `lua/agentcomplete/opencode_cli.lua`): they populate ~1s after the buffer attaches, so a
+  live `:luafile` run shows them, but a fresh `mise run diag` (which exits immediately)
+  reports 0 for both.
 - `## Highlighting` — whether token highlighting is attached to this buffer, how many
   tokens are currently painted, what `AgentCompleteSkill` and `AgentCompleteFile` resolve
   to (the group each links to, or `(explicit)` when the user set attributes directly —

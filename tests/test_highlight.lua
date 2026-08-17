@@ -187,7 +187,7 @@ T["attach"] = new_set {
       vim.env.OPENCODE_CONFIG_DIR = nil
       -- Exactly the two built-in detectors: test_detect leaves its own in the registry.
       require("agentcomplete.detect").clear()
-      require("agentcomplete").setup { opencode = { resolve_skills_via_cli = false } }
+      require("agentcomplete").setup { opencode = { resolve_via_cli = false } }
     end,
     post_case = function()
       -- Wipe the case's buffer so its augroup and `_sessions` entry do not outlive it.

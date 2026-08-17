@@ -49,14 +49,17 @@ function M.detect(bufnr)
   -- over a built-in of the same name; OpenCode's built-in TUI commands fill in the rest.
   local extra_commands = scan.opencode_commands(cwd)
   vim.list_extend(extra_commands, scan.opencode_builtin_commands())
-  -- OpenCode's authoritative skill set, resolved asynchronously via `opencode debug skill`
-  -- (config is read at call-time, mirroring backends/blink.lua, to avoid an init<->detect
-  -- require cycle). Opt-out via `opencode.resolve_skills_via_cli = false`. The first detect
-  -- kicks off the background job and returns the empty cache; later detects read the result.
-  local extra_skills
+  -- OpenCode's authoritative skill and command sets, resolved asynchronously via
+  -- `opencode debug skill` / `opencode debug config` (config is read at call-time, mirroring
+  -- backends/blink.lua, to avoid an init<->detect require cycle). Opt-out via
+  -- `opencode.resolve_via_cli = false`. The first detect kicks off the background jobs and
+  -- returns the empty cache; later detects read the result. The lists are handed over by
+  -- reference, not copied, because the jobs fill them in place after this returns.
+  local extra_skills, cli_commands
   local oc_config = require("agentcomplete").config.opencode or {}
-  if oc_config.resolve_skills_via_cli ~= false then
-    extra_skills = require("agentcomplete.opencode_skills").get(cwd)
+  if oc_config.resolve_via_cli ~= false then
+    local resolved = require("agentcomplete.opencode_cli").get(cwd)
+    extra_skills, cli_commands = resolved.skills, resolved.commands
   end
   return {
     tool = "opencode",
@@ -65,6 +68,7 @@ function M.detect(bufnr)
     skill_dirs = skill_dirs,
     command_dirs = command_dirs,
     extra_commands = extra_commands,
+    cli_commands = cli_commands,
     extra_skills = extra_skills,
   }
 end

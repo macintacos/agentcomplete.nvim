@@ -4,7 +4,7 @@
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
----@field opencode { show_all_builtin_commands: boolean, resolve_skills_via_cli: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed. When `resolve_skills_via_cli` is true (the default), OpenCode prompt buffers also source skills asynchronously from `opencode debug skill` (merged with, and de-duplicated against, the filesystem scan).
+---@field opencode { show_all_builtin_commands: boolean, resolve_via_cli: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed. When `resolve_via_cli` is true (the default), OpenCode prompt buffers also source skills and commands asynchronously from `opencode debug skill` / `opencode debug config` (merged with, and de-duplicated against, the filesystem scan) — the only way plugin-contributed commands are seen.
 
 ---@class AgentComplete
 local M = {}
@@ -22,7 +22,7 @@ local defaults = {
   detect = "auto",
   sources = { slash = true, file = true },
   allowed_sources = {},
-  opencode = { show_all_builtin_commands = false, resolve_skills_via_cli = true },
+  opencode = { show_all_builtin_commands = false, resolve_via_cli = true },
 }
 
 ---@type AgentComplete.Config

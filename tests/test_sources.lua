@@ -167,6 +167,40 @@ T["items"]["slash trigger includes session.extra_commands, deduped against markd
   expect.equality(by_label["/ship"].detail, "From config")
 end
 
+-- The CLI-resolved set is the only place a plugin-contributed command shows up, and it outranks
+-- the static built-ins so a real command's own description wins over a hard-coded one.
+T["items"]["slash trigger includes session.cli_commands, which outrank extra_commands"] = function()
+  local sources = require "agentcomplete.sources"
+  local session = fixture_session()
+  session.cli_commands = {
+    { name = "jira-create-child", description = "From the CLI" },
+    { name = "init", description = "The user's own init" },
+  }
+  session.extra_commands = { { name = "init", description = "Static built-in init" } }
+  local items = sources.items(session, { trigger = "/", query = "", start_col = 1 })
+  local by_label = {}
+  for _, i in ipairs(items) do
+    by_label[i.label] = i
+  end
+  expect.equality(by_label["/jira-create-child"].kind, "command")
+  expect.equality(by_label["/jira-create-child"].detail, "From the CLI")
+  expect.equality(by_label["/init"].detail, "The user's own init")
+end
+
+-- A `hidden` static built-in must stay filtered even with a CLI set present: the CLI list is
+-- consulted first, so a bug there would let the hidden flag be skipped rather than applied.
+T["items"]["a hidden extra_command stays filtered when cli_commands are present"] = function()
+  local sources = require "agentcomplete.sources"
+  local session = fixture_session()
+  session.cli_commands = { { name = "shown", description = "From the CLI" } }
+  session.extra_commands = { { name = "themes", description = "TUI only", hidden = true } }
+  local labels = vim.tbl_map(function(i)
+    return i.label
+  end, sources.items(session, { trigger = "/", query = "", start_col = 1 }))
+  expect.equality(vim.tbl_contains(labels, "/shown"), true)
+  expect.equality(vim.tbl_contains(labels, "/themes"), false)
+end
+
 T["items"]["slash trigger merges session.extra_skills, deduped by name against filesystem skills"] = function()
   local sources = require "agentcomplete.sources"
   local session = fixture_session()

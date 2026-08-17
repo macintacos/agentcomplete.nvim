@@ -231,13 +231,17 @@ local function opencode_config_dirs(cwd)
 end
 
 ---Skill and command search dirs for an OpenCode session rooted at `cwd`. OpenCode keeps skills
----under `<base>/{skill,skills}/<name>/SKILL.md` and markdown commands under `<base>/command`,
----across the global config home, an optional `$OPENCODE_CONFIG_DIR`, and the project-local
----`<cwd>/.opencode`. `M.skills` discovers one level deep (`<base>/{skill,skills}/<name>/SKILL.md`,
----the same depth used for Claude), so OpenCode's deeper `**/SKILL.md` skill nesting is not found;
----`M.commands` recurses. Config-defined commands (the `opencode.json[c]` `command` map) are
----discovered separately by `M.opencode_commands`. Lists are de-duplicated so a base reached two
----ways (e.g. cwd's `.opencode` also set as `$OPENCODE_CONFIG_DIR`) is not doubled.
+---under `<base>/{skill,skills}/<name>/SKILL.md` and markdown commands under
+---`<base>/{command,commands}`, across the global config home, an optional
+---`$OPENCODE_CONFIG_DIR`, and the project-local `<cwd>/.opencode`. Both the singular and
+---plural spellings are searched because OpenCode itself accepts either — searching only one
+---silently drops every command of a user who chose the other. `M.skills` discovers one level
+---deep (`<base>/{skill,skills}/<name>/SKILL.md`, the same depth used for Claude), so
+---OpenCode's deeper `**/SKILL.md` skill nesting is not found; `M.commands` recurses. This
+---filesystem scan is the instant, offline path: it sees only these dirs, never the commands
+---OpenCode resolves from installed plugins — `opencode_cli.lua` covers those. Lists are
+---de-duplicated so a base reached two ways (e.g. cwd's `.opencode` also set as
+---`$OPENCODE_CONFIG_DIR`) is not doubled.
 ---@param cwd string
 ---@return string[] skill_dirs
 ---@return string[] command_dirs
@@ -247,6 +251,7 @@ function M.opencode_dirs(cwd)
     table.insert(skill_dirs, base .. "/skill")
     table.insert(skill_dirs, base .. "/skills")
     table.insert(command_dirs, base .. "/command")
+    table.insert(command_dirs, base .. "/commands")
   end
   return dedup(skill_dirs), dedup(command_dirs)
 end

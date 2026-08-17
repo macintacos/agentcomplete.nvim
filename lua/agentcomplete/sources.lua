@@ -114,8 +114,11 @@ function M.items(session, ctx)
     for _, s in ipairs(session.extra_skills or {}) do
       add_skill(s)
     end
-    -- Markdown commands (from command_dirs) then any tool-specific extra_commands
-    -- (e.g. OpenCode config-map commands), de-duplicated by name across both.
+    -- Markdown commands (from command_dirs, instant), then the tool CLI's resolved set
+    -- (`cli_commands`, which alone sees plugin-contributed commands), then the remaining
+    -- tool-specific ones (`extra_commands`: config-map and static built-ins). De-duplicated by
+    -- name across all three, first wins — so a real command outranks a same-named static
+    -- built-in, whose hard-coded description and `hidden` flag are the weakest source.
     local seen_cmd = {}
     local function add_command(c)
       if seen_cmd[c.name] then
@@ -129,11 +132,14 @@ function M.items(session, ctx)
         table.insert(out, { label = "/" .. c.name, insert_text = c.name, kind = "command", detail = c.description })
       end
     end
-    for _, c in ipairs(scan.commands(session.command_dirs)) do
-      add_command(c)
-    end
-    for _, c in ipairs(session.extra_commands or {}) do
-      add_command(c)
+    for _, list in ipairs {
+      scan.commands(session.command_dirs),
+      session.cli_commands or {},
+      session.extra_commands or {},
+    } do
+      for _, c in ipairs(list) do
+        add_command(c)
+      end
     end
   elseif ctx.trigger == "@" and enabled.file ~= false then
     for _, f in ipairs(scan.files(session.cwd)) do

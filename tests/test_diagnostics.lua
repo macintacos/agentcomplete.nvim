@@ -106,7 +106,7 @@ local function full_report()
       session_source = "detected",
     },
     session = { tool = "claude-code", cwd = "/proj", session_id = nil },
-    discovery = { skills = 3, commands = 2, files = 42 },
+    discovery = { skills = 3, cli_skills = 0, commands = 2, cli_commands = 0, extra_commands = 0, files = 42 },
     highlighting = {
       attached = true,
       painted = 2,
@@ -217,15 +217,30 @@ T["render"]["reports how many tokens are currently painted"] = function()
   expect.equality(has(diag.render(report), "painted: 9"), true)
 end
 
-T["render"]["surfaces the CLI skill resolver toggle and its resolved count"] = function()
+T["render"]["surfaces the CLI resolver toggle and its resolved skill count"] = function()
   local diag = require "agentcomplete.diagnostics"
   local report = full_report()
-  report.config.opencode = { show_all_builtin_commands = false, resolve_skills_via_cli = true }
+  report.config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true }
   report.discovery.cli_skills = 17
   local out = diag.render(report)
-  expect.equality(has(out, "resolve_skills_via_cli"), true)
+  expect.equality(has(out, "resolve_via_cli"), true)
   expect.equality(has(out, "opencode debug skill"), true)
   expect.equality(has(out, "17"), true) -- the CLI-resolved skill count
+end
+
+-- Counting commands per source is what makes a discovery path that searched the wrong directory
+-- legible: summing them let ~17 static built-ins pass for a healthy command line while the
+-- filesystem scan found nothing.
+T["render"]["counts each command source separately"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.discovery.commands = 0
+  report.discovery.cli_commands = 25
+  report.discovery.extra_commands = 17
+  local out = diag.render(report)
+  expect.equality(has(out, "commands (filesystem):            0"), true)
+  expect.equality(has(out, "commands (opencode debug config): 25"), true)
+  expect.equality(has(out, "commands (config map + built-in): 17"), true)
 end
 
 return T

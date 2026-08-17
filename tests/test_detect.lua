@@ -285,15 +285,18 @@ T["opencode"]["orders config-map commands before built-in commands"] = function(
   expect.equality(idx_deploy < idx_init, true)
 end
 
-T["opencode"]["populates extra_skills from the CLI resolver when the toggle is on"] = function()
+T["opencode"]["populates extra_skills and cli_commands from the CLI resolver when the toggle is on"] = function()
   vim.env.OPENCODE = "1"
   vim.g.agentcomplete_cwd = nil
   local proj = tmpdir()
   vim.env.AGENTCOMPLETE_CWD = proj
-  require("agentcomplete").config.opencode = { show_all_builtin_commands = false, resolve_skills_via_cli = true }
+  require("agentcomplete").config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true }
   -- Seed the resolver cache for this cwd so detect reads it without spawning a subprocess.
-  require("agentcomplete.opencode_skills")._cache[proj] =
-    { started = true, skills = { { name = "cli-only-skill", description = "from the CLI" } } }
+  require("agentcomplete.opencode_cli")._cache[proj] = {
+    started = true,
+    skills = { { name = "cli-only-skill", description = "from the CLI" } },
+    commands = { { name = "cli-only-command", description = "from the CLI" } },
+  }
   local oc = require "agentcomplete.detect.opencode"
   local s = assert(oc.detect(named_buf "/private/tmp/1718646000008.md"))
   local names = {}
@@ -301,17 +304,21 @@ T["opencode"]["populates extra_skills from the CLI resolver when the toggle is o
     names[sk.name] = true
   end
   expect.equality(names["cli-only-skill"], true)
+  expect.equality((s.cli_commands or {})[1].name, "cli-only-command")
+  -- Handed over by reference, not copied: the resolver fills these lists after detect returns.
+  expect.equality(s.cli_commands == require("agentcomplete.opencode_cli")._cache[proj].commands, true)
 end
 
-T["opencode"]["omits extra_skills when resolve_skills_via_cli is false"] = function()
+T["opencode"]["omits the CLI-resolved sets when resolve_via_cli is false"] = function()
   vim.env.OPENCODE = "1"
   vim.g.agentcomplete_cwd = nil
   local proj = tmpdir()
   vim.env.AGENTCOMPLETE_CWD = proj
-  require("agentcomplete").config.opencode = { show_all_builtin_commands = false, resolve_skills_via_cli = false }
+  require("agentcomplete").config.opencode = { show_all_builtin_commands = false, resolve_via_cli = false }
   local oc = require "agentcomplete.detect.opencode"
   local s = assert(oc.detect(named_buf "/private/tmp/1718646000009.md"))
   expect.equality(s.extra_skills, nil)
+  expect.equality(s.cli_commands, nil)
 end
 
 return T
