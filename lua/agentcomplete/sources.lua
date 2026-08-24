@@ -96,14 +96,16 @@ function M.items(session, ctx)
   local enabled = session.sources or {}
   local out = {}
   if ctx.trigger == "/" and enabled.slash ~= false then
-    -- Filesystem-scanned skills (instant) then any tool-specific extra_skills (e.g. OpenCode's
-    -- CLI-resolved set), de-duplicated by name across both — filesystem-first wins a name clash.
-    local seen_skill = {}
+    -- Skills and commands share the `/` namespace, so one `seen` set spans both: the first
+    -- entry for a name wins and every later one — skill or command — is dropped.
+    -- Filesystem-scanned skills (instant) come first, then any tool-specific extra_skills
+    -- (e.g. OpenCode's CLI-resolved set).
+    local seen = {}
     local function add_skill(s)
-      if seen_skill[s.name] then
+      if seen[s.name] then
         return
       end
-      seen_skill[s.name] = true
+      seen[s.name] = true
       if matches(s.name, ctx.query) then
         table.insert(out, { label = "/" .. s.name, insert_text = s.name, kind = "skill", detail = s.description })
       end
@@ -119,12 +121,11 @@ function M.items(session, ctx)
     -- tool-specific ones (`extra_commands`: config-map and static built-ins). De-duplicated by
     -- name across all three, first wins — so a real command outranks a same-named static
     -- built-in, whose hard-coded description and `hidden` flag are the weakest source.
-    local seen_cmd = {}
     local function add_command(c)
-      if seen_cmd[c.name] then
+      if seen[c.name] then
         return
       end
-      seen_cmd[c.name] = true
+      seen[c.name] = true
       if c.hidden and not session.show_all_builtin_commands then
         return
       end

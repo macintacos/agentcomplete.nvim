@@ -139,6 +139,24 @@ T["items"]["slash trigger returns skills + commands matching the query prefix"] 
   expect.equality(by_label["/deploy-helper"].kind, "skill")
 end
 
+-- Skills and commands share the `/` namespace, so a name held by both must be offered once
+-- rather than as two visually identical entries the user can't tell apart.
+T["items"]["a skill and a command of the same name are offered once"] = function()
+  local sources = require "agentcomplete.sources"
+  local root = tmpdir()
+  write(root .. "/skills/deploy/SKILL.md", { "---", "name: deploy", "description: The skill", "---" })
+  write(root .. "/commands/deploy.md", { "---", "description: The command", "---" })
+  local items = sources.items({
+    tool = "claude-code",
+    cwd = root,
+    skill_dirs = { root .. "/skills" },
+    command_dirs = { root .. "/commands" },
+  }, { trigger = "/", query = "", start_col = 1 })
+  expect.equality(#items, 1)
+  expect.equality(items[1].kind, "skill") -- skills are added first, so they win the clash
+  expect.equality(items[1].detail, "The skill")
+end
+
 T["items"]["slash trigger includes session.extra_commands, deduped against markdown commands"] = function()
   local sources = require "agentcomplete.sources"
   local session = fixture_session()
