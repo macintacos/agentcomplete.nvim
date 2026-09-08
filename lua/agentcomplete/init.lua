@@ -4,6 +4,7 @@
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
+---@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it opens as a vertical split rather than a horizontal one.
 ---@field opencode { show_all_builtin_commands: boolean, resolve_via_cli: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed. When `resolve_via_cli` is true (the default), OpenCode prompt buffers also source skills and commands asynchronously from `opencode debug skill` / `opencode debug config` (merged with, and de-duplicated against, the filesystem scan) — the only way plugin-contributed commands are seen.
 
 ---@class AgentComplete
@@ -12,6 +13,7 @@ local M = {}
 local detect = require "agentcomplete.detect"
 local backends = require "agentcomplete.backends"
 local highlight = require "agentcomplete.highlight"
+local context = require "agentcomplete.context"
 local scan = require "agentcomplete.scan"
 
 ---Default configuration.
@@ -22,6 +24,7 @@ local defaults = {
   detect = "auto",
   sources = { slash = true, file = true },
   allowed_sources = {},
+  context = { enabled = true, min_width = 160 },
   opencode = { show_all_builtin_commands = false, resolve_via_cli = true },
 }
 
@@ -65,6 +68,23 @@ local function ensure_detectors()
   end
 end
 
+---Register built-in last-message resolvers (idempotent — safe across repeated setup calls).
+local function ensure_resolvers()
+  local builtins = { require "agentcomplete.context.claude_code" }
+  for _, r in ipairs(builtins) do
+    local present = false
+    for _, existing in ipairs(context.resolvers) do
+      if existing.name == r.name then
+        present = true
+        break
+      end
+    end
+    if not present then
+      context.register(r)
+    end
+  end
+end
+
 ---Attach completion and token highlighting to a buffer if a session is detected (or forced).
 ---@param bufnr integer|nil 0/nil → current buffer.
 ---@param opts? { force: boolean }
@@ -88,6 +108,12 @@ function M.attach(bufnr, opts)
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
     highlight.attach(buf, session)
+    -- Once per buffer: attach runs again on later BufReadPost, and resolution reads the whole
+    -- transcript. The pane is already open by then anyway.
+    if not vim.b[buf].agentcomplete_context then
+      vim.b[buf].agentcomplete_context = true
+      context.open(buf, session, M.config.context)
+    end
   end
   return session ~= nil
 end
@@ -101,6 +127,10 @@ function M.detach(bufnr)
   end
   backends.detach(buf)
   highlight.detach(buf)
+  context.close(buf)
+  if vim.api.nvim_buf_is_valid(buf) then
+    vim.b[buf].agentcomplete_context = nil
+  end
 end
 
 ---Set up agentcomplete.nvim.
@@ -109,6 +139,7 @@ end
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
   ensure_detectors()
+  ensure_resolvers()
   backends.install_suppression(M.config)
 
   vim.api.nvim_create_user_command("AgentCompleteAttach", function()

@@ -245,4 +245,210 @@ T["claude_code.resolve"]["declines a session belonging to another tool"] = funct
   expect.equality(result, nil)
 end
 
+T["format"] = new_set()
+
+---A `vim.system` stand-in whose process exits `code` with `stdout`.
+local function fake_system(code, stdout)
+  return function()
+    return {
+      wait = function()
+        return { code = code, stdout = stdout }
+      end,
+    }
+  end
+end
+
+T["format"]["returns the formatter's output"] = function()
+  local context = require "agentcomplete.context"
+  expect.equality(context.format("*  a\n", fake_system(0, "- a\n")), "- a\n")
+end
+
+T["format"]["falls back to the raw text when the formatter fails"] = function()
+  local context = require "agentcomplete.context"
+  expect.equality(context.format("*  a\n", fake_system(1, "")), "*  a\n")
+end
+
+T["format"]["falls back to the raw text when the formatter is absent"] = function()
+  local context = require "agentcomplete.context"
+  expect.equality(
+    context.format("*  a\n", function()
+      error "ENOENT"
+    end),
+    "*  a\n"
+  )
+end
+
+T["header"] = new_set()
+
+T["header"]["names the resolver and the session it read"] = function()
+  local context = require "agentcomplete.context"
+  local session = session_for "claude-code"
+  session.session_id = SID
+  local header = context.header(session, "claude-code")
+  expect.equality(header:find("claude-code", 1, true) ~= nil, true)
+  expect.equality(header:find(SID, 1, true) ~= nil, true)
+  expect.equality(header:find "\n", nil)
+end
+
+T["log"] = new_set()
+
+T["log"]["appends one timestamped line per call"] = function()
+  local context = require "agentcomplete.context"
+  local path = tmpdir() .. "/context.log"
+  context.log(path, "first", "T1")
+  context.log(path, "second", "T2")
+  expect.equality(vim.fn.readfile(path), { "[T1] first", "[T2] second" })
+end
+
+T["open"] = new_set {
+  hooks = {
+    pre_case = function()
+      vim.cmd "silent! only"
+    end,
+    post_case = function()
+      local context = require "agentcomplete.context"
+      for buf in pairs(context._state) do
+        context.close(buf)
+      end
+      vim.cmd "silent! only"
+      vim.o.columns = 80
+    end,
+  },
+}
+
+---A prompt buffer holding `lines`, focused, plus a resolver stub registered for it.
+---@param lines? string[]
+local function prompt_buffer(lines)
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or { "" })
+  vim.api.nvim_set_current_buf(buf)
+  return buf
+end
+
+---Register a resolver reporting `result`, and return an `open` opts table with a temp log.
+local function with_resolver(result)
+  require("agentcomplete.context").register(stub("claude-code", result))
+  return { headless = false, log_path = tmpdir() .. "/context.log" }
+end
+
+local function ok_result(text)
+  return { ok = true, resolver = "claude-code", text = text, session_id = SID, transcript = "/t.jsonl" }
+end
+
+---The window the pane opened into, i.e. the one that is not the prompt's.
+local function pane_win(prompt_win)
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if win ~= prompt_win then
+      return win
+    end
+  end
+end
+
+T["open"]["splits vertically when the terminal is at least min_width wide"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(vim.fn.winlayout()[1], "row")
+end
+
+T["open"]["splits horizontally when the terminal is narrower than min_width"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 80
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(vim.fn.winlayout()[1], "col")
+end
+
+T["open"]["leaves the pane read-only and the cursor in the prompt"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local win = assert(pane_win(prompt_win))
+  expect.equality(vim.bo[vim.api.nvim_win_get_buf(win)].modifiable, false)
+  expect.equality(vim.api.nvim_get_current_win(), prompt_win)
+end
+
+T["open"]["shows the header above the message"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win(prompt_win))), 0, -1, false)
+  expect.equality(lines[1]:find("claude-code", 1, true) ~= nil, true)
+  expect.equality(vim.tbl_contains(lines, "hello"), true)
+end
+
+T["open"]["closes the pane when the prompt buffer is wiped"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local win = assert(pane_win(prompt_win))
+  -- Deleting the prompt buffer closes its window; without a third one the pane would be the
+  -- last window standing, which Neovim will not close.
+  vim.cmd "botright new"
+  vim.api.nvim_buf_delete(buf, { force = true })
+  vim.wait(500, function()
+    return not vim.api.nvim_win_is_valid(win)
+  end)
+  expect.equality(vim.api.nvim_win_is_valid(win), false)
+end
+
+-- Claude Code's own `externalEditorContext` renders the conversation into the prompt buffer.
+-- Opening beside it would show the same message twice.
+T["open"]["skips a buffer Claude Code already rendered context into"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer { "prior turn", "# ─── Write your reply below this line ───", "" }
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+end
+
+T["open"]["skips when the feature is disabled"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = false, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+end
+
+T["open"]["skips when there is no UI to split"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = with_resolver(ok_result "hello")
+  opts.headless = true
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+end
+
+T["open"]["records what it resolved for the diagnostics report"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(context._state[buf].resolver, "claude-code")
+  expect.equality(context._state[buf].session_id, SID)
+  expect.equality(context._state[buf].transcript, "/t.jsonl")
+  expect.equality(context._state[buf].bytes, 5)
+end
+
+T["open"]["logs a resolver failure instead of opening a pane"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = with_resolver { ok = false, resolver = "claude-code", err = "no transcript" }
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+  expect.equality(#vim.fn.readfile(opts.log_path), 1)
+  expect.equality(context._state[buf].err, "no transcript")
+end
+
+T["open"]["logs a session no resolver claims"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = { headless = false, log_path = tmpdir() .. "/context.log" }
+  context.open(buf, session_for "some-other-agent", { enabled = true, min_width = 160 }, opts)
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+  expect.equality(#vim.fn.readfile(opts.log_path), 1)
+  expect.equality(type(context._state[buf].err), "string")
+end
+
 return T
