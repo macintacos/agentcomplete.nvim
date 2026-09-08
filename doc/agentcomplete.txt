@@ -189,12 +189,12 @@ The full default configuration, with every option: >lua
 			buffers. See |agentcomplete-suppression|.
 
 'context.enabled'	boolean (default `true`). When true, attaching opens a
-			read-only split showing the agent's last message. See
+			read-only pane showing the agent's last message. See
 			|agentcomplete-context|.
 
 'context.min_width'	number (default `160`). Terminal width at or above
-			which the context pane opens as a vertical split; below
-			it, a horizontal one.
+			which the context pane opens to the right of the
+			prompt; below it, underneath.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -385,16 +385,31 @@ colorschemes after startup: >lua
 12. Context pane
                                                        *agentcomplete-context*
 
-Attaching to a prompt buffer opens a read-only split beside it holding the
+Attaching to a prompt buffer opens a read-only pane beside it holding the
 agent's last message. Without it a reply is written blind: the buffer the
 agent opens for you carries no conversation at all.
 
-The split is vertical when the terminal is at least 'context.min_width'
-columns wide and horizontal below that, and its size is fixed against later
-window changes. It holds a scratch buffer — unnamed, never written anywhere,
-wiped when it closes — set to `markdown` with 'wrap' and 'linebreak' on and
-'modifiable' off. The cursor stays in the prompt buffer, and the pane closes
-on its own when that buffer goes away.
+The pane goes to the right of the prompt when the terminal is at least
+'context.min_width' columns wide, and below it when narrower. It is drawn as
+a rounded-border window titled with the agent that spoke, footed "read-only",
+and follows the prompt when the terminal is resized.
+
+It reads as a document rather than a buffer you act on: no line numbers, no
+sign or fold column, and markdown markup concealed. That last one is the point
+of the pane rather than a detail of it — markup exists to be edited, and this
+is the one markdown in the editor nobody will edit. Everything else about how
+the message looks is your own markdown setup, unchanged: the pane sets
+`filetype` to `markdown` and lets treesitter and whatever renderer you use
+style it exactly as they style any other markdown.
+
+It holds a scratch buffer — unnamed, never written anywhere, wiped when it
+closes — with 'modifiable' off, so you can move the cursor in to read or copy
+but never type. The cursor starts in the prompt buffer.
+
+The pane belongs to the prompt and goes when the prompt does. Quitting the
+prompt window dismisses the pane first, so `:q` returns you to the agent
+instead of leaving you in a message you cannot reply to; you never have to
+close the pane yourself.
 
 When `rumdl` is on $PATH the message is piped through `rumdl` `fmt` `-` before
 being shown. A missing binary or a failed run shows the raw message instead:
