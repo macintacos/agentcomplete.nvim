@@ -193,8 +193,9 @@ The full default configuration, with every option: >lua
 			|agentcomplete-context|.
 
 'context.min_width'	number (default `160`). Terminal width at or above
-			which the context pane opens to the right of the
-			prompt; below it, underneath.
+			which the context pane sits to the right of the prompt
+			and takes 40% of it; below that, underneath. Re-checked
+			whenever the terminal is resized.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -390,9 +391,12 @@ agent's last message. Without it a reply is written blind: the buffer the
 agent opens for you carries no conversation at all.
 
 The pane goes to the right of the prompt when the terminal is at least
-'context.min_width' columns wide, and below it when narrower. It is drawn as
-a rounded-border window titled with the agent that spoke, footed "read-only",
-and follows the prompt when the terminal is resized.
+'context.min_width' columns wide, taking 40% of it — the reply you are
+composing is the work, and the message is reference for it — and moves
+beneath the prompt when the terminal is narrower than that. It re-places
+itself as you resize, so a window dragged narrower restacks rather than
+leaving both halves too cramped to read. It is drawn as a rounded-border
+window titled with the agent that spoke and footed "read-only".
 
 It reads as a document rather than a buffer you act on: no line numbers, no
 sign or fold column, and markdown markup concealed. That last one is the point
