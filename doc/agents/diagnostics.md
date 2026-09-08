@@ -78,6 +78,14 @@ than the buffer name.
   go uncolored: an uncolored token is the plugin's signal for "does not resolve", and the
   painted count is what separates a token that never resolved from one painted in a group
   the colorscheme renders invisibly.
+- `## Context` — what the last-message pane resolved for this buffer: the `resolver` that
+  claimed the session, the `session id` and `transcript` it read, the message's size in
+  `bytes`, and the `last error`. `(no context resolved)` means resolution never ran for
+  this buffer — the feature is off, there is no UI to split, Claude Code's own
+  `externalEditorContext` already rendered into the prompt buffer, or nothing attached. A
+  populated `last error` beside `(unset)` fields is a resolution that ran and failed; the
+  same line is in `.tmp/agentcomplete-context.log`. A `mise run diag` pass always reports
+  `(no context resolved)`: headless runs open no pane by design.
 - `## blink suppression` — the only-source suppression diagnosis, ending in a single
   "Likely cause" line that walks the mechanism in the order failures actually occur, so it
   points straight at the fix.

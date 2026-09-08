@@ -26,7 +26,8 @@ CONTENTS
     9. Commands ..................................... |agentcomplete-commands|
    10. Completion sources ............................ |agentcomplete-sources|
    11. Highlighting ............................. |agentcomplete-highlighting|
-   12. Diagnostics ............................... |agentcomplete-diagnostics|
+   12. Context pane .................................. |agentcomplete-context|
+   13. Diagnostics ............................... |agentcomplete-diagnostics|
 
 ==============================================================================
 1. Introduction
@@ -151,6 +152,10 @@ The full default configuration, with every option: >lua
 	    file = true,         -- complete @path/to/file
 	  },
 	  allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
+	  context = {
+	    enabled = true,      -- read-only split showing the agent's last message
+	    min_width = 160,     -- columns at or above which that split is vertical
+	  },
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
 	    resolve_via_cli = true,            -- also source skills/commands from `opencode debug`
@@ -182,6 +187,14 @@ The full default configuration, with every option: >lua
 'allowed_sources'	string[] (default `{}`). blink only. Extra blink
 			source names to keep with agentcomplete in detected
 			buffers. See |agentcomplete-suppression|.
+
+'context.enabled'	boolean (default `true`). When true, attaching opens a
+			read-only split showing the agent's last message. See
+			|agentcomplete-context|.
+
+'context.min_width'	number (default `160`). Terminal width at or above
+			which the context pane opens as a vertical split; below
+			it, a horizontal one.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -369,7 +382,44 @@ colorschemes after startup: >lua
 <
 
 ==============================================================================
-12. Diagnostics
+12. Context pane
+                                                       *agentcomplete-context*
+
+Attaching to a prompt buffer opens a read-only split beside it holding the
+agent's last message. Without it a reply is written blind: the buffer the
+agent opens for you carries no conversation at all.
+
+The split is vertical when the terminal is at least 'context.min_width'
+columns wide and horizontal below that, and its size is fixed against later
+window changes. It holds a scratch buffer — unnamed, never written anywhere,
+wiped when it closes — set to `markdown` with 'wrap' and 'linebreak' on and
+'modifiable' off. The cursor stays in the prompt buffer, and the pane closes
+on its own when that buffer goes away.
+
+When `rumdl` is on $PATH the message is piped through `rumdl` `fmt` `-` before
+being shown. A missing binary or a failed run shows the raw message instead:
+formatting never costs you the pane.
+
+Claude Code has an `externalEditorContext` setting of its own that renders
+recent conversation into the prompt buffer, above a "Write your reply below
+this line" delimiter. agentcomplete opens no pane in a buffer holding that
+delimiter, so the two never show you the same message twice.
+
+Resolution fails soft throughout. When the last message cannot be found — no
+session file, no transcript, no assistant turn in it — no pane opens, nothing
+is raised, and one line explaining why is appended to
+`.tmp/agentcomplete-context.log` under the editor's working directory. That
+path sits inside your project deliberately: the agent whose message failed to
+load is the one that has to read it. |agentcomplete-diagnostics| reports the
+same state for the current buffer.
+
+For Claude Code the message comes from the session transcript under
+`~/.claude/projects`, found by walking up from Neovim's parent process to the
+`~/.claude/sessions/<pid>.json` that Claude Code wrote — so the pane works
+through an $EDITOR wrapper script as well as a direct launch.
+
+==============================================================================
+13. Diagnostics
                                                    *agentcomplete-diagnostics*
 
 When completion misbehaves in a prompt buffer ("no completions", "wrong
@@ -392,6 +442,8 @@ directory and prints the report to |:messages|. The report contains:
 	Highlighting	whether highlighting attached, how many tokens are
 			painted, what each group resolves to, and the size
 			of the resolved / set
+	Context		which resolver ran, the session and transcript it read,
+			the size of the message, and why no pane opened
 	blink		the only-source suppression diagnosis, ending in a
 			single "Likely cause" line
 	Environment	the raw detection signals (`OPENCODE`, `AGENT`,
