@@ -106,22 +106,22 @@ local function scan_backwards(path)
     return nil
   end
   local size = (uv.fs_fstat(fd) or {}).size or 0
-  local want, found = TAIL_START, nil
+  local tail_size, message = TAIL_START, nil
   while true do
-    local offset = math.max(0, size - want)
+    local offset = math.max(0, size - tail_size)
     local from = offset > 0 and offset - 1 or 0
     local chunk = uv.fs_read(fd, size - from, from) or ""
     if from > 0 then
       chunk = chunk:sub((chunk:find("\n", 1, true) or #chunk) + 1)
     end
-    found = newest_message(vim.split(chunk, "\n", { trimempty = true }))
-    if found or offset == 0 or want >= TAIL_MAX then
+    message = newest_message(vim.split(chunk, "\n", { trimempty = true }))
+    if message or offset == 0 or tail_size >= TAIL_MAX then
       break
     end
-    want = math.min(want * 2, TAIL_MAX)
+    tail_size = math.min(tail_size * 2, TAIL_MAX)
   end
   uv.fs_close(fd)
-  return found
+  return message
 end
 
 ---Report a failure. The session is still claimed: the walk got far enough to know it is ours,

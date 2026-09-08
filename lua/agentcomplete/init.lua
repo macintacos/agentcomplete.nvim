@@ -48,13 +48,13 @@ end
 
 ---Add each of `builtins` to a registry it is not already in, by name. Idempotent, so repeated
 ---setup calls are safe.
----@param registered { name: string }[]
+---@param registry { name: string }[]
 ---@param register fun(item: any)
 ---@param builtins { name: string }[]
-local function ensure_registered(registered, register, builtins)
+local function ensure_registered(registry, register, builtins)
   for _, item in ipairs(builtins) do
     local present = false
-    for _, existing in ipairs(registered) do
+    for _, existing in ipairs(registry) do
       if existing.name == item.name then
         present = true
         break
