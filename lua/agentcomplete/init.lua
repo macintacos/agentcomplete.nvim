@@ -79,7 +79,8 @@ local function ensure_builtins()
   })
 end
 
----Attach completion and token highlighting to a buffer if a session is detected (or forced).
+---Attach completion, token highlighting, and the context pane to a buffer if a session is
+---detected (or forced).
 ---@param bufnr integer|nil 0/nil → current buffer.
 ---@param opts? { force: boolean }
 ---@return boolean attached
@@ -107,7 +108,7 @@ function M.attach(bufnr, opts)
   return session ~= nil
 end
 
----Detach completion and token highlighting from a buffer.
+---Detach completion, token highlighting, and the context pane from a buffer.
 ---@param bufnr integer|nil 0/nil → current buffer.
 function M.detach(bufnr)
   local buf = bufnr or 0

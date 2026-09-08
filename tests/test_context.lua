@@ -374,7 +374,7 @@ T["open"] = new_set {
   },
 }
 
----A prompt buffer holding `lines`, focused, plus a resolver stub registered for it.
+---A prompt buffer holding `lines`, focused.
 ---@param lines? string[]
 local function prompt_buffer(lines)
   local buf = vim.api.nvim_create_buf(true, false)
