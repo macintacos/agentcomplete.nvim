@@ -6,8 +6,8 @@
 ---own CLI for the answer; the Claude Code one happens to finish synchronously, and reports
 ---through `cb` anyway so an asynchronous sibling drops in without changing the contract.
 ---
----The module splits the way `highlight.lua` does: `format`, `header`, and `log` are the
----editor-state-free core the tests drive directly, and `open`/`pane`/`close` are the glue.
+---The module splits the way `highlight.lua` does: `format` and `log` are the editor-state-free
+---core the tests drive directly, and `open`/`pane`/`close` are the glue.
 ---@class AgentComplete.Context
 local M = {}
 
@@ -103,8 +103,8 @@ local function has_editor_context(buf)
 end
 
 ---Pipe `text` through `rumdl fmt -`. A missing binary, a non-zero exit, or a formatter that
----outruns `FORMAT_TIMEOUT_MS` yields the raw text: the pane never fails over formatting, and
----never blocks the editor on it either — this runs on the main loop as the prompt opens.
+---outruns `FORMAT_TIMEOUT_MS` yields the raw text: the pane never fails over formatting. This
+---runs on the main loop as the prompt opens, so the wait is bounded rather than left to hang.
 ---@param text string
 ---@param system? fun(cmd: string[], opts: table): table Defaults to `vim.system`; injected in tests.
 ---@return string
@@ -162,7 +162,9 @@ local PANE_WIDTH = 0.4
 ---@param vertical boolean
 ---@return integer
 local function reserve(host, vertical)
-  local win = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), false, {
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  local win = vim.api.nvim_open_win(buf, false, {
     split = vertical and "right" or "below",
     win = host,
   })
@@ -172,6 +174,8 @@ local function reserve(host, vertical)
   vim.wo[win].foldcolumn = "0"
   vim.wo[win].cursorline = false
   vim.wo[win].winbar = ""
+  -- Not 'winfixwidth': fixing the width makes the prompt absorb the whole of a terminal
+  -- resize rather than shrinking with it. `place` reasserts the pane's share instead.
   vim.wo[win].winfixbuf = true
   return win
 end
@@ -215,7 +219,7 @@ end
 ---@param spacer integer Split the float is drawn over.
 ---@param min_width integer Terminal width at or above which the pane sits beside the prompt.
 local function follow(buf, host, win, spacer, min_width)
-  local grp = M._augroups[buf] or vim.api.nvim_create_augroup("AgentCompleteContext_" .. buf, { clear = false })
+  local grp = assert(M._augroups[buf], "pane built for an unattached buffer")
   local beside = vim.o.columns >= min_width
   local placing = false
 
@@ -231,15 +235,18 @@ local function follow(buf, host, win, spacer, min_width)
       return
     end
     placing = true
-    local wanted = vim.o.columns >= min_width
-    if wanted ~= beside then
-      beside = wanted
-      vim.api.nvim_win_set_config(spacer, { split = beside and "right" or "below", win = host })
-    end
-    if beside then
-      vim.api.nvim_win_set_width(spacer, math.floor(vim.o.columns * PANE_WIDTH))
-    end
-    vim.api.nvim_win_set_config(win, geometry(spacer))
+    -- Guarded so a raise mid-resize cannot leave the flag set and the pane frozen where it is.
+    pcall(function()
+      local wanted = vim.o.columns >= min_width
+      if wanted ~= beside then
+        beside = wanted
+        vim.api.nvim_win_set_config(spacer, { split = beside and "right" or "below", win = host })
+      end
+      if beside then
+        vim.api.nvim_win_set_width(spacer, math.floor(vim.o.columns * PANE_WIDTH))
+      end
+      vim.api.nvim_win_set_config(win, geometry(spacer))
+    end)
     placing = false
   end
 
@@ -284,7 +291,7 @@ local function follow(buf, host, win, spacer, min_width)
   })
   vim.api.nvim_create_autocmd("WinClosed", {
     group = grp,
-    pattern = { tostring(win), tostring(host) },
+    pattern = { tostring(win), tostring(spacer), tostring(host) },
     callback = function()
       M.close(buf)
     end,
@@ -358,7 +365,12 @@ local function show(buf, result, config, log_path, format)
     M.log(log_path, result.err or "resolution failed")
     return
   end
-  M.pane(buf, format(result.text or ""), config.min_width, result.resolver)
+  local win = M.pane(buf, format(result.text or ""), config.min_width, result.resolver)
+  if not win then
+    M._state[buf] = { resolver = result.resolver, err = "prompt buffer is on no screen to split from" }
+    M.log(log_path, M._state[buf].err)
+    return
+  end
   -- After the pane, so a raise from it leaves the error in `_state` rather than a success
   -- shape that tells a diagnostics reader the pane is on screen.
   M._state[buf] = {
@@ -413,7 +425,15 @@ function M.open(buf, session, config, opts)
   local log_path = opts.log_path or ((vim.loop.cwd() or vim.fn.getcwd()) .. "/.tmp/agentcomplete-context.log")
   local format = opts.format or M.format
 
+  local reported = false
   local claimed, err = M.resolve(session, function(result)
+    -- A resolver reports once, and only while this buffer is still attached. A second report
+    -- would build a pane over the first and overwrite the record of its windows; one arriving
+    -- after `close` would hang autocmds on an augroup nothing owns.
+    if reported or M._augroups[buf] ~= grp then
+      return
+    end
+    reported = true
     -- Guarded here rather than left to the registry's `pcall`: a raise from the pane would
     -- read there as "the resolver declined", and be logged as the wrong failure.
     local ok, failure = pcall(show, buf, result, config, log_path, format)

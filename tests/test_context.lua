@@ -710,4 +710,60 @@ T["open"]["shows a message resolved by the real Claude Code resolver"] = functio
   expect.equality(context._state[buf].transcript, fx.transcript)
 end
 
+-- The pane is two windows over two scratch buffers, and closing a window does not take its
+-- buffer with it: unwiped, every prompt a session opens leaves one behind for its lifetime.
+T["open"]["leaves no buffer behind when the pane closes"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local before = #vim.api.nvim_list_bufs()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.close(buf)
+  expect.equality(#vim.api.nvim_list_bufs(), before)
+end
+
+-- `_state` is what the diagnostics report reads to explain a missing pane, so "the message
+-- resolved" and "the message is on screen" cannot be the same answer.
+T["open"]["records a failure when the prompt buffer is on no screen to split from"] = function()
+  local context = require "agentcomplete.context"
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hi"))
+  expect.equality(type(context._state[buf].err), "string")
+end
+
+-- A resolver reports once. A second report would build a second pane over the first and
+-- overwrite the record of the first one's windows, leaving two nothing can close.
+T["open"]["ignores a resolver that reports twice"] = function()
+  local context = require "agentcomplete.context"
+  context.register {
+    name = "twice",
+    resolve = function(_, cb)
+      cb(ok_result "first")
+      cb(ok_result "second")
+      return true
+    end,
+  }
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, {
+    headless = false,
+    log_path = tmpdir() .. "/context.log",
+    format = function(text)
+      return text
+    end,
+  })
+  expect.equality(#vim.api.nvim_list_wins(), 3)
+end
+
+-- Every window the pane owns is a way out of it, so the teardown listens on all of them: a
+-- split closed on its own would otherwise leave the float drawn over nothing.
+T["open"]["dismisses the pane when the split it sits over is closed"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local prompt = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local float = assert(pane_win())
+  vim.api.nvim_win_close(assert(spacer_win(prompt)), true)
+  expect.equality(vim.api.nvim_win_is_valid(float), false)
+end
+
 return T
