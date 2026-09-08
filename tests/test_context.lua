@@ -327,18 +327,6 @@ T["format"]["falls back to the raw text when the formatter outruns its timeout"]
   expect.equality(type(waited), "number")
 end
 
-T["header"] = new_set()
-
--- Read from the result rather than the session: an asynchronous resolver reports its session
--- id without necessarily writing it back onto the session table.
-T["header"]["names the resolver and the session it read"] = function()
-  local context = require "agentcomplete.context"
-  local header = context.header { ok = true, resolver = "claude-code", session_id = SID }
-  expect.equality(header:find("claude-code", 1, true) ~= nil, true)
-  expect.equality(header:find(SID, 1, true) ~= nil, true)
-  expect.equality(header:find "\n", nil)
-end
-
 T["log"] = new_set()
 
 T["log"]["appends one timestamped line per call"] = function()
@@ -401,10 +389,21 @@ local function ok_result(text)
   return { ok = true, resolver = "claude-code", text = text, session_id = SID, transcript = "/t.jsonl" }
 end
 
----The window the pane opened into, i.e. the one that is not the prompt's.
-local function pane_win(prompt_win)
+---The window holding the message: the floating one. `open` leaves two windows behind — the
+---split that reserves the room and the float that fills it — so "not the prompt's" no longer
+---picks one out.
+local function pane_win()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
-    if win ~= prompt_win then
+    if vim.api.nvim_win_get_config(win).relative ~= "" then
+      return win
+    end
+  end
+end
+
+---The split the float sits over, i.e. the remaining non-floating window that is not `prompt_win`.
+local function spacer_win(prompt_win)
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if win ~= prompt_win and vim.api.nvim_win_get_config(win).relative == "" then
       return win
     end
   end
@@ -431,27 +430,109 @@ T["open"]["leaves the pane read-only and the cursor in the prompt"] = function()
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  local win = assert(pane_win(prompt_win))
+  local win = assert(pane_win())
   expect.equality(vim.bo[vim.api.nvim_win_get_buf(win)].modifiable, false)
   expect.equality(vim.api.nvim_get_current_win(), prompt_win)
 end
 
-T["open"]["shows the header above the message"] = function()
+T["open"]["frames the message, naming the resolver in the border"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local config = vim.api.nvim_win_get_config(assert(pane_win()))
+  local function chunks(parts)
+    return table.concat(vim.tbl_map(function(part)
+      return part[1]
+    end, parts))
+  end
+  expect.equality(config.border[1], "╭")
+  expect.equality(chunks(config.title):find("claude-code", 1, true) ~= nil, true)
+  expect.equality(chunks(config.footer):find("read-only", 1, true) ~= nil, true)
+end
+
+-- The pane is the one markdown in the editor nobody will edit, so the markup that exists to
+-- be edited is what it hides. Everything a gutter is for -- line numbers to jump to, signs,
+-- folds -- addresses a buffer you act on, and this is a buffer you read.
+T["open"]["reads as a document rather than an editable buffer"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local win = assert(pane_win())
+  expect.equality(vim.wo[win].number, false)
+  expect.equality(vim.wo[win].relativenumber, false)
+  expect.equality(vim.wo[win].signcolumn, "no")
+  expect.equality(vim.wo[win].foldcolumn, "0")
+  expect.equality(vim.wo[win].spell, false)
+  expect.equality(vim.wo[win].conceallevel, 3)
+  expect.equality(vim.wo[win].wrap, true)
+  expect.equality(vim.bo[vim.api.nvim_win_get_buf(win)].filetype, "markdown")
+end
+
+-- Window-local options are set against whichever window is current, so a filetype set before
+-- the pane has one lands on the prompt instead -- taking every ftplugin and FileType autocmd
+-- with it, and leaving the pane itself unrendered.
+-- A filetype set on a buffer no window is showing fires `FileType` inside a scratch
+-- autocommand window, so every window-local option an ftplugin sets is applied there and
+-- thrown away with it. The pane needs its window first or it renders as plain text: the
+-- markdown plugins that would style it are exactly the ones setting those options.
+T["open"]["gives the pane a window before its filetype, so ftplugins reach it"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local grp = vim.api.nvim_create_augroup("AgentCompleteContextFtTest", { clear = true })
+  vim.api.nvim_create_autocmd("FileType", {
+    group = grp,
+    pattern = "markdown",
+    callback = function()
+      vim.opt_local.foldlevel = 7
+    end,
+  })
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  vim.api.nvim_del_augroup_by_id(grp)
+  expect.equality(vim.wo[assert(pane_win())].foldlevel, 7)
+end
+
+T["open"]["shows the message from its first line"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win())), 0, -1, false)
+  expect.equality(lines[1], "hello")
+end
+
+-- The split exists only to reserve the room the float fills; landing in it means landing on an
+-- empty buffer exactly where the message appears to be.
+T["open"]["hands the cursor to the message when the split is entered"] = function()
   local context = require "agentcomplete.context"
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win(prompt_win))), 0, -1, false)
-  expect.equality(lines[1]:find("claude-code", 1, true) ~= nil, true)
-  expect.equality(vim.tbl_contains(lines, "hello"), true)
+  vim.api.nvim_set_current_win(assert(spacer_win(prompt_win)))
+  vim.wait(100)
+  expect.equality(vim.api.nvim_get_current_win(), pane_win())
+end
+
+-- Quitting the prompt is how the agent CLI is answered, so both of the pane's windows have to
+-- be gone *before* that quit resolves: either one still standing is a window Neovim keeps the
+-- editor open for, leaving the reader in a message they cannot reply to instead of back at the
+-- agent. Asserting the prompt window is still open is what pins the ordering — after it closes,
+-- dismissing the pane is too late to matter.
+T["open"]["dismisses the pane before the prompt's quit resolves"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local win, spacer = assert(pane_win()), assert(spacer_win(prompt_win))
+  vim.api.nvim_exec_autocmds("QuitPre", { buffer = buf })
+  expect.equality(vim.api.nvim_win_is_valid(win), false)
+  expect.equality(vim.api.nvim_win_is_valid(spacer), false)
+  expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
 end
 
 T["open"]["closes the pane when the prompt buffer is wiped"] = function()
   local context = require "agentcomplete.context"
   local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  local win = assert(pane_win(prompt_win))
+  local win = assert(pane_win())
   -- Deleting the prompt buffer closes its window; without a third one the pane would be the
   -- last window standing, which Neovim will not close.
   vim.cmd "botright new"
@@ -540,7 +621,7 @@ T["open"]["opens one pane however many times it is called"] = function()
   local config = { enabled = true, min_width = 160 }
   context.open(buf, session_for "claude-code", config, opts)
   context.open(buf, session_for "claude-code", config, opts)
-  expect.equality(#vim.api.nvim_list_wins(), 2)
+  expect.equality(#vim.api.nvim_list_wins(), 3)
 end
 
 -- `:edit!` fires BufUnload but not BufDelete, and the buffer survives it — so must the pane.
@@ -550,9 +631,8 @@ T["open"]["keeps the pane across a reload of the prompt buffer"] = function()
   vim.fn.writefile({ "draft" }, path)
   vim.cmd("silent edit " .. vim.fn.fnameescape(path))
   local buf = vim.api.nvim_get_current_buf()
-  local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  local win = assert(pane_win(prompt_win))
+  local win = assert(pane_win())
   vim.cmd "silent edit!"
   vim.wait(100)
   expect.equality(vim.api.nvim_win_is_valid(win), true)
@@ -578,7 +658,6 @@ T["open"]["shows a message resolved by the real Claude Code resolver"] = functio
   context.register(require "agentcomplete.context.claude_code")
   local fx = fixture { assistant { text_block "resolved for real" } }
   local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, {
     headless = false,
     log_path = tmpdir() .. "/context.log",
@@ -587,9 +666,9 @@ T["open"]["shows a message resolved by the real Claude Code resolver"] = functio
     end,
     resolver = { sessions_root = fx.sessions_root, projects_root = fx.projects_root },
   })
-  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win(prompt_win))), 0, -1, false)
-  expect.equality(lines[1]:find(SID, 1, true) ~= nil, true)
+  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win())), 0, -1, false)
   expect.equality(vim.tbl_contains(lines, "resolved for real"), true)
+  expect.equality(context._state[buf].session_id, SID)
   expect.equality(context._state[buf].transcript, fx.transcript)
 end
 

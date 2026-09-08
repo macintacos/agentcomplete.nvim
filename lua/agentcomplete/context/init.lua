@@ -72,8 +72,9 @@ end
 ---@type table<integer, AgentComplete.Context.State>
 M._state = {}
 
----Pane window, per prompt buffer.
----@type table<integer, integer>
+---The pane's two windows, per prompt buffer: `win` is the float holding the message, `spacer`
+---the split it sits over.
+---@type table<integer, { win: integer, spacer: integer }>
 M._panes = {}
 
 ---Teardown augroup, per prompt buffer. Also the "context is attached here" guard: it is set
@@ -119,15 +120,6 @@ function M.format(text, system)
   return proc.stdout
 end
 
----The pane's one-line title: which agent the message came from, and which session.
----Reads the result rather than the session, so a resolver that reports its session id without
----writing it back still titles the pane correctly.
----@param result AgentComplete.Context.Result
----@return string
-function M.header(result)
-  return "# " .. result.resolver .. " — last message (" .. tostring(result.session_id) .. ")"
-end
-
 ---Append a timestamped line to `path`, creating its directory. Guarded end to end, `mkdir`
 ---included: it raises on an unwritable cwd, and the log exists to explain a missing pane
 ---rather than to become a second failure in front of the user's prompt.
@@ -143,41 +135,172 @@ function M.log(path, message, now)
   end)
 end
 
----Open the read-only pane beside `buf`. The split follows the terminal's width, and so does
----the option that fixes its size — `winfixwidth` has no meaning on a horizontal split.
+---What the pane turns off beyond `style = "minimal"`, which already clears 'number',
+---'relativenumber', 'cursorline', 'foldcolumn', 'spell' and 'list'. 'conceallevel' is the
+---point of the pane rather than a detail of it: markdown markup exists to be edited, and this
+---is the one markdown in the editor nobody will edit. The inset is a 'statuscolumn' rather
+---than padding on the text, which would land in every yank and hide the markup from the
+---parser that renders it.
+local PANE_OPTIONS = {
+  wrap = true,
+  linebreak = true,
+  conceallevel = 3,
+  concealcursor = "nc",
+  signcolumn = "no",
+  statuscolumn = "  ",
+  winhighlight = "Normal:NormalFloat",
+}
+
+---Reserve the room the float fills. A split cannot carry a border and a float alone would
+---cover the prompt rather than sit beside it, so the pane is both: this split holds the space
+---and takes the resize, and the float draws inside it.
+---@param host integer Window showing the prompt.
+---@param vertical boolean
+---@return integer
+local function reserve(host, vertical)
+  local win = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), false, {
+    split = vertical and "right" or "below",
+    win = host,
+  })
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].foldcolumn = "0"
+  vim.wo[win].cursorline = false
+  vim.wo[win].winbar = ""
+  vim.wo[win].winfixbuf = true
+  return win
+end
+
+---The float's rectangle: inset a column so the split's separator and the border are not drawn
+---against each other, and short of the full height so the bottom border stays on screen.
+---@param spacer integer
+---@return vim.api.keyset.win_config
+local function geometry(spacer)
+  return {
+    relative = "win",
+    win = spacer,
+    row = 0,
+    col = 1,
+    width = math.max(1, vim.api.nvim_win_get_width(spacer) - 4),
+    height = math.max(1, vim.api.nvim_win_get_height(spacer) - 2),
+  }
+end
+
+---The frame: who is speaking, and that you cannot answer here. Two-tone so the agent's name
+---reads first and the labels recede into the border.
+---@param resolver string
+---@return vim.api.keyset.win_config
+local function chrome(resolver)
+  return {
+    style = "minimal",
+    border = "rounded",
+    title = { { "─ ", "FloatBorder" }, { resolver, "Title" }, { " · last message ", "Comment" } },
+    title_pos = "left",
+    footer = { { "─ ", "FloatBorder" }, { "read-only", "Comment" }, { " ─", "FloatBorder" } },
+    footer_pos = "right",
+  }
+end
+
+---Keep the pane in step with the windows around it: track the split it is drawn over, hand the
+---cursor on when that split is entered, mark the message as focused, and take the whole pane
+---down with the prompt.
+---@param buf integer Prompt buffer.
+---@param host integer Window showing the prompt.
+---@param win integer Float holding the message.
+---@param spacer integer Split the float is drawn over.
+local function follow(buf, host, win, spacer)
+  local grp = M._augroups[buf] or vim.api.nvim_create_augroup("AgentCompleteContext_" .. buf, { clear = false })
+  local function valid()
+    return vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_is_valid(spacer)
+  end
+
+  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
+    group = grp,
+    callback = function()
+      if valid() then
+        vim.api.nvim_win_set_config(win, geometry(spacer))
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "WinEnter", "WinLeave" }, {
+    group = grp,
+    callback = function()
+      if not valid() then
+        return
+      end
+      -- The split only holds the room; landing in it means landing on an empty buffer exactly
+      -- where the message appears to be.
+      if vim.api.nvim_get_current_win() == spacer then
+        vim.api.nvim_set_current_win(win)
+      end
+      vim.wo[win].cursorline = vim.api.nvim_get_current_win() == win
+    end,
+  })
+
+  -- The pane is chrome the prompt owns, so it goes when the prompt does — and on `QuitPre`,
+  -- before the quit resolves, so the prompt window is the last one standing and `:q` returns
+  -- the reader to the agent instead of stranding them in a message they cannot reply to.
+  vim.api.nvim_create_autocmd("QuitPre", {
+    group = grp,
+    buffer = buf,
+    callback = function()
+      M.close(buf)
+    end,
+  })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = grp,
+    pattern = { tostring(win), tostring(host) },
+    callback = function()
+      M.close(buf)
+    end,
+  })
+end
+
+---Open the read-only pane beside `buf`, framed and titled for `resolver`. Vertical at or above
+---`min_width`, horizontal below it.
 ---@param buf integer Prompt buffer the pane belongs to.
 ---@param text string
----@param min_width integer Terminal width at or above which the split goes vertical.
+---@param min_width integer Terminal width at or above which the pane opens as a vertical split.
+---@param resolver string Name shown in the border.
 ---@return integer|nil win nil when `buf` is not on screen to split from.
-function M.pane(buf, text, min_width)
+function M.pane(buf, text, min_width, resolver)
   local host = vim.fn.bufwinid(buf)
   if host == -1 then
     return nil
   end
-  local vertical = vim.o.columns >= min_width
+  local spacer = reserve(host, vim.o.columns >= min_width)
+
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  vim.bo[pane_buf].filetype = "markdown"
+  local win = vim.api.nvim_open_win(pane_buf, false, vim.tbl_extend("error", geometry(spacer), chrome(resolver)))
+
+  -- Contents and filetype after the window, not before: window-local options are set against
+  -- whichever window is current, so a filetype set while the pane has none sends every
+  -- ftplugin and FileType autocmd to the prompt window and leaves the pane unrendered.
   vim.api.nvim_buf_set_lines(pane_buf, 0, -1, false, vim.split(text, "\n"))
   vim.bo[pane_buf].modifiable = false
+  vim.bo[pane_buf].filetype = "markdown"
+  for option, value in pairs(PANE_OPTIONS) do
+    vim.wo[win][option] = value
+  end
 
-  local win = vim.api.nvim_open_win(pane_buf, false, { split = vertical and "right" or "below", win = host })
-  vim.wo[win].wrap = true
-  vim.wo[win].linebreak = true
-  vim.wo[win][vertical and "winfixwidth" or "winfixheight"] = true
-  M._panes[buf] = win
+  M._panes[buf] = { win = win, spacer = spacer }
+  follow(buf, host, win, spacer)
   return win
 end
 
 ---Close the pane for `buf` and release everything `open` recorded for it.
 ---@param buf integer
 function M.close(buf)
-  local win = M._panes[buf]
-  if win then
-    -- Closing the prompt buffer can leave the pane as the only window, which Neovim refuses to
-    -- close. An orphaned pane is a better outcome than quitting the editor out from under it.
-    pcall(vim.api.nvim_win_close, win, true)
+  local pane = M._panes[buf]
+  if pane then
+    -- Cleared first: closing either window fires `WinClosed`, which routes back here.
     M._panes[buf] = nil
+    for _, win in ipairs { pane.win, pane.spacer } do
+      pcall(vim.api.nvim_win_close, win, true)
+    end
   end
   if M._augroups[buf] then
     pcall(vim.api.nvim_del_augroup_by_id, M._augroups[buf])
@@ -202,7 +325,7 @@ local function show(buf, result, config, log_path, format)
     M.log(log_path, result.err or "resolution failed")
     return
   end
-  M.pane(buf, M.header(result) .. "\n\n" .. format(result.text or ""), config.min_width)
+  M.pane(buf, format(result.text or ""), config.min_width, result.resolver)
   -- After the pane, so a raise from it leaves the error in `_state` rather than a success
   -- shape that tells a diagnostics reader the pane is on screen.
   M._state[buf] = {
