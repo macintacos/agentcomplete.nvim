@@ -11,7 +11,6 @@ local M = { name = "claude-code" }
 
 local uv = vim.loop
 
----How far up the process tree to look for a session file before giving up.
 local MAX_PID_HOPS = 5
 
 ---Transcripts are large (hundreds of KB) and their final turns are tool calls, so the newest
@@ -59,7 +58,7 @@ local function read_json(path)
 end
 
 ---The non-empty `text` blocks of one transcript entry, joined; nil when it carries none
----(a turn that is only tool calls, which is what the final turns of a transcript usually are).
+---(a tool-call-only turn).
 ---@param entry table
 ---@return string|nil
 local function entry_text(entry)
@@ -95,8 +94,10 @@ local function newest_message(lines)
   return nil
 end
 
----Scan `path` backwards over a growing tail. Every chunk that starts mid-file opens on a
----truncated line, which is dropped rather than fed to the scan.
+---Scan `path` backwards over a growing tail, dropping the truncated line every chunk that
+---starts mid-file opens on. The read begins one byte early so that leading fragment always
+---exists: landing exactly on a newline would otherwise make the first line a complete one,
+---and discarding it would throw away a real entry.
 ---@param path string
 ---@return string|nil
 local function scan_backwards(path)
@@ -108,11 +109,12 @@ local function scan_backwards(path)
   local want, found = TAIL_START, nil
   while true do
     local offset = math.max(0, size - want)
-    local lines = vim.split(uv.fs_read(fd, size - offset, offset) or "", "\n", { trimempty = true })
-    if offset > 0 then
-      table.remove(lines, 1)
+    local from = offset > 0 and offset - 1 or 0
+    local chunk = uv.fs_read(fd, size - from, from) or ""
+    if from > 0 then
+      chunk = chunk:sub((chunk:find("\n", 1, true) or #chunk) + 1)
     end
-    found = newest_message(lines)
+    found = newest_message(vim.split(chunk, "\n", { trimempty = true }))
     if found or offset == 0 or want >= TAIL_MAX then
       break
     end

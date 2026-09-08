@@ -1,5 +1,6 @@
--- Tests for agentcomplete.context: the Claude Code transcript resolver (with its roots and
--- subprocess injected, so no real `$HOME` and no real `ps` are touched).
+-- Tests for agentcomplete.context: the resolver registry, the Claude Code transcript
+-- resolver (with its roots and subprocess injected, so no real `$HOME`, `ps`, or formatter
+-- subprocess is touched), and the pane built around them.
 local MiniTest = require "mini.test"
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
@@ -114,6 +115,37 @@ T["registry"]["a resolver that throws is skipped rather than aborting the walk"]
   }
   context.register(stub("claims", { ok = true, resolver = "claims", text = "b" }))
   expect.equality(context.resolve(session_for "any", function() end), "claims")
+end
+
+-- "no resolver is registered" and "the registered one crashed" are opposite problems, and the
+-- failure log is where a maintainer tells them apart.
+T["registry"]["carries out the error when a raising resolver is the only candidate"] = function()
+  local context = require "agentcomplete.context"
+  context.register {
+    name = "raises",
+    resolve = function()
+      error "transcript decode blew up"
+    end,
+  }
+  local claimed, err = context.resolve(session_for "any", function() end)
+  expect.equality(claimed, nil)
+  err = assert(err, "no error carried out")
+  expect.equality(err:find("raises", 1, true) ~= nil, true)
+  expect.equality(err:find("transcript decode blew up", 1, true) ~= nil, true)
+end
+
+T["registry"]["passes resolver seams through to the resolver"] = function()
+  local context = require "agentcomplete.context"
+  local seen
+  context.register {
+    name = "records",
+    resolve = function(_, _, opts)
+      seen = opts
+      return true
+    end,
+  }
+  context.resolve(session_for "any", function() end, { sessions_root = "/fixture" })
+  expect.equality(seen.sessions_root, "/fixture")
 end
 
 T["registry"]["reports nothing when no resolver claims the session"] = function()
@@ -278,13 +310,30 @@ T["format"]["falls back to the raw text when the formatter is absent"] = functio
   )
 end
 
+-- Unbounded, this waits on the main loop as the prompt buffer opens, so a hung formatter
+-- would freeze the editor rather than cost the pane.
+T["format"]["falls back to the raw text when the formatter outruns its timeout"] = function()
+  local context = require "agentcomplete.context"
+  local waited
+  local system = function()
+    return {
+      wait = function(_, timeout)
+        waited = timeout
+        return nil
+      end,
+    }
+  end
+  expect.equality(context.format("*  a\n", system), "*  a\n")
+  expect.equality(type(waited), "number")
+end
+
 T["header"] = new_set()
 
+-- Read from the result rather than the session: an asynchronous resolver reports its session
+-- id without necessarily writing it back onto the session table.
 T["header"]["names the resolver and the session it read"] = function()
   local context = require "agentcomplete.context"
-  local session = session_for "claude-code"
-  session.session_id = SID
-  local header = context.header(session, "claude-code")
+  local header = context.header { ok = true, resolver = "claude-code", session_id = SID }
   expect.equality(header:find("claude-code", 1, true) ~= nil, true)
   expect.equality(header:find(SID, 1, true) ~= nil, true)
   expect.equality(header:find "\n", nil)
@@ -298,6 +347,15 @@ T["log"]["appends one timestamped line per call"] = function()
   context.log(path, "first", "T1")
   context.log(path, "second", "T2")
   expect.equality(vim.fn.readfile(path), { "[T1] first", "[T2] second" })
+end
+
+-- `vim.fn.mkdir` throws when the directory cannot be made, and both the module docstring and
+-- the vimdoc promise this path raises nothing.
+T["log"]["does not raise when the directory cannot be created"] = function()
+  local context = require "agentcomplete.context"
+  local blocker = tmpdir() .. "/blocker"
+  vim.fn.writefile({ "" }, blocker)
+  expect.equality(pcall(context.log, blocker .. "/context.log", "boom", "T1"), true)
 end
 
 T["open"] = new_set {
@@ -326,9 +384,17 @@ local function prompt_buffer(lines)
 end
 
 ---Register a resolver reporting `result`, and return an `open` opts table with a temp log.
+---`format` is stubbed to the identity so the pane cases never spawn the real formatter — what
+---they assert is the pane, not `rumdl`'s output.
 local function with_resolver(result)
   require("agentcomplete.context").register(stub("claude-code", result))
-  return { headless = false, log_path = tmpdir() .. "/context.log" }
+  return {
+    headless = false,
+    log_path = tmpdir() .. "/context.log",
+    format = function(text)
+      return text
+    end,
+  }
 end
 
 local function ok_result(text)
@@ -441,14 +507,90 @@ T["open"]["logs a resolver failure instead of opening a pane"] = function()
   expect.equality(context._state[buf].err, "no transcript")
 end
 
-T["open"]["logs a session no resolver claims"] = function()
+-- A tool whose resolver has not shipped yet is normal operation, not a failure, and the log
+-- lives in the user's own project — so this path must leave the filesystem alone.
+T["open"]["records a tool no resolver claims without writing a log"] = function()
   local context = require "agentcomplete.context"
   local buf = prompt_buffer()
   local opts = { headless = false, log_path = tmpdir() .. "/context.log" }
   context.open(buf, session_for "some-other-agent", { enabled = true, min_width = 160 }, opts)
   expect.equality(#vim.api.nvim_list_wins(), 1)
-  expect.equality(#vim.fn.readfile(opts.log_path), 1)
+  expect.equality(vim.fn.filereadable(opts.log_path), 0)
   expect.equality(type(context._state[buf].err), "string")
+end
+
+T["open"]["logs a resolver that raised, naming it"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  context.register {
+    name = "explodes",
+    resolve = function()
+      error "transcript decode blew up"
+    end,
+  }
+  local opts = { headless = false, log_path = tmpdir() .. "/context.log" }
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  expect.equality(vim.fn.readfile(opts.log_path)[1]:find("transcript decode blew up", 1, true) ~= nil, true)
+end
+
+T["open"]["opens one pane however many times it is called"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = with_resolver(ok_result "hello")
+  local config = { enabled = true, min_width = 160 }
+  context.open(buf, session_for "claude-code", config, opts)
+  context.open(buf, session_for "claude-code", config, opts)
+  expect.equality(#vim.api.nvim_list_wins(), 2)
+end
+
+-- `:edit!` fires BufUnload but not BufDelete, and the buffer survives it — so must the pane.
+T["open"]["keeps the pane across a reload of the prompt buffer"] = function()
+  local context = require "agentcomplete.context"
+  local path = tmpdir() .. "/claude-prompt-reload.md"
+  vim.fn.writefile({ "draft" }, path)
+  vim.cmd("silent edit " .. vim.fn.fnameescape(path))
+  local buf = vim.api.nvim_get_current_buf()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local win = assert(pane_win(prompt_win))
+  vim.cmd "silent edit!"
+  vim.wait(100)
+  expect.equality(vim.api.nvim_win_is_valid(win), true)
+end
+
+T["open"]["releases per-buffer state when a failed buffer goes away"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = with_resolver { ok = false, resolver = "claude-code", err = "no transcript" }
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  expect.equality(context._state[buf].err, "no transcript")
+  vim.api.nvim_buf_delete(buf, { force = true })
+  vim.wait(500, function()
+    return context._state[buf] == nil
+  end)
+  expect.equality(context._state[buf], nil)
+end
+
+-- The registry, the real resolver, and the pane are otherwise only tested apart; this is the
+-- one case that drives all three together.
+T["open"]["shows a message resolved by the real Claude Code resolver"] = function()
+  local context = require "agentcomplete.context"
+  context.register(require "agentcomplete.context.claude_code")
+  local fx = fixture { assistant { text_block "resolved for real" } }
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, {
+    headless = false,
+    log_path = tmpdir() .. "/context.log",
+    format = function(text)
+      return text
+    end,
+    resolver = { sessions_root = fx.sessions_root, projects_root = fx.projects_root },
+  })
+  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win(prompt_win))), 0, -1, false)
+  expect.equality(lines[1]:find(SID, 1, true) ~= nil, true)
+  expect.equality(vim.tbl_contains(lines, "resolved for real"), true)
+  expect.equality(context._state[buf].transcript, fx.transcript)
 end
 
 return T

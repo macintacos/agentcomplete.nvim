@@ -410,8 +410,9 @@ session file, no transcript, no assistant turn in it — no pane opens, nothing
 is raised, and one line explaining why is appended to
 `.tmp/agentcomplete-context.log` under the editor's working directory. That
 path sits inside your project deliberately: the agent whose message failed to
-load is the one that has to read it. |agentcomplete-diagnostics| reports the
-same state for the current buffer.
+load is the one that has to read it. A tool with no resolver yet is not a
+failure and writes no line at all. |agentcomplete-diagnostics| reports the
+state either way, for the current buffer.
 
 For Claude Code the message comes from the session transcript under
 `~/.claude/projects`, found by walking up from Neovim's parent process to the

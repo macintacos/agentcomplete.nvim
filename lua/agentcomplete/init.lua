@@ -46,43 +46,37 @@ local function fallback_session()
   }
 end
 
----Register built-in detectors (idempotent — safe across repeated setup calls).
----Order is significant (first match wins); Claude Code before OpenCode. The two are
----mutually exclusive in practice, so the order is harmless either way.
-local function ensure_detectors()
-  local builtins = {
-    require "agentcomplete.detect.claude_code",
-    require "agentcomplete.detect.opencode",
-  }
-  for _, d in ipairs(builtins) do
+---Add each of `builtins` to a registry it is not already in, by name. Idempotent, so repeated
+---setup calls are safe.
+---@param registered { name: string }[]
+---@param register fun(item: any)
+---@param builtins { name: string }[]
+local function ensure_registered(registered, register, builtins)
+  for _, item in ipairs(builtins) do
     local present = false
-    for _, existing in ipairs(detect.detectors) do
-      if existing.name == d.name then
+    for _, existing in ipairs(registered) do
+      if existing.name == item.name then
         present = true
         break
       end
     end
     if not present then
-      detect.register(d)
+      register(item)
     end
   end
 end
 
----Register built-in last-message resolvers (idempotent — safe across repeated setup calls).
-local function ensure_resolvers()
-  local builtins = { require "agentcomplete.context.claude_code" }
-  for _, r in ipairs(builtins) do
-    local present = false
-    for _, existing in ipairs(context.resolvers) do
-      if existing.name == r.name then
-        present = true
-        break
-      end
-    end
-    if not present then
-      context.register(r)
-    end
-  end
+---Register the built-in detectors and last-message resolvers.
+local function ensure_builtins()
+  -- Detector order is significant (first match wins); Claude Code before OpenCode. The two are
+  -- mutually exclusive in practice, so the order is harmless either way.
+  ensure_registered(detect.detectors, detect.register, {
+    require "agentcomplete.detect.claude_code",
+    require "agentcomplete.detect.opencode",
+  })
+  ensure_registered(context.resolvers, context.register, {
+    require "agentcomplete.context.claude_code",
+  })
 end
 
 ---Attach completion and token highlighting to a buffer if a session is detected (or forced).
@@ -108,12 +102,7 @@ function M.attach(bufnr, opts)
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
     highlight.attach(buf, session)
-    -- Once per buffer: attach runs again on later BufReadPost, and resolution reads the whole
-    -- transcript. The pane is already open by then anyway.
-    if not vim.b[buf].agentcomplete_context then
-      vim.b[buf].agentcomplete_context = true
-      context.open(buf, session, M.config.context)
-    end
+    context.open(buf, session, M.config.context)
   end
   return session ~= nil
 end
@@ -128,9 +117,6 @@ function M.detach(bufnr)
   backends.detach(buf)
   highlight.detach(buf)
   context.close(buf)
-  if vim.api.nvim_buf_is_valid(buf) then
-    vim.b[buf].agentcomplete_context = nil
-  end
 end
 
 ---Set up agentcomplete.nvim.
@@ -138,8 +124,7 @@ end
 ---@return AgentComplete
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
-  ensure_detectors()
-  ensure_resolvers()
+  ensure_builtins()
   backends.install_suppression(M.config)
 
   vim.api.nvim_create_user_command("AgentCompleteAttach", function()
