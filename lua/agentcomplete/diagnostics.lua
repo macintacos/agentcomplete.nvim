@@ -117,6 +117,7 @@ end
 ---@field session { tool: string, cwd: string, session_id: string|nil, skill_dirs: string[], command_dirs: string[] }|nil
 ---@field discovery { skills: integer, cli_skills: integer, commands: integer, cli_commands: integer, extra_commands: integer, files: integer }|nil
 ---@field highlighting { attached: boolean, painted: integer, groups: { AgentCompleteSkill: string|nil, AgentCompleteFile: string|nil }, slash_set: integer|nil }
+---@field context AgentComplete.Context.State|nil
 ---@field blink AgentComplete.Diagnostics.Suppression
 ---@field env table<string, string|nil>
 
@@ -194,6 +195,19 @@ function M.render(report)
   add("- AgentCompleteSkill:       " .. val(groups.AgentCompleteSkill))
   add("- AgentCompleteFile:        " .. val(groups.AgentCompleteFile))
   add("- resolved / set size:      " .. (h.slash_set and tostring(h.slash_set) or "(no active session)"))
+  add ""
+
+  add "## Context"
+  local c = report.context
+  if c then
+    add("- resolver:                 " .. val(c.resolver))
+    add("- session id:               " .. val(c.session_id))
+    add("- transcript:               " .. val(c.transcript))
+    add("- message bytes:            " .. val(c.bytes))
+    add("- last error:               " .. (c.err or "(none)"))
+  else
+    add "- (no context resolved)"
+  end
   add ""
 
   add "## blink suppression"
@@ -289,6 +303,8 @@ function M.collect(opts)
     slash_set = session and vim.tbl_count(highlight.slash_names(session)) or nil,
   }
 
+  local context = require "agentcomplete.context"
+
   local ok, bcfg = pcall(require, "blink.cmp.config")
   bcfg = ok and bcfg or nil
   local registered = bcfg and bcfg.sources and bcfg.sources.providers or nil
@@ -329,6 +345,7 @@ function M.collect(opts)
     } or nil,
     discovery = discovery,
     highlighting = highlighting,
+    context = context._state[buf],
     blink = suppression,
     env = {
       AGENTCOMPLETE_CWD = vim.env.AGENTCOMPLETE_CWD,
