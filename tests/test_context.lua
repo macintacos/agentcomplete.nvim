@@ -511,6 +511,44 @@ T["open"]["hands the cursor to the message when the split is entered"] = functio
   expect.equality(vim.api.nvim_get_current_win(), pane_win())
 end
 
+-- Every window move that leaves the float lands on the split first -- `<C-w>h`, `<C-w>p` and
+-- `<C-w>W` all do. Passing the cursor on to the message there, rather than back out, is what
+-- makes the pane impossible to leave.
+T["open"]["lets the cursor leave the message through the split"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  vim.api.nvim_set_current_win(assert(pane_win()))
+  vim.api.nvim_set_current_win(assert(spacer_win(prompt_win)))
+  vim.wait(100)
+  expect.equality(vim.api.nvim_get_current_win(), prompt_win)
+end
+
+-- The reply being composed is the work; the message beside it is reference for that work.
+T["open"]["leaves the prompt the greater share of the width"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 80)
+end
+
+-- The terminal is resized mid-session, and an orientation chosen once at open time leaves the
+-- pane wedged beside a prompt with no room for either.
+T["open"]["moves the pane below the prompt when the terminal narrows"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(vim.fn.winlayout()[1], "row")
+  vim.o.columns = 80
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  vim.wait(100)
+  expect.equality(vim.fn.winlayout()[1], "col")
+end
+
 -- Quitting the prompt is how the agent CLI is answered, so both of the pane's windows have to
 -- be gone *before* that quit resolves: either one still standing is a window Neovim keeps the
 -- editor open for, leaving the reader in a message they cannot reply to instead of back at the

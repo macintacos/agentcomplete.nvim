@@ -151,6 +151,10 @@ local PANE_OPTIONS = {
   winhighlight = "Normal:NormalFloat",
 }
 
+---Share of the terminal's width the pane takes when it sits beside the prompt. The reply being
+---composed is the work; the message beside it is reference for that work.
+local PANE_WIDTH = 0.4
+
 ---Reserve the room the float fills. A split cannot carry a border and a float alone would
 ---cover the prompt rather than sit beside it, so the pane is both: this split holds the space
 ---and takes the resize, and the float draws inside it.
@@ -202,24 +206,59 @@ local function chrome(resolver)
   }
 end
 
----Keep the pane in step with the windows around it: track the split it is drawn over, hand the
----cursor on when that split is entered, mark the message as focused, and take the whole pane
----down with the prompt.
+---Keep the pane in step with the windows around it: re-place it as the terminal is resized,
+---pass the cursor through the split it is drawn over, mark the message as focused, and take the
+---whole pane down with the prompt.
 ---@param buf integer Prompt buffer.
 ---@param host integer Window showing the prompt.
 ---@param win integer Float holding the message.
 ---@param spacer integer Split the float is drawn over.
-local function follow(buf, host, win, spacer)
+---@param min_width integer Terminal width at or above which the pane sits beside the prompt.
+local function follow(buf, host, win, spacer, min_width)
   local grp = M._augroups[buf] or vim.api.nvim_create_augroup("AgentCompleteContext_" .. buf, { clear = false })
+  local beside = vim.o.columns >= min_width
+  local placing = false
+
   local function valid()
     return vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_is_valid(spacer)
   end
 
-  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
+  ---Re-place the pane for the terminal as it is now: beside the prompt while there is width
+  ---for both, beneath it once there is not. Guarded against its own resizes, which raise the
+  ---very events that call it.
+  local function place()
+    if placing or not valid() then
+      return
+    end
+    placing = true
+    local wanted = vim.o.columns >= min_width
+    if wanted ~= beside then
+      beside = wanted
+      vim.api.nvim_win_set_config(spacer, { split = beside and "right" or "below", win = host })
+    end
+    if beside then
+      vim.api.nvim_win_set_width(spacer, math.floor(vim.o.columns * PANE_WIDTH))
+    end
+    vim.api.nvim_win_set_config(win, geometry(spacer))
+    placing = false
+  end
+
+  place()
+  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, { group = grp, callback = place })
+
+  vim.api.nvim_create_autocmd("WinEnter", {
     group = grp,
     callback = function()
-      if valid() then
-        vim.api.nvim_win_set_config(win, geometry(spacer))
+      if not valid() or vim.api.nvim_get_current_win() ~= spacer then
+        return
+      end
+      -- The split only reserves the room, so the cursor is passed through it rather than left
+      -- on the empty buffer where the message appears to be: on into the message when arriving
+      -- from outside, and back out to the prompt when arriving from the message — which is
+      -- every window move that leaves the float, since they all land here first.
+      local onward = vim.fn.win_getid(vim.fn.winnr "#") == win and host or win
+      if vim.api.nvim_win_is_valid(onward) then
+        vim.api.nvim_set_current_win(onward)
       end
     end,
   })
@@ -227,15 +266,9 @@ local function follow(buf, host, win, spacer)
   vim.api.nvim_create_autocmd({ "WinEnter", "WinLeave" }, {
     group = grp,
     callback = function()
-      if not valid() then
-        return
+      if valid() then
+        vim.wo[win].cursorline = vim.api.nvim_get_current_win() == win
       end
-      -- The split only holds the room; landing in it means landing on an empty buffer exactly
-      -- where the message appears to be.
-      if vim.api.nvim_get_current_win() == spacer then
-        vim.api.nvim_set_current_win(win)
-      end
-      vim.wo[win].cursorline = vim.api.nvim_get_current_win() == win
     end,
   })
 
@@ -287,7 +320,7 @@ function M.pane(buf, text, min_width, resolver)
   end
 
   M._panes[buf] = { win = win, spacer = spacer }
-  follow(buf, host, win, spacer)
+  follow(buf, host, win, spacer, min_width)
   return win
 end
 
