@@ -17,6 +17,7 @@ local pane = require "agentcomplete.context.pane"
 ---@class AgentComplete.Context.Result
 ---@field ok boolean Whether the message was resolved.
 ---@field resolver string Name of the resolver that reported.
+---@field rung? string Which step of a resolver's chain produced the session, when it has one.
 ---@field text? string The agent's last message, when `ok`.
 ---@field session_id? string Session the message was read from, when `ok`.
 ---@field transcript? string File the message was read from, when `ok`.
@@ -66,6 +67,7 @@ end
 
 ---@class AgentComplete.Context.State
 ---@field resolver? string Resolver that reported, when one claimed the session.
+---@field rung? string Which step of the resolver's chain produced the session, when it has one.
 ---@field session_id? string
 ---@field transcript? string
 ---@field bytes? integer Size of the resolved message.
@@ -156,15 +158,21 @@ end
 ---@param format fun(text: string): string
 local function show(buf, result, config, log_path, format)
   if not result.ok then
-    M._state[buf] = { resolver = result.resolver, err = result.err }
+    M._state[buf] = { resolver = result.resolver, rung = result.rung, err = result.err }
     M.log(log_path, result.err or "resolution failed")
     return
+  end
+  -- A resolver that had to choose between candidates says so here as well as in the border: the
+  -- pane looks the same whichever conversation it found, and this is the record of which.
+  if result.rung then
+    M.log(log_path, result.resolver .. " resolved via " .. result.rung)
   end
   local win = pane.open(buf, {
     group = assert(M._augroups[buf], "pane built for an unattached buffer"),
     text = format(result.text or ""),
     min_width = config.min_width,
     resolver = result.resolver,
+    rung = result.rung,
     on_close = function()
       M.close(buf)
     end,
@@ -178,6 +186,7 @@ local function show(buf, result, config, log_path, format)
   -- shape that tells a diagnostics reader the pane is on screen.
   M._state[buf] = {
     resolver = result.resolver,
+    rung = result.rung,
     session_id = result.session_id,
     transcript = result.transcript,
     bytes = #(result.text or ""),
@@ -203,7 +212,14 @@ function M.open(buf, session, config, opts)
   if headless == nil then
     headless = #vim.api.nvim_list_uis() == 0
   end
-  if not config.enabled or headless or M._augroups[buf] or has_editor_context(buf) then
+  -- `DELIMITER` is Claude Code's own sentence; gating the check on the tool is this module's
+  -- one piece of per-tool knowledge, keeping a coincidental match elsewhere from reading as it.
+  if
+    not config.enabled
+    or headless
+    or M._augroups[buf]
+    or (session.tool == "claude-code" and has_editor_context(buf))
+  then
     return
   end
 

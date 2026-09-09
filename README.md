@@ -13,6 +13,8 @@ built-in completion.
 ## Requirements
 
 - Neovim 0.10+ (0.12+ for the `vim.pack` install below)
+- `sqlite3` on `$PATH` — only for OpenCode's last-message pane (preinstalled on macOS; a
+  separate package on most Linux distributions)
 - Optional: [blink.cmp](https://github.com/Saghen/blink.cmp) v1 — without it, the built-in
   completion backend is used
 
@@ -35,8 +37,8 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```
 
 Or call `require("agentcomplete").setup({})` with your plugin manager of choice. That is
-the only setup required — there is no companion plugin to install on the Claude Code or
-OpenCode side. If detection ever misses (e.g. an unusual launch), force it on with
+the only setup required on the Claude Code side. OpenCode users have one optional extra
+step — see below. If detection ever misses (e.g. an unusual launch), force it on with
 `:AgentCompleteAttach`.
 
 ## Setup gotchas
@@ -77,6 +79,20 @@ agentcomplete's `setup()` in the right order:
 
 Once registered, the source self-gates — it stays dormant everywhere except a detected
 prompt buffer, so listing it above is harmless.
+
+### Using OpenCode? Install the session pointer plugin (optional)
+
+agentcomplete shows the agent's last message in a pane beside your prompt. OpenCode hands
+its editor no session id, so agentcomplete has to guess which conversation the prompt
+belongs to. Run this once to remove the guess:
+
+```vim
+:AgentCompleteInstallOpenCodePlugin
+```
+
+It symlinks a small plugin into OpenCode's config directory; restart OpenCode to pick it
+up. Skipping it costs you only certainty — the pane still opens, labelled `guessed`. See
+`:help agentcomplete-context`.
 
 ### Prefer zero config?
 

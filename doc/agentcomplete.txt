@@ -49,10 +49,11 @@ Two completion backends are supported, chosen by the 'backend' option:
 	blink.cmp	preferred, auto-detected when installed
 	native		Neovim's built-in insert-mode completion
 
-agentcomplete is the only setup required — there is no companion Claude Code
-or OpenCode plugin to install on the agent side. The plugin reads the same
-skill and command directories the agent itself reads, so what it completes is
-what the agent can actually run.
+agentcomplete is the only setup completion requires — nothing is installed on
+the agent side for it. (|agentcomplete-context| offers OpenCode users one
+optional extra; see |:AgentCompleteInstallOpenCodePlugin|.) The plugin reads
+the same skill and command directories the agent itself reads, so what it
+completes is what the agent can actually run.
 
 ==============================================================================
 2. How detection works
@@ -130,7 +131,7 @@ With Neovim's |vim.pack|: >lua
 
                                                          *agentcomplete-setup*
 `require("agentcomplete").setup({opts})` merges {opts} over the defaults,
-registers the |:AgentCompleteAttach| and |:AgentCompleteDetach| commands, and
+registers the commands in |agentcomplete-commands|, and
 when 'enabled' is true, installs an autocommand that attaches to detected
 prompt buffers on `VimEnter` and `BufReadPost`. Calling it with no arguments
 (`setup({})`) uses the defaults below.
@@ -316,6 +317,22 @@ the editor's working directory.
 			buffer, removing the backend, the token highlights,
 			and any buffer-local state they installed.
 
+                                         *:AgentCompleteInstallOpenCodePlugin*
+:AgentCompleteInstallOpenCodePlugin
+			Symlink agentcomplete's session-pointer plugin into
+			OpenCode's config home, at
+			`<config>/plugin/agentcomplete.ts`. The plugin records
+			which OpenCode session each process is running, which
+			is what lets |agentcomplete-context| show the right
+			conversation instead of guessing at it.
+
+			A symlink rather than a copy, so the installed plugin
+			follows the checkout when agentcomplete updates. It
+			never runs from `setup()` — writing into another
+			tool's config directory unasked is a surprise — and it
+			refuses rather than overwrites when a file is already
+			at that path.
+
 ==============================================================================
 10. Completion sources
                                                        *agentcomplete-sources*
@@ -421,8 +438,10 @@ formatting never costs you the pane.
 
 Claude Code has an `externalEditorContext` setting of its own that renders
 recent conversation into the prompt buffer, above a "Write your reply below
-this line" delimiter. agentcomplete opens no pane in a buffer holding that
-delimiter, so the two never show you the same message twice.
+this line" delimiter. agentcomplete opens no pane in a Claude Code buffer
+holding that delimiter, so the two never show you the same message twice. The
+check is Claude-Code-only: an OpenCode prompt that happens to quote the same
+sentence still gets its pane.
 
 Resolution fails soft throughout. When the last message cannot be found — no
 session file, no transcript, no assistant turn in it — no pane opens, nothing
@@ -437,6 +456,31 @@ For Claude Code the message comes from the session transcript under
 `~/.claude/projects`, found by walking up from Neovim's parent process to the
 `~/.claude/sessions/<pid>.json` that Claude Code wrote — so the pane works
 through an $EDITOR wrapper script as well as a direct launch.
+
+For OpenCode the message is read read-only from OpenCode's own SQLite
+database at `~/.local/share/opencode/opencode.db` ($XDG_DATA_HOME is
+honored), using `sqlite3` — which must be on $PATH for the pane. Which
+session to read is the hard part: OpenCode's external editor inherits
+$OPENCODE_PID but no session id, and OpenCode records no mapping between the
+two. So the session is resolved down three rungs, and the pane's border names
+the one that answered — a guess is never shown as a certainty:
+
+	`$OPENCODE_SESSION_ID`
+			The session id straight from the environment. Nothing
+			sets this today; it is the cheapest answer if OpenCode
+			ever does.
+	`pointer file`	A record written by agentcomplete's OpenCode plugin,
+			naming the session running in this process tree. See
+			|:AgentCompleteInstallOpenCodePlugin|.
+	`guessed`	The session in this directory used most recently since
+			the OpenCode process started — so a session resumed
+			with `--continue` resolves as readily as a fresh one.
+			Correct in the ordinary case of one OpenCode per
+			project, and wrong when two share a directory — which
+			is why it says so in the border.
+
+A `guessed` header means the pane may be showing another conversation. Install
+the plugin to replace the guess with a certainty.
 
 ==============================================================================
 13. Diagnostics
@@ -462,12 +506,15 @@ directory and prints the report to |:messages|. The report contains:
 	Highlighting	whether highlighting attached, how many tokens are
 			painted, what each group resolves to, and the size
 			of the resolved / set
-	Context		which resolver ran, the session and transcript it read,
-			the size of the message, and why no pane opened
+	Context		which resolver ran, which rung of its chain answered,
+			the session and transcript it read, the size of the
+			message, where session pointers are looked for, and
+			why no pane opened
 	blink		the only-source suppression diagnosis, ending in a
 			single "Likely cause" line
 	Environment	the raw detection signals (`OPENCODE`, `AGENT`,
-			`CLAUDE_CODE_SESSION_ID`, `$AGENTCOMPLETE_CWD`, …)
+			`CLAUDE_CODE_SESSION_ID`, `$AGENTCOMPLETE_CWD`, …) and
+			whether the OpenCode plugin is installed
 
 Contributors running the plugin from a checkout can produce the same report
 headlessly with `mise run diag`; see CONTRIBUTING.md.

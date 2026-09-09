@@ -213,15 +213,20 @@ function M.claude_dirs(cwd)
   return dedup(skill_dirs), dedup(command_dirs), namespaces
 end
 
+---OpenCode's global config home: `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`.
+---@return string
+function M.opencode_config_home()
+  local xdg = vim.env.XDG_CONFIG_HOME
+  return (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
+end
+
 ---OpenCode's config base directories for a session rooted at `cwd`: the global config
----home (`$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`), an optional extra base from
----`$OPENCODE_CONFIG_DIR`, and the project-local `<cwd>/.opencode`.
+---home, an optional extra base from `$OPENCODE_CONFIG_DIR`, and the project-local
+---`<cwd>/.opencode`.
 ---@param cwd string
 ---@return string[]
 local function opencode_config_dirs(cwd)
-  local xdg = vim.env.XDG_CONFIG_HOME
-  local global = (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
-  local bases = { global }
+  local bases = { M.opencode_config_home() }
   local extra = vim.env.OPENCODE_CONFIG_DIR
   if extra and extra ~= "" then
     table.insert(bases, extra)
@@ -328,9 +333,7 @@ local function opencode_config_files(cwd)
   if explicit and explicit ~= "" then
     files[#files + 1] = explicit
   end
-  local xdg = vim.env.XDG_CONFIG_HOME
-  local home = (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
-  for _, base in ipairs { home, cwd } do
+  for _, base in ipairs { M.opencode_config_home(), cwd } do
     files[#files + 1] = base .. "/opencode.json"
     files[#files + 1] = base .. "/opencode.jsonc"
   end

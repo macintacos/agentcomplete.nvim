@@ -79,21 +79,38 @@ than the buffer name.
   painted count is what separates a token that never resolved from one painted in a group
   the colorscheme renders invisibly.
 - `## Context` — what the last-message pane resolved for this buffer: the `resolver` that
-  claimed the session, the `session id` and `transcript` it read, the message's size in
-  `bytes`, and the `last error`. `(no context resolved)` means resolution never ran for
-  this buffer — the feature is off, there is no UI to split, Claude Code's own
-  `externalEditorContext` already rendered into the prompt buffer, or nothing attached. A
-  populated `last error` beside `(unset)` fields is a resolution that either failed or
-  never started. Only the first kind is also in `.tmp/agentcomplete-context.log`:
-  `no resolver for tool <x>` is normal operation for a tool whose resolver has not shipped
-  yet, so it is recorded here and nowhere else. A `mise run diag` pass always reports
-  `(no context resolved)`: headless runs open no pane by design.
+  claimed the session, the `rung` of its chain that answered, the `session id` and
+  `transcript` it read, the message's size in `bytes`, the `pointer dir` the OpenCode
+  resolver looks in, what the `opencode plugin` install path holds, and the `last error`.
+  A failed resolution still reports its rung, so the row says which resolution was being
+  attempted even when no pane opened.
+
+  The `rung` is what to read when an OpenCode pane shows the *wrong* conversation.
+  `pointer file` and `$OPENCODE_SESSION_ID` are certainties; `guessed` means the resolver
+  fell back to the session most recently used in the cwd, which is wrong whenever two
+  OpenCode processes share a directory. A `guessed` rung alongside
+  `opencode plugin: (unset)` is the ordinary cause, and
+  `:AgentCompleteInstallOpenCodePlugin` is the fix; a `guessed` rung *with* the plugin
+  installed means no pointer record matched this process tree, so ask whether OpenCode is
+  running as a shared daemon. `opencode plugin` reports the checkout a symlink resolves to
+  rather than a yes/no, because a link left behind by a moved checkout reads as installed
+  and resolves nothing.
+
+  `(no context resolved)` means resolution never ran for this buffer — the feature is off,
+  there is no UI to split, Claude Code's own `externalEditorContext` already rendered into
+  a Claude Code prompt buffer, or nothing attached. A populated `last error` beside
+  `(unset)` fields is a resolution that either failed or never started. Only the first
+  kind is also in `.tmp/agentcomplete-context.log`: `no resolver for tool <x>` is normal
+  operation for a tool whose resolver has not shipped yet, so it is recorded here and
+  nowhere else. A `mise run diag` pass always reports `(no context resolved)`: headless
+  runs open no pane by design.
 - `## blink suppression` — the only-source suppression diagnosis, ending in a single
   "Likely cause" line that walks the mechanism in the order failures actually occur, so it
   points straight at the fix.
-- `## Environment` — the raw detection signals (`OPENCODE`, `OPENCODE_PID`, `AGENT`,
-  `CLAUDE_CODE_SESSION_ID`, `$AGENTCOMPLETE_CWD`, `$OPENCODE_CONFIG_DIR`,
-  `$XDG_CONFIG_HOME`, …).
+- `## Environment` — the raw detection signals (`OPENCODE`, `OPENCODE_PID`,
+  `OPENCODE_SESSION_ID`, `AGENT`, `CLAUDE_CODE_SESSION_ID`, `$AGENTCOMPLETE_CWD`,
+  `$OPENCODE_CONFIG_DIR`, and the XDG bases the OpenCode paths hang off —
+  `$XDG_CONFIG_HOME`, `$XDG_STATE_HOME`, `$XDG_DATA_HOME`).
 
 ## Running it
 

@@ -164,6 +164,30 @@ T["render"]["names the resolver, session, transcript, and size of the shown mess
   expect.equality(has(out, "1234"), true)
 end
 
+-- A pane showing the wrong conversation looks identical to one showing the right conversation,
+-- so the rung that chose the session is what a reader has to be able to see.
+T["render"]["names the rung that resolved the session and where pointers are looked for"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.context = { resolver = "opencode", rung = "guessed", session_id = "ses_x", bytes = 12 }
+  report.pointer_dir = "/state/opencode/agentcomplete"
+  local out = diag.render(report)
+  expect.equality(has(out, "guessed"), true)
+  expect.equality(has(out, "/state/opencode/agentcomplete"), true)
+end
+
+T["render"]["reports the OpenCode session env and what the plugin path holds"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.env.OPENCODE_SESSION_ID = "ses_env"
+  report.env.XDG_STATE_HOME = "/state"
+  report.opencode_plugin = "/checkout/opencode/agentcomplete.ts"
+  local out = diag.render(report)
+  expect.equality(has(out, "OPENCODE_SESSION_ID"), true)
+  expect.equality(has(out, "XDG_STATE_HOME"), true)
+  expect.equality(has(out, "/checkout/opencode/agentcomplete.ts"), true)
+end
+
 T["render"]["surfaces the reason no pane opened"] = function()
   local diag = require "agentcomplete.diagnostics"
   local report = full_report()

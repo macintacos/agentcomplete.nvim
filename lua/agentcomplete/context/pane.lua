@@ -74,12 +74,18 @@ end
 ---The frame: who is speaking, and that you cannot answer here. Two-tone so the agent's name
 ---reads first and the labels recede into the border.
 ---@param resolver string
+---@param rung string|nil
 ---@return vim.api.keyset.win_config
-local function chrome(resolver)
+local function chrome(resolver, rung)
+  local title = { { "─ ", "FloatBorder" }, { resolver, "Title" } }
+  if rung then
+    title[#title + 1] = { " · " .. rung, "Comment" }
+  end
+  title[#title + 1] = { " · last message ", "Comment" }
   return {
     style = "minimal",
     border = "rounded",
-    title = { { "─ ", "FloatBorder" }, { resolver, "Title" }, { " · last message ", "Comment" } },
+    title = title,
     title_pos = "left",
     footer = { { "─ ", "FloatBorder" }, { "read-only", "Comment" }, { " ─", "FloatBorder" } },
     footer_pos = "right",
@@ -169,6 +175,7 @@ end
 ---@field text string Message to show.
 ---@field min_width integer Terminal width at or above which the pane sits beside the prompt.
 ---@field resolver string Name shown in the border.
+---@field rung? string Which step of the resolver's chain produced the session, shown beside its name.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
 ---Build the pane beside `buf`. Vertical at or above `min_width`, horizontal below it.
@@ -184,7 +191,8 @@ function M.open(buf, opts)
 
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  local win = vim.api.nvim_open_win(pane_buf, false, vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver)))
+  local win_config = vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver, opts.rung))
+  local win = vim.api.nvim_open_win(pane_buf, false, win_config)
 
   -- Contents and filetype after the window, not before: window-local options are set against
   -- whichever window is current, so a filetype set while the pane has none sends every
