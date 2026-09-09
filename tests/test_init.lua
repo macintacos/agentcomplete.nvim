@@ -205,6 +205,14 @@ T["setup merges a context override over the defaults"] = function()
   expect.equality(agentcomplete.config.context.min_width, 160) -- sibling default preserved
 end
 
+-- `rumdl_config` has no `defaults` entry — its default is "unset" — so the merge passing a
+-- user value through is the whole mechanism, and the only option here relying on it.
+T["setup carries a context.rumdl_config with no default behind it"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { context = { rumdl_config = "/p.toml" } }
+  expect.equality(agentcomplete.config.context.rumdl_config, "/p.toml")
+end
+
 T["setup preserves the opencode.show_all_builtin_commands default"] = function()
   local agentcomplete = require "agentcomplete"
   agentcomplete.setup {}
