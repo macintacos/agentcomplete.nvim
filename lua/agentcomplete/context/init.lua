@@ -85,9 +85,8 @@ M._augroups = {}
 
 ---Claude Code's own `externalEditorContext` renders the conversation into the prompt buffer
 ---above this line. Matched on the sentence rather than the full box-drawn delimiter, so a
----change to its padding cannot silently show the same message twice. This and the tool check
----guarding it are the registry's one piece of per-tool knowledge — cheaper than a `skip` hook
----on the resolver contract that only Claude Code would ever implement.
+---change to its padding cannot silently show the same message twice. With the tool check
+---guarding it, the registry's one piece of per-tool knowledge.
 local DELIMITER = "Write your reply below this line"
 
 ---How long `rumdl` gets before the raw message is shown instead.
@@ -160,9 +159,14 @@ end
 ---@param format fun(text: string): string
 local function show(buf, result, config, log_path, format)
   if not result.ok then
-    M._state[buf] = { resolver = result.resolver, err = result.err }
+    M._state[buf] = { resolver = result.resolver, rung = result.rung, err = result.err }
     M.log(log_path, result.err or "resolution failed")
     return
+  end
+  -- A resolver that had to choose between candidates says so here as well as in the border: the
+  -- pane looks the same whichever conversation it found, and this is the record of which.
+  if result.rung then
+    M.log(log_path, result.resolver .. " resolved via " .. result.rung)
   end
   local win = pane.open(buf, {
     group = assert(M._augroups[buf], "pane built for an unattached buffer"),

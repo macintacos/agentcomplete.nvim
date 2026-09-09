@@ -1,7 +1,7 @@
 // OpenCode hands its external editor a pid but no session id, and persists no
 // pid→session mapping of its own — hence this pointer file.
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Plugin } from "@opencode-ai/plugin";
@@ -13,7 +13,7 @@ const pointer = join(stateHome, "opencode", "agentcomplete", `${process.pid}.jso
 // varies, so record every pid the reader could plausibly hold.
 const pids = [process.pid, process.ppid, Number(process.env.OPENCODE_PID)].filter(Number.isFinite);
 
-export const agentcomplete: Plugin = async ({ directory, worktree }) => ({
+export const agentcomplete: Plugin = async ({ worktree }) => ({
   event: async ({ event }) => {
     if (event.type !== "session.created" && event.type !== "session.updated") return;
     const info = event.properties.info;
@@ -21,16 +21,32 @@ export const agentcomplete: Plugin = async ({ directory, worktree }) => ({
 
     try {
       await mkdir(dirname(pointer), { recursive: true });
+      // Written then renamed: `session.updated` fires throughout a conversation, so a reader
+      // landing inside a plain truncate-and-write would see half a record often enough to matter.
+      const staging = `${pointer}.tmp`;
       await writeFile(
-        pointer,
-        JSON.stringify({ pids, sessionID: info.id, directory, worktree, ts: Date.now() }),
+        staging,
+        // `info.directory`, not the plugin's own: one server can hold sessions in several
+        // directories, and the reader matches on this to know the record is for its project.
+        JSON.stringify({
+          pids,
+          sessionID: info.id,
+          directory: info.directory,
+          worktree,
+          ts: Date.now(),
+        }),
       );
+      await rename(staging, pointer);
     } catch {
       // A pointer that cannot be written must not take the session down with it.
     }
   },
 
   dispose: async () => {
-    await rm(pointer, { force: true }).catch(() => {});
+    try {
+      await rm(pointer, { force: true });
+    } catch {
+      // As above: a stale pointer is recoverable, a throwing teardown is not.
+    }
   },
 });

@@ -81,16 +81,20 @@ than the buffer name.
 - `## Context` — what the last-message pane resolved for this buffer: the `resolver` that
   claimed the session, the `rung` of its chain that answered, the `session id` and
   `transcript` it read, the message's size in `bytes`, the `pointer dir` the OpenCode
-  resolver looks in, and the `last error`.
+  resolver looks in, what the `opencode plugin` install path holds, and the `last error`.
+  A failed resolution still reports its rung, so the row says which resolution was being
+  attempted even when no pane opened.
 
   The `rung` is what to read when an OpenCode pane shows the *wrong* conversation.
   `pointer file` and `$OPENCODE_SESSION_ID` are certainties; `guessed` means the resolver
-  fell back to the newest session in the cwd, which is wrong whenever two OpenCode
-  processes share a directory. A `guessed` rung alongside
-  `opencode plugin: (not installed)` in `## Environment` is the ordinary cause, and
+  fell back to the session most recently used in the cwd, which is wrong whenever two
+  OpenCode processes share a directory. A `guessed` rung alongside
+  `opencode plugin: (unset)` is the ordinary cause, and
   `:AgentCompleteInstallOpenCodePlugin` is the fix; a `guessed` rung *with* the plugin
   installed means no pointer record matched this process tree, so ask whether OpenCode is
-  running as a shared daemon.
+  running as a shared daemon. `opencode plugin` reports the checkout a symlink resolves to
+  rather than a yes/no, because a link left behind by a moved checkout reads as installed
+  and resolves nothing.
 
   `(no context resolved)` means resolution never ran for this buffer — the feature is off,
   there is no UI to split, Claude Code's own `externalEditorContext` already rendered into
@@ -105,8 +109,8 @@ than the buffer name.
   points straight at the fix.
 - `## Environment` — the raw detection signals (`OPENCODE`, `OPENCODE_PID`,
   `OPENCODE_SESSION_ID`, `AGENT`, `CLAUDE_CODE_SESSION_ID`, `$AGENTCOMPLETE_CWD`,
-  `$OPENCODE_CONFIG_DIR`, `$XDG_CONFIG_HOME`, `$XDG_STATE_HOME`, …), and `opencode plugin`
-  — the installed session-pointer plugin, or `(not installed)`.
+  `$OPENCODE_CONFIG_DIR`, and the XDG bases the OpenCode paths hang off —
+  `$XDG_CONFIG_HOME`, `$XDG_STATE_HOME`, `$XDG_DATA_HOME`).
 
 ## Running it
 

@@ -10,6 +10,7 @@
 local M = { name = "claude-code" }
 
 local uv = vim.loop
+local proc = require "agentcomplete.context.proc"
 
 local MAX_PID_HOPS = 5
 
@@ -18,14 +19,6 @@ local MAX_PID_HOPS = 5
 ---it yields a message, reaches the start of the file, or hits the cap.
 local TAIL_START = 256 * 1024
 local TAIL_MAX = 4 * 1024 * 1024
-
----@param pid integer
----@param system fun(cmd: string[]): string
----@return integer|nil
-local function parent_pid(pid, system)
-  local ok, out = pcall(system, { "ps", "-o", "ppid=", "-p", tostring(pid) })
-  return ok and tonumber(vim.trim(out or "")) or nil
-end
 
 ---Climb from Neovim's parent to the first process Claude Code wrote a session file for.
 ---@param sessions_root string
@@ -41,20 +34,9 @@ local function session_file(sessions_root, system)
     if uv.fs_stat(path) then
       return path
     end
-    pid = parent_pid(pid, system)
+    pid = proc.parent_pid(pid, system)
   end
   return nil
-end
-
----@param path string
----@return table|nil
-local function read_json(path)
-  local read, lines = pcall(vim.fn.readfile, path)
-  if not read then
-    return nil
-  end
-  local decoded, value = pcall(vim.json.decode, table.concat(lines, "\n"))
-  return (decoded and type(value) == "table") and value or nil
 end
 
 ---The non-empty `text` blocks of one transcript entry, joined; nil when it carries none
@@ -153,7 +135,7 @@ function M.resolve(session, cb, opts)
   end
   -- `sessionId`, not the `session_id` that sits beside it in transcript entries: the two hold
   -- different values, and only `sessionId` names the session file and the transcript.
-  local session_id = (read_json(pointer_path) or {}).sessionId
+  local session_id = (proc.read_json(pointer_path) or {}).sessionId
   if type(session_id) ~= "string" then
     return fail(cb, "no sessionId in " .. pointer_path)
   end

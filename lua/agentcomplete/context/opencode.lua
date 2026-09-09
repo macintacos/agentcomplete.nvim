@@ -7,21 +7,18 @@
 ---tree, then a guess at the newest session in the cwd — and the rung that answered is reported
 ---alongside the message, because a guess shown as a certainty is worse than no pane.
 ---
----The state root, the database, the subprocesses and the clock are optional `opts` seams (the
----pattern `agentcomplete.opencode_cli` uses), so tests touch no real `$HOME`, `ps`, or database.
+---The roots, the subprocesses and the clock are optional `opts` seams (the pattern
+---`agentcomplete.opencode_cli` uses), so tests touch no real `$HOME`, `ps`, or database.
 local M = { name = "opencode" }
 
 local uv = vim.loop
+local proc = require "agentcomplete.context.proc"
 
 local MAX_PID_HOPS = 5
 
----@param pid integer
----@param system fun(cmd: string[]): string
----@return integer|nil
-local function parent_pid(pid, system)
-  local ok, out = pcall(system, { "ps", "-o", "ppid=", "-p", tostring(pid) })
-  return ok and tonumber(vim.trim(out or "")) or nil
-end
+---Bounds the read the way `opencode_cli` bounds its probes: a `sqlite3` that never exits would
+---otherwise leave the pane silently absent and nothing in the log.
+local SQLITE_TIMEOUT_MS = 5000
 
 ---`ps -o etime=` output — POSIX `[[dd-]hh:]mm:ss` — as seconds. macOS `ps` has no `etimes`
 ---keyword, and `lstart` is a locale-formatted date Lua has no `strptime` for.
@@ -44,27 +41,44 @@ function M.parse_etime(s)
   return seconds + (tonumber(days) or 0) * 86400
 end
 
+---@param record table
+---@param wanted table<integer, boolean>
+---@return boolean
+local function names_a_pid(record, wanted)
+  for _, pid in ipairs(type(record.pids) == "table" and record.pids or {}) do
+    if wanted[pid] then
+      return true
+    end
+  end
+  return false
+end
+
 ---The pointer record for this process tree: one naming a pid in `chain` and `cwd` as either
 ---its `directory` or its `worktree`, freshest `ts` first. The directory check is what stops a
----recycled pid matching a record from another project.
+---recycled pid matching a record from another project, and `since` — the TUI's start time,
+---which every record for it postdates — is what stops one a crash left behind, since `dispose`
+---unlinks only on a clean exit.
 ---@param records table[]
 ---@param chain integer[] Pids this Neovim's tree runs under.
 ---@param cwd string
+---@param since? integer Epoch ms before which a record cannot describe this process.
 ---@return table|nil
-function M.pick_pointer(records, chain, cwd)
+function M.pick_pointer(records, chain, cwd, since)
   local wanted = {}
   for _, pid in ipairs(chain) do
     wanted[pid] = true
   end
   local best
   for _, record in ipairs(records) do
-    if type(record.sessionID) == "string" and (record.directory == cwd or record.worktree == cwd) then
-      for _, pid in ipairs(type(record.pids) == "table" and record.pids or {}) do
-        if wanted[pid] and (not best or (record.ts or 0) > (best.ts or 0)) then
-          best = record
-          break
-        end
-      end
+    local ts = record.ts or 0
+    if
+      type(record.sessionID) == "string"
+      and (not since or ts >= since)
+      and (record.directory == cwd or record.worktree == cwd)
+      and names_a_pid(record, wanted)
+      and (not best or ts > (best.ts or 0))
+    then
+      best = record
     end
   end
   return best
@@ -129,15 +143,13 @@ function M.pointer_dir(state_root)
   return state .. "/opencode/agentcomplete"
 end
 
----@param path string
----@return table|nil
-local function read_json(path)
-  local read, lines = pcall(vim.fn.readfile, path)
-  if not read then
-    return nil
-  end
-  local decoded, value = pcall(vim.json.decode, table.concat(lines, "\n"))
-  return (decoded and type(value) == "table") and value or nil
+---Where OpenCode keeps its conversations.
+---@param data_root? string
+---@return string
+function M.db_path(data_root)
+  local xdg = vim.env.XDG_DATA_HOME
+  local data = data_root or ((xdg and xdg ~= "") and xdg or vim.fs.normalize "~/.local/share")
+  return data .. "/opencode/opencode.db"
 end
 
 ---@param dir string
@@ -145,7 +157,7 @@ end
 local function pointer_records(dir)
   local out = {}
   for _, path in ipairs(vim.fn.glob(dir .. "/*.json", true, true)) do
-    out[#out + 1] = read_json(path)
+    out[#out + 1] = proc.read_json(path)
   end
   return out
 end
@@ -153,70 +165,81 @@ end
 ---`$OPENCODE_PID` and Neovim's own ancestors: the pids a pointer for this session may name.
 ---Recording all of them is what makes it not matter whether the plugin ran in the TUI process,
 ---an instance-server child, or the shared daemon.
+---@param tui_pid integer|nil
 ---@param system fun(cmd: string[]): string
 ---@return integer[]
-local function pid_chain(system)
-  local chain = { tonumber(vim.env.OPENCODE_PID) }
+local function pid_chain(tui_pid, system)
+  local chain = { tui_pid }
   local pid = uv.os_getppid() ---@type integer|nil
   for _ = 1, MAX_PID_HOPS do
     if not pid then
       break
     end
     chain[#chain + 1] = pid
-    pid = parent_pid(pid, system)
+    pid = proc.parent_pid(pid, system)
   end
   return chain
 end
 
 ---When the TUI started, in epoch milliseconds, from its elapsed time.
+---@param tui_pid integer|nil
 ---@param system fun(cmd: string[]): string
 ---@param now fun(): integer
 ---@return integer|nil
-local function tui_start_ms(system, now)
-  local pid = tonumber(vim.env.OPENCODE_PID)
-  if not pid then
+local function tui_start_ms(tui_pid, system, now)
+  if not tui_pid then
     return nil
   end
-  local ok, out = pcall(system, { "ps", "-o", "etime=", "-p", tostring(pid) })
+  local ok, out = pcall(system, { "ps", "-o", "etime=", "-p", tostring(tui_pid) })
   local elapsed = ok and M.parse_etime(out or "")
   return elapsed and now() - elapsed * 1000 or nil
 end
 
 ---The SQL naming this prompt's session, and which rung produced it.
+---@param env { session_id: string|nil, tui_pid: integer|nil }
 ---@param cwd string
 ---@param opts AgentComplete.Context.OpenCode.Seams
 ---@return string|nil expr
 ---@return string rung
-local function session_expr(cwd, opts)
-  local exported = vim.env.OPENCODE_SESSION_ID
-  if exported and exported ~= "" then
-    return quote(exported), "$OPENCODE_SESSION_ID"
+local function session_expr(env, cwd, opts)
+  if env.session_id and env.session_id ~= "" then
+    return quote(env.session_id), "$OPENCODE_SESSION_ID"
   end
   local system = opts.system or vim.fn.system
-  local pointer = M.pick_pointer(pointer_records(M.pointer_dir(opts.state_root)), pid_chain(system), cwd)
+  local start_ms = tui_start_ms(env.tui_pid, system, opts.now or function()
+    return os.time() * 1000
+  end)
+
+  local records = pointer_records(M.pointer_dir(opts.state_root))
+  -- The pid climb forks `ps` up to `MAX_PID_HOPS` times at prompt-open, so it waits on there
+  -- being anything for it to match against — which there is not until the plugin is installed.
+  local pointer = #records > 0 and M.pick_pointer(records, pid_chain(env.tui_pid, system), cwd, start_ms)
   if pointer then
     return quote(pointer.sessionID), "pointer file"
   end
-  local start_ms = tui_start_ms(system, opts.now or function()
-    return os.time() * 1000
-  end)
+
   if not start_ms then
     return nil, "guessed"
   end
+  -- Ordered and floored on `time_updated`, not `time_created`: `opencode --continue` shows a
+  -- session far older than the process showing it, which a creation floor hides outright.
   local newest_root = (
     "select id from session where parent_id is null and directory = %s"
-    .. " and time_created >= %d order by time_created desc limit 1"
+    .. " and time_updated >= %d order by time_updated desc limit 1"
   ):format(quote(cwd), start_ms)
   return newest_root, "guessed"
 end
 
 ---Report a failure. The session is still claimed: the walk got far enough to know it is ours,
----and handing it to the next resolver would only produce a second, less relevant error.
+---and handing it to the next resolver would only produce a second, less relevant error. The
+---rung rides along so the diagnostics row says which resolution was being attempted — which is
+---most of what a reader wants when the complaint is that no pane appeared at all.
 ---@param cb fun(result: AgentComplete.Context.Result)
 ---@param err string
+---@param rung? string
 ---@return true
-local function fail(cb, err)
-  cb { ok = false, resolver = M.name, err = err }
+local function fail(cb, err, rung)
+  cb { ok = false, resolver = M.name, rung = rung, err = err }
   return true
 end
 
@@ -236,14 +259,20 @@ function M.resolve(session, cb, opts)
     return nil
   end
   opts = opts or {}
-  local db = opts.db_path or vim.fs.normalize "~/.local/share/opencode/opencode.db"
+  local db = opts.db_path or M.db_path()
   if not uv.fs_stat(db) then
     return fail(cb, "no OpenCode database at " .. db)
   end
 
-  local expr, rung = session_expr(session.cwd, opts)
+  -- The environment is read here and nowhere below, so the rungs take what they need as
+  -- arguments. `session.cwd` is normalized because it may have been typed by the user via
+  -- `$AGENTCOMPLETE_CWD`, while every path it is compared against was written by OpenCode.
+  local env = { session_id = vim.env.OPENCODE_SESSION_ID, tui_pid = tonumber(vim.env.OPENCODE_PID) }
+  local cwd = vim.fs.normalize(session.cwd)
+
+  local expr, rung = session_expr(env, cwd, opts)
   if not expr then
-    return fail(cb, "no session id, no pointer file, and no $OPENCODE_PID to date a guess from")
+    return fail(cb, "no session id, no pointer file, and no $OPENCODE_PID to date a guess from", rung)
   end
 
   -- No temp-file redirect, unlike `opencode_cli`'s probes: that exists because `opencode`'s Bun
@@ -252,21 +281,23 @@ function M.resolve(session, cb, opts)
   local started = pcall(
     spawn,
     { "sqlite3", "-readonly", "-json", db, M.message_sql(expr) },
-    { text = true },
+    { text = true, timeout = SQLITE_TIMEOUT_MS },
     vim.schedule_wrap(function(obj)
       if obj.code ~= 0 then
-        return fail(cb, "sqlite3 exited " .. tostring(obj.code) .. ": " .. vim.trim(obj.stderr or ""))
+        return fail(cb, "sqlite3 exited " .. tostring(obj.code) .. ": " .. vim.trim(obj.stderr or ""), rung)
       end
       local text, session_id = M.join_rows(obj.stdout or "")
       if not text then
-        return fail(cb, "no assistant message in " .. db .. " for this session")
+        -- Named by rung, because on the guess the sub-select may have matched no session at
+        -- all — which sends a reader hunting for a missing message rather than a missing one.
+        return fail(cb, "no assistant message for the " .. rung .. " session in " .. db, rung)
       end
       session.session_id = session_id or session.session_id
       cb { ok = true, resolver = M.name, rung = rung, text = text, session_id = session_id, transcript = db }
     end)
   )
   if not started then
-    return fail(cb, "could not run sqlite3")
+    return fail(cb, "could not run sqlite3", rung)
   end
   return true
 end

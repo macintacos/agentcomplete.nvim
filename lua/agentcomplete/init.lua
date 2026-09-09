@@ -98,7 +98,11 @@ function M.install_opencode_plugin(source, config_home)
   if vim.loop.fs_lstat(target) then
     return "conflict", target
   end
-  vim.fn.mkdir(config_home .. "/plugin", "p")
+  -- `mkdir` raises rather than returning 0 on an unwritable parent, which would escape the
+  -- command as a traceback while the rarer symlink failure came back as a tidy report.
+  if not pcall(vim.fn.mkdir, config_home .. "/plugin", "p") then
+    return "failed", target
+  end
   return vim.loop.fs_symlink(source, target) and "created" or "failed", target
 end
 
@@ -106,7 +110,7 @@ end
 local INSTALL_REPORT = {
   created = "installed the OpenCode plugin at ",
   current = "the OpenCode plugin is already installed at ",
-  conflict = "refusing to overwrite the file already at ",
+  conflict = "remove it and re-run — refusing to overwrite the file already at ",
   failed = "could not symlink the OpenCode plugin into ",
 }
 
