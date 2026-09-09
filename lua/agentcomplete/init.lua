@@ -80,6 +80,36 @@ local function ensure_builtins()
   })
 end
 
+---Symlink the shipped OpenCode plugin into `<config_home>/plugin/`, so OpenCode loads it and
+---the context pane can resolve a session by pointer file rather than by guess. A symlink
+---rather than a copy, so the installed plugin tracks the checkout. Anything already at the
+---target is left alone: it is the user's, and an older checkout's link reads the same as a
+---hand-written plugin.
+---@param source string The shipped `agentcomplete.ts`.
+---@param config_home string OpenCode's config home.
+---@return "created"|"current"|"conflict"|"failed" status
+---@return string target Where the plugin was installed, or what stood in the way.
+function M.install_opencode_plugin(source, config_home)
+  local target = config_home .. "/plugin/agentcomplete.ts"
+  local linked = vim.loop.fs_readlink(target)
+  if linked == source then
+    return "current", target
+  end
+  if vim.loop.fs_lstat(target) then
+    return "conflict", target
+  end
+  vim.fn.mkdir(config_home .. "/plugin", "p")
+  return vim.loop.fs_symlink(source, target) and "created" or "failed", target
+end
+
+---@type table<string, string>
+local INSTALL_REPORT = {
+  created = "installed the OpenCode plugin at ",
+  current = "the OpenCode plugin is already installed at ",
+  conflict = "refusing to overwrite the file already at ",
+  failed = "could not symlink the OpenCode plugin into ",
+}
+
 ---Attach completion, token highlighting, and the context pane to a buffer if a session is
 ---detected (or forced).
 ---@param bufnr integer|nil 0/nil → current buffer.
@@ -135,6 +165,16 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("AgentCompleteDetach", function()
     M.detach(0)
   end, { desc = "Detach agentcomplete from the current buffer" })
+  -- Never from `setup()`: writing into another tool's config directory unasked is a surprise.
+  vim.api.nvim_create_user_command("AgentCompleteInstallOpenCodePlugin", function()
+    local source = vim.api.nvim_get_runtime_file("opencode/agentcomplete.ts", false)[1]
+    if not source then
+      return vim.notify("agentcomplete: no opencode/agentcomplete.ts on the runtimepath", vim.log.levels.ERROR)
+    end
+    local status, target = M.install_opencode_plugin(source, scan.opencode_config_home())
+    local level = (status == "created" or status == "current") and vim.log.levels.INFO or vim.log.levels.ERROR
+    vim.notify("agentcomplete: " .. INSTALL_REPORT[status] .. target, level)
+  end, { desc = "Symlink agentcomplete's session-pointer plugin into OpenCode's config" })
 
   if M.config.enabled then
     local grp = vim.api.nvim_create_augroup("AgentComplete", { clear = true })
