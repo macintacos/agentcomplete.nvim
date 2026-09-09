@@ -232,8 +232,7 @@ end
 
 ---Report a failure. The session is still claimed: the walk got far enough to know it is ours,
 ---and handing it to the next resolver would only produce a second, less relevant error. The
----rung rides along so the diagnostics row says which resolution was being attempted — which is
----most of what a reader wants when the complaint is that no pane appeared at all.
+---rung rides along too, so the diagnostics row can say which resolution was attempted.
 ---@param cb fun(result: AgentComplete.Context.Result)
 ---@param err string
 ---@param rung? string
@@ -264,10 +263,10 @@ function M.resolve(session, cb, opts)
     return fail(cb, "no OpenCode database at " .. db)
   end
 
-  -- The environment is read here and nowhere below, so the rungs take what they need as
-  -- arguments. `session.cwd` is normalized because it may have been typed by the user via
-  -- `$AGENTCOMPLETE_CWD`, while every path it is compared against was written by OpenCode.
+  -- Read here and nowhere below, so the rungs take what they need as arguments.
   local env = { session_id = vim.env.OPENCODE_SESSION_ID, tui_pid = tonumber(vim.env.OPENCODE_PID) }
+  -- Normalized because it may have been typed by the user via `$AGENTCOMPLETE_CWD`, while every
+  -- path it is compared against was written by OpenCode.
   local cwd = vim.fs.normalize(session.cwd)
 
   local expr, rung = session_expr(env, cwd, opts)
@@ -288,8 +287,8 @@ function M.resolve(session, cb, opts)
       end
       local text, session_id = M.join_rows(obj.stdout or "")
       if not text then
-        -- Named by rung, because on the guess the sub-select may have matched no session at
-        -- all — which sends a reader hunting for a missing message rather than a missing one.
+        -- Named by rung, because on a guess the sub-select may have matched no session at all —
+        -- without it, that reads as a missing message rather than a missing session.
         return fail(cb, "no assistant message for the " .. rung .. " session in " .. db, rung)
       end
       session.session_id = session_id or session.session_id
