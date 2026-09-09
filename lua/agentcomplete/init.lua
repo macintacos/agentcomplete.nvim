@@ -76,6 +76,7 @@ local function ensure_builtins()
   })
   ensure_registered(context.resolvers, context.register, {
     require "agentcomplete.context.claude_code",
+    require "agentcomplete.context.opencode",
   })
 end
 

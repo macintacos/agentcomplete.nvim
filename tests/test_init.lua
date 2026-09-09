@@ -29,12 +29,13 @@ T["setup registers the Claude Code detector"] = function()
   expect.equality(vim.tbl_contains(names, "claude-code"), true)
 end
 
-T["setup registers the Claude Code context resolver"] = function()
+T["setup registers the built-in context resolvers"] = function()
   require("agentcomplete").setup()
   local names = vim.tbl_map(function(r)
     return r.name
   end, require("agentcomplete.context").resolvers)
   expect.equality(vim.tbl_contains(names, "claude-code"), true)
+  expect.equality(vim.tbl_contains(names, "opencode"), true)
 end
 
 T["setup defaults the context pane on, with a split-direction threshold"] = function()
