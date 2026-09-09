@@ -94,6 +94,13 @@ It symlinks a small plugin into OpenCode's config directory; restart OpenCode to
 up. Skipping it costs you only certainty — the pane still opens, labelled `guessed`. See
 `:help agentcomplete-context`.
 
+If your Neovim config is synced across machines, ask for the same symlink from `setup()`
+instead — the command has to be typed on every machine, whereas this runs on each one:
+
+```lua
+opts = { opencode = { install_plugin = true } },
+```
+
 ### Prefer zero config?
 
 Without blink.cmp, agentcomplete uses Neovim's built-in completion automatically — no

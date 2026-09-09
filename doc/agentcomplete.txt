@@ -160,6 +160,7 @@ The full default configuration, with every option: >lua
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
 	    resolve_via_cli = true,            -- also source skills/commands from `opencode debug`
+	    install_plugin = false,            -- symlink the session-pointer plugin from setup()
 	  },
 	})
 <
@@ -218,6 +219,17 @@ The full default configuration, with every option: >lua
 			Set to `false` to skip the subprocesses, leaving
 			completion to the filesystem scan and the
 			`opencode.json[c]` command map. OpenCode-only.
+
+'opencode.install_plugin'
+			boolean (default `false`). When true, `setup()`
+			performs the same symlink as
+			|:AgentCompleteInstallOpenCodePlugin|, reporting only
+			when the outcome is something other than "already
+			installed". Set it in a Neovim config synced across
+			machines: `setup()` runs on every one of them, while
+			the command has to be typed on each, and without the
+			plugin |agentcomplete-context| falls back to a
+			`guessed` session. OpenCode-only.
 
 ==============================================================================
 5. blink.cmp integration
@@ -328,10 +340,11 @@ the editor's working directory.
 
 			A symlink rather than a copy, so the installed plugin
 			follows the checkout when agentcomplete updates. It
-			never runs from `setup()` — writing into another
-			tool's config directory unasked is a surprise — and it
 			refuses rather than overwrites when a file is already
-			at that path.
+			at that path, and it does not run from `setup()`
+			unless 'opencode.install_plugin' asks it to — writing
+			into another tool's config directory unasked is a
+			surprise, which is why the flag is opt-in.
 
 ==============================================================================
 10. Completion sources
