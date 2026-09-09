@@ -57,19 +57,21 @@ Markdown, TOML, and shell are formatted/linted too (rumdl, taplo, shellcheck);
 ## The TypeScript toolchain
 
 The OpenCode plugin lives in [`opencode/`](opencode/) and ships as TypeScript source —
-there is no build step.
+there is no build step. Today it is a typed placeholder that only exercises the toolchain.
 
-- **bun** — runtime and package manager; `mise run setup` uses it to install the plugin's
-  dependencies into `opencode/node_modules`.
-- **oxlint** — TypeScript lint, scoped to `opencode/**/*.ts`, on its default ruleset:
-  there is no config file.
-- **oxfmt** — TypeScript formatter, scoped the same way so it does not take over files
-  another formatter already owns. It runs under `mise run format` and at pre-commit, not
+All three tools below are scoped to `opencode/**/*.{ts,tsx,mts,cts}`, so nothing outside
+the plugin reaches them and no `.ts` file inside it escapes them.
+
+- **bun** — package manager; `mise run setup` uses it to install the plugin's dependencies
+  into `opencode/node_modules`.
+- **oxlint** — TypeScript lint, on its default ruleset: there is no config file. Read-only
+  under `mise run lint`; pre-commit lets it autofix.
+- **oxfmt** — TypeScript formatter. It runs under `mise run format` and at pre-commit, not
   under `mise run lint`.
 - **tsc** — TypeScript type-check (config in
   [`opencode/tsconfig.json`](opencode/tsconfig.json)). `mise run lint` runs it like any
-  other check; it just runs from `opencode/` against the local binary, because it is a bun
-  dependency rather than a mise-pinned tool.
+  other check; it just runs the local binary, because it is a bun dependency rather than a
+  mise-pinned tool.
 
 ## Git hooks
 

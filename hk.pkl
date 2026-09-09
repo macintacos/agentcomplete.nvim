@@ -12,6 +12,12 @@ import "package://github.com/jdx/hk/releases/download/v1.46.0/hk@1.46.0#/Builtin
 // Step keys use a uniform `Language(Action)  [[builtins.tool]]` scheme,
 // column-aligned on the bracket tag, so hk's per-run output reads consistently.
 
+// The OpenCode plugin's TypeScript, shared by all three steps so a new extension
+// cannot slip past one of them. The builtins' own globs are wider — oxfmt's reaches
+// Markdown, TOML, YAML and JSON, which would stack a second formatter on top of
+// rumdl, taplo and yamlfmt in the same run.
+local tsGlob = List("opencode/**/*.{ts,tsx,mts,cts}")
+
 // Formatters — rewrite files into canonical form.
 local formatters = new Mapping<String, Step> {
   // rumdl owns Markdown — one tool for both lint and format. The format step runs
@@ -32,11 +38,8 @@ local formatters = new Mapping<String, Step> {
 
   ["Lua(Format)            [[builtins.stylua]]"] = Builtins.stylua
 
-  // oxfmt's default glob covers Markdown, TOML, YAML, JSON, HTML, and CSS, which
-  // would put a second formatter on top of rumdl, taplo, and yamlfmt in the same
-  // run. Scoped to the plugin's TypeScript so it only owns .ts.
   ["TypeScript(Format)     [[builtins.oxfmt]]"] = (Builtins.oxfmt) {
-    glob = List("opencode/**/*.ts")
+    glob = tsGlob
   }
 }
 
@@ -69,20 +72,17 @@ local linters = new Mapping<String, Step> {
     check = "./scripts/luals-check.sh"
   }
 
+  // Read-only here; pre-commit autofixes via the builtin's `oxlint --fix`.
   ["TypeScript(Lint)       [[builtins.ox_lint]]"] = (Builtins.ox_lint) {
-    glob = List("opencode/**/*.ts")
+    glob = tsGlob
   }
 
-  // typescript is a package.json devDependency, so tsc is not on PATH — the step
-  // runs inside opencode/ against the local binary. A bare `bun x tsc` would fall
-  // back to the npm registry when node_modules is missing and pass non-hermetically.
-  // `dir` both scopes the step to files under it and makes `glob` relative to it,
-  // so this pattern is bare rather than `opencode/`-prefixed like the two above.
+  // tsc is a package.json devDependency, so it is not on PATH. A bare `bun x tsc`
+  // would silently fetch it from the npm registry when node_modules is missing.
   ["TypeScript(TypeCheck)  [[builtins.tsc]]"] = (Builtins.tsc) {
-    glob = List("**/*.ts")
-    dir = "opencode"
+    glob = tsGlob
     workspace_indicator = null
-    check = "./node_modules/.bin/tsc --noEmit -p tsconfig.json"
+    check = "./opencode/node_modules/.bin/tsc --noEmit -p opencode/tsconfig.json"
   }
 }
 

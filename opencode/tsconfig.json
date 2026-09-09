@@ -4,8 +4,9 @@
     "module": "Preserve",
     "strict": true,
     "noEmit": true,
+    // @opencode-ai/plugin's unmet @opentui/* peer deps error without this.
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*"]
 }

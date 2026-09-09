@@ -2,6 +2,12 @@
 # Commit mise.lock for reproducible, checksum-pinned tool versions.
 lockfile = true
 
+# The npm backend (npm:oxfmt) installs through the bun pinned below. Left unset it
+# resolves from the developer's own mise config, which on a machine without that
+# setting falls back to a host npm — and so a host Node this repo never pins.
+[settings.npm]
+package_manager = "bun"
+
 # HK_MISE routes hk's git-hook subprocesses through `mise x`, so each hook step
 # uses the versions pinned below — even for committers who never activated mise.
 [env]
@@ -29,7 +35,7 @@ lua-language-server       = "latest" # LuaCATS type-check (config in .luarc.json
 neovim                    = "latest" # headless test runtime (mini.test)
 
 # TypeScript toolchain for the OpenCode plugin (opencode/).
-bun         = "latest" # runtime, package manager, and test runner — no bundler
+bun         = "latest" # package manager for opencode/ (bun install)
 oxlint      = "latest" # TypeScript lint
 "npm:oxfmt" = "latest" # TypeScript format
 
