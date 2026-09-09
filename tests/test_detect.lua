@@ -290,7 +290,8 @@ T["opencode"]["populates extra_skills and cli_commands from the CLI resolver whe
   vim.g.agentcomplete_cwd = nil
   local proj = tmpdir()
   vim.env.AGENTCOMPLETE_CWD = proj
-  require("agentcomplete").config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true }
+  require("agentcomplete").config.opencode =
+    { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false }
   -- Seed the resolver cache for this cwd so detect reads it without spawning a subprocess.
   require("agentcomplete.opencode_cli")._cache[proj] = {
     started = true,
@@ -314,7 +315,8 @@ T["opencode"]["omits the CLI-resolved sets when resolve_via_cli is false"] = fun
   vim.g.agentcomplete_cwd = nil
   local proj = tmpdir()
   vim.env.AGENTCOMPLETE_CWD = proj
-  require("agentcomplete").config.opencode = { show_all_builtin_commands = false, resolve_via_cli = false }
+  require("agentcomplete").config.opencode =
+    { show_all_builtin_commands = false, resolve_via_cli = false, install_plugin = false }
   local oc = require "agentcomplete.detect.opencode"
   local s = assert(oc.detect(named_buf "/private/tmp/1718646000009.md"))
   expect.equality(s.extra_skills, nil)

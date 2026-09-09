@@ -95,10 +95,11 @@ up. Skipping it costs you only certainty — the pane still opens, labelled `gue
 `:help agentcomplete-context`.
 
 If your Neovim config is synced across machines, ask for the same symlink from `setup()`
-instead — the command has to be typed on every machine, whereas this runs on each one:
+instead — the command is a one-shot you have to remember on each new machine, while
+`setup()` runs wherever your config does:
 
 ```lua
-opts = { opencode = { install_plugin = true } },
+require("agentcomplete").setup({ opencode = { install_plugin = true } })
 ```
 
 ### Prefer zero config?

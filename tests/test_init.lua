@@ -85,8 +85,23 @@ end
 
 T["install_plugin"]["symlinks the shipped plugin when opted in"] = function()
   require("agentcomplete").setup { opencode = { install_plugin = true } }
-  local link = vim.loop.fs_readlink(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts")
-  expect.equality(link ~= nil and link:sub(-#"opencode/agentcomplete.ts") == "opencode/agentcomplete.ts", true)
+  local target = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"
+  local link = vim.loop.fs_readlink(target)
+  expect.equality(type(link), "string")
+  ---@cast link string
+  expect.equality(vim.endswith(link, "opencode/agentcomplete.ts"), true)
+  -- fs_stat follows the link, so this is what separates an installed plugin from a dangling one.
+  expect.equality(vim.loop.fs_stat(target) ~= nil, true)
+end
+
+T["install_plugin"]["reports a conflict rather than overwriting what is already there"] = function()
+  local plugin_dir = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin"
+  vim.fn.mkdir(plugin_dir, "p")
+  vim.fn.writefile({ "mine" }, plugin_dir .. "/agentcomplete.ts")
+  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  expect.equality(#notes, 1)
+  expect.equality(notes[1].level, vim.log.levels.ERROR)
+  expect.equality(vim.fn.readfile(plugin_dir .. "/agentcomplete.ts"), { "mine" })
 end
 
 T["install_plugin"]["reports the install once, then stays quiet on later setups"] = function()
