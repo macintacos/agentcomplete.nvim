@@ -32,9 +32,10 @@ digraph agentcomplete_router {
 `preflight: lint + test passed`. There is no `--json` mode, no build step, and no extra
 flags — when a task fails, run it directly to see its full output and narrow the failure:
 
-- `mise run lint` — read-only checks via `hk check --all`: stylua (format), selene (lint
-  hygiene), lua-language-server (LuaCATS type-check), plus rumdl (markdown), taplo (TOML),
-  and shellcheck (shell).
+- `mise run lint` — read-only checks via `hk check --all`: selene (lint hygiene),
+  lua-language-server (LuaCATS type-check), oxlint (TypeScript lint), tsc (TypeScript
+  type-check), plus rumdl (markdown), taplo (TOML), pkl, and shellcheck (shell). No
+  formatter runs here — `hk check` is the linters only.
 - `mise run test` — the headless Neovim + mini.test suite. `mise run test -f <file>` runs
   a single file (e.g. `mise run test -f tests/test_detect.lua`).
 - `mise run format` — apply formatting in write mode (the counterpart to `lint`'s check).

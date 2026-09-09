@@ -36,3 +36,8 @@ if [ ! -d "$blink_dir/.git" ]; then
 fi
 git -C "$blink_dir" fetch --tags --quiet origin
 git -C "$blink_dir" checkout --quiet "$blink_tag"
+
+# hk's TypeScript(TypeCheck) step runs opencode/node_modules/.bin/tsc; nothing else
+# creates it. --frozen-lockfile so a drifted package.json fails here rather than
+# silently rewriting the committed lockfile.
+bun install --cwd opencode --frozen-lockfile

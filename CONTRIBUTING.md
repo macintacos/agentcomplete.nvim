@@ -9,20 +9,22 @@ checks, and understand the test/diagnostics workflow.
 ## Prerequisites
 
 Tooling is managed by [mise](https://mise.jdx.dev) (tool versions) and
-[hk](https://hk.jdx.dev) (format/lint git hooks). Every tool the project needs — the Lua
-toolchain, the markdown/TOML/shell formatters, and the headless Neovim used by the tests —
-is pinned in [`mise.toml`](mise.toml) and installed by mise, so you do not install them by
-hand.
+[hk](https://hk.jdx.dev) (format/lint git hooks). Almost every tool the project needs —
+the Lua and TypeScript toolchains, the markdown/TOML/shell formatters, and the headless
+Neovim used by the tests — is pinned in [`mise.toml`](mise.toml) and installed by mise.
+The exception is `tsc`, which the OpenCode plugin in `opencode/` declares as a bun
+dependency instead. Either way you do not install anything by hand.
 
 Install [mise](https://mise.jdx.dev/getting-started.html), then from the repo root:
 
 ```sh
 mise trust
-mise run setup      # install pinned tools, fetch test deps, register git hooks
+mise run setup      # install tools + deps, fetch test deps, register git hooks
 ```
 
 `mise run setup` is the one-time bootstrap: it installs the pinned tools, fetches the test
-dependencies, and registers the git hooks.
+dependencies, installs the OpenCode plugin's bun dependencies, and registers the git
+hooks.
 
 ## Day-to-day tasks
 
@@ -51,6 +53,25 @@ see its full output and narrow the failure.
 
 Markdown, TOML, and shell are formatted/linted too (rumdl, taplo, shellcheck);
 `mise run lint` covers all of them via `hk check --all`.
+
+## The TypeScript toolchain
+
+The OpenCode plugin lives in [`opencode/`](opencode/) and ships as TypeScript source —
+there is no build step. Today it is a typed placeholder that only exercises the toolchain.
+
+All three tools below are scoped to `opencode/**/*.{ts,tsx,mts,cts}`, so nothing outside
+the plugin reaches them and no `.ts` file inside it escapes them.
+
+- **bun** — package manager; `mise run setup` uses it to install the plugin's dependencies
+  into `opencode/node_modules`.
+- **oxlint** — TypeScript lint, on its default ruleset: there is no config file. Read-only
+  under `mise run lint`; pre-commit lets it autofix.
+- **oxfmt** — TypeScript formatter. It runs under `mise run format` and at pre-commit, not
+  under `mise run lint`.
+- **tsc** — TypeScript type-check (config in
+  [`opencode/tsconfig.json`](opencode/tsconfig.json)). `mise run lint` runs it like any
+  other check; it just runs the local binary, because it is a bun dependency rather than a
+  mise-pinned tool.
 
 ## Git hooks
 
