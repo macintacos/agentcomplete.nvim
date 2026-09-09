@@ -113,6 +113,12 @@ local function full_report()
       groups = { AgentCompleteSkill = "Special", AgentCompleteFile = "Directory" },
       slash_set = 5,
     },
+    context = {
+      resolver = "claude-code",
+      session_id = "sess-1",
+      transcript = "/proj/.claude/transcript.jsonl",
+      bytes = 1234,
+    },
     blink = diag.diagnose_suppression(state { allowed_sources = { "path" } }),
     env = {
       AGENTCOMPLETE_CWD = nil,
@@ -136,6 +142,7 @@ T["render"]["includes the title and every section header"] = function()
     "## Detection",
     "## Discovery",
     "## Highlighting",
+    "## Context",
     "## blink suppression",
     "## Environment",
   } do
@@ -145,6 +152,24 @@ T["render"]["includes the title and every section header"] = function()
   expect.equality(has(out, "only source"), true)
   -- The discovery counts from the report render (42 = files, distinctive here).
   expect.equality(has(out, "42"), true)
+end
+
+-- The pane is decoration on someone's prompt buffer, so it fails silently by design; this
+-- section is where a missing one becomes legible.
+T["render"]["names the resolver, session, transcript, and size of the shown message"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local out = diag.render(full_report())
+  expect.equality(has(out, "claude-code"), true)
+  expect.equality(has(out, "/proj/.claude/transcript.jsonl"), true)
+  expect.equality(has(out, "1234"), true)
+end
+
+T["render"]["surfaces the reason no pane opened"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.context = { resolver = "claude-code", err = "no transcript for session sess-1" }
+  local out = diag.render(report)
+  expect.equality(has(out, "no transcript for session sess-1"), true)
 end
 
 T["render"]["a minimal report (no session, blink inactive) renders without error"] = function()
@@ -163,6 +188,7 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
     session = nil,
     discovery = nil,
     highlighting = { attached = false, painted = 0, groups = {}, slash_set = nil },
+    context = nil,
     blink = diag.diagnose_suppression(state { resolved_backend = "native" }),
     env = { cwd = "/proj" },
   }
@@ -172,6 +198,8 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
   expect.equality(has(out, "(none)"), true)
   -- ...and Highlighting degrades the same way rather than sizing a set that isn't there.
   expect.equality(has(out, "(no active session)"), true)
+  -- ...as does Context, which never ran at all here.
+  expect.equality(has(out, "(no context resolved)"), true)
 end
 
 T["render"]["surfaces OpenCode env signals and the session's search dirs"] = function()

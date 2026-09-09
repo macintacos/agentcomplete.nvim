@@ -4,6 +4,7 @@
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
+---@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it opens as a vertical split rather than a horizontal one.
 ---@field opencode { show_all_builtin_commands: boolean, resolve_via_cli: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed. When `resolve_via_cli` is true (the default), OpenCode prompt buffers also source skills and commands asynchronously from `opencode debug skill` / `opencode debug config` (merged with, and de-duplicated against, the filesystem scan) — the only way plugin-contributed commands are seen.
 
 ---@class AgentComplete
@@ -12,6 +13,7 @@ local M = {}
 local detect = require "agentcomplete.detect"
 local backends = require "agentcomplete.backends"
 local highlight = require "agentcomplete.highlight"
+local context = require "agentcomplete.context"
 local scan = require "agentcomplete.scan"
 
 ---Default configuration.
@@ -22,6 +24,7 @@ local defaults = {
   detect = "auto",
   sources = { slash = true, file = true },
   allowed_sources = {},
+  context = { enabled = true, min_width = 160 },
   opencode = { show_all_builtin_commands = false, resolve_via_cli = true },
 }
 
@@ -43,29 +46,41 @@ local function fallback_session()
   }
 end
 
----Register built-in detectors (idempotent — safe across repeated setup calls).
----Order is significant (first match wins); Claude Code before OpenCode. The two are
----mutually exclusive in practice, so the order is harmless either way.
-local function ensure_detectors()
-  local builtins = {
-    require "agentcomplete.detect.claude_code",
-    require "agentcomplete.detect.opencode",
-  }
-  for _, d in ipairs(builtins) do
+---Add each of `builtins` to a registry it is not already in, by name. Idempotent, so repeated
+---setup calls are safe.
+---@param registry { name: string }[]
+---@param register fun(item: any)
+---@param builtins { name: string }[]
+local function ensure_registered(registry, register, builtins)
+  for _, item in ipairs(builtins) do
     local present = false
-    for _, existing in ipairs(detect.detectors) do
-      if existing.name == d.name then
+    for _, existing in ipairs(registry) do
+      if existing.name == item.name then
         present = true
         break
       end
     end
     if not present then
-      detect.register(d)
+      register(item)
     end
   end
 end
 
----Attach completion and token highlighting to a buffer if a session is detected (or forced).
+---Register the built-in detectors and last-message resolvers.
+local function ensure_builtins()
+  -- Detector order is significant (first match wins); Claude Code before OpenCode. The two are
+  -- mutually exclusive in practice, so the order is harmless either way.
+  ensure_registered(detect.detectors, detect.register, {
+    require "agentcomplete.detect.claude_code",
+    require "agentcomplete.detect.opencode",
+  })
+  ensure_registered(context.resolvers, context.register, {
+    require "agentcomplete.context.claude_code",
+  })
+end
+
+---Attach completion, token highlighting, and the context pane to a buffer if a session is
+---detected (or forced).
 ---@param bufnr integer|nil 0/nil → current buffer.
 ---@param opts? { force: boolean }
 ---@return boolean attached
@@ -88,11 +103,12 @@ function M.attach(bufnr, opts)
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
     highlight.attach(buf, session)
+    context.open(buf, session, M.config.context)
   end
   return session ~= nil
 end
 
----Detach completion and token highlighting from a buffer.
+---Detach completion, token highlighting, and the context pane from a buffer.
 ---@param bufnr integer|nil 0/nil → current buffer.
 function M.detach(bufnr)
   local buf = bufnr or 0
@@ -101,6 +117,7 @@ function M.detach(bufnr)
   end
   backends.detach(buf)
   highlight.detach(buf)
+  context.close(buf)
 end
 
 ---Set up agentcomplete.nvim.
@@ -108,7 +125,7 @@ end
 ---@return AgentComplete
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
-  ensure_detectors()
+  ensure_builtins()
   backends.install_suppression(M.config)
 
   vim.api.nvim_create_user_command("AgentCompleteAttach", function()

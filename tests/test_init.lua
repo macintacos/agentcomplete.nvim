@@ -29,6 +29,28 @@ T["setup registers the Claude Code detector"] = function()
   expect.equality(vim.tbl_contains(names, "claude-code"), true)
 end
 
+T["setup registers the Claude Code context resolver"] = function()
+  require("agentcomplete").setup()
+  local names = vim.tbl_map(function(r)
+    return r.name
+  end, require("agentcomplete.context").resolvers)
+  expect.equality(vim.tbl_contains(names, "claude-code"), true)
+end
+
+T["setup defaults the context pane on, with a split-direction threshold"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup {}
+  expect.equality(agentcomplete.config.context.enabled, true)
+  expect.equality(agentcomplete.config.context.min_width, 160)
+end
+
+T["setup merges a context override over the defaults"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { context = { enabled = false } }
+  expect.equality(agentcomplete.config.context.enabled, false)
+  expect.equality(agentcomplete.config.context.min_width, 160) -- sibling default preserved
+end
+
 T["setup preserves the opencode.show_all_builtin_commands default"] = function()
   local agentcomplete = require "agentcomplete"
   agentcomplete.setup {}
