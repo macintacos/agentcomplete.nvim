@@ -102,16 +102,21 @@ local function has_editor_context(buf)
   return false
 end
 
----Pipe `text` through `rumdl fmt -`. A missing binary, a non-zero exit, or a formatter that
----outruns `FORMAT_TIMEOUT_MS` yields the raw text: the pane never fails over formatting. This
----runs on the main loop as the prompt opens, so the wait is bounded rather than left to hang.
+---Pipe `text` through `rumdl fmt`. Without `config_path` it formats with rumdl's built-in
+---defaults: the pane's wrapping must not depend on whichever project the editor's cwd happens
+---to sit in, whose `.rumdl.toml` rumdl would otherwise discover. A missing binary, a non-zero
+---exit — an unreadable `config_path` among them — or a formatter that outruns
+---`FORMAT_TIMEOUT_MS` yields the raw text: the pane never fails over formatting. This runs on
+---the main loop as the prompt opens, so the wait is bounded rather than left to hang.
 ---@param text string
+---@param config_path? string Path to a rumdl config file; defaults to rumdl's own defaults.
 ---@param system? fun(cmd: string[], opts: table): table Defaults to `vim.system`; injected in tests.
 ---@return string
-function M.format(text, system)
+function M.format(text, config_path, system)
   system = system or vim.system
+  local cmd = config_path and { "rumdl", "fmt", "-c", config_path, "-" } or { "rumdl", "fmt", "--no-config", "-" }
   local ok, proc = pcall(function()
-    return system({ "rumdl", "fmt", "-" }, { stdin = text, text = true }):wait(FORMAT_TIMEOUT_MS)
+    return system(cmd, { stdin = text, text = true }):wait(FORMAT_TIMEOUT_MS)
   end)
   -- `wait(timeout)` returns nil rather than a result table when the timeout fires.
   if not ok or type(proc) ~= "table" or proc.code ~= 0 or type(proc.stdout) ~= "string" or proc.stdout == "" then
@@ -149,13 +154,14 @@ end
 ---@class AgentComplete.Context.Options
 ---@field enabled boolean Whether attaching opens the pane at all.
 ---@field min_width integer Terminal width at or above which the pane opens as a vertical split.
+---@field rumdl_config? string Path to a rumdl config file for the pane's formatting; unset formats with rumdl's built-in defaults.
 
 ---Build the pane for a resolved message, or record and log a resolver's failure.
 ---@param buf integer
 ---@param result AgentComplete.Context.Result
 ---@param config AgentComplete.Context.Options
 ---@param log_path string
----@param format fun(text: string): string
+---@param format fun(text: string, config_path?: string): string
 local function show(buf, result, config, log_path, format)
   if not result.ok then
     M._state[buf] = { resolver = result.resolver, rung = result.rung, err = result.err }
@@ -169,7 +175,7 @@ local function show(buf, result, config, log_path, format)
   end
   local win = pane.open(buf, {
     group = assert(M._augroups[buf], "pane built for an unattached buffer"),
-    text = format(result.text or ""),
+    text = format(result.text or "", config.rumdl_config),
     min_width = config.min_width,
     resolver = result.resolver,
     rung = result.rung,
@@ -196,7 +202,7 @@ end
 ---@class AgentComplete.Context.Seams
 ---@field log_path? string Where a failure is recorded; defaults to `<cwd>/.tmp/`.
 ---@field headless? boolean Whether there is no UI to split; read from the editor when absent.
----@field format? fun(text: string): string Defaults to `M.format`.
+---@field format? fun(text: string, config_path?: string): string Defaults to `M.format`.
 ---@field resolver? table Passed through to the claiming resolver.
 
 ---Resolve the agent's last message for `buf` and show it beside the prompt. Idempotent per

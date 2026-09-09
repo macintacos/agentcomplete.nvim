@@ -291,20 +291,46 @@ local function fake_system(code, stdout)
   end
 end
 
+---A `vim.system` stand-in that records the argv it was called with.
+local function recording_system(record)
+  return function(cmd)
+    record.cmd = cmd
+    return {
+      wait = function()
+        return { code = 0, stdout = "out\n" }
+      end,
+    }
+  end
+end
+
 T["format"]["returns the formatter's output"] = function()
   local context = require "agentcomplete.context"
-  expect.equality(context.format("*  a\n", fake_system(0, "- a\n")), "- a\n")
+  expect.equality(context.format("*  a\n", nil, fake_system(0, "- a\n")), "- a\n")
+end
+
+T["format"]["formats with rumdl's built-in defaults when no config path is given"] = function()
+  local context = require "agentcomplete.context"
+  local record = {}
+  context.format("*  a\n", nil, recording_system(record))
+  expect.equality(record.cmd, { "rumdl", "fmt", "--no-config", "-" })
+end
+
+T["format"]["points rumdl at a config path when one is given"] = function()
+  local context = require "agentcomplete.context"
+  local record = {}
+  context.format("*  a\n", "/p.toml", recording_system(record))
+  expect.equality(record.cmd, { "rumdl", "fmt", "-c", "/p.toml", "-" })
 end
 
 T["format"]["falls back to the raw text when the formatter fails"] = function()
   local context = require "agentcomplete.context"
-  expect.equality(context.format("*  a\n", fake_system(1, "")), "*  a\n")
+  expect.equality(context.format("*  a\n", nil, fake_system(1, "")), "*  a\n")
 end
 
 T["format"]["falls back to the raw text when the formatter is absent"] = function()
   local context = require "agentcomplete.context"
   expect.equality(
-    context.format("*  a\n", function()
+    context.format("*  a\n", nil, function()
       error "ENOENT"
     end),
     "*  a\n"
@@ -324,7 +350,7 @@ T["format"]["falls back to the raw text when the formatter outruns its timeout"]
       end,
     }
   end
-  expect.equality(context.format("*  a\n", system), "*  a\n")
+  expect.equality(context.format("*  a\n", nil, system), "*  a\n")
   expect.equality(type(waited), "number")
 end
 
@@ -431,6 +457,19 @@ T["open"]["splits horizontally when the terminal is narrower than min_width"] = 
   local buf = prompt_buffer()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
   expect.equality(vim.fn.winlayout()[1], "col")
+end
+
+T["open"]["hands the pane's formatter the configured rumdl config path"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = with_resolver(ok_result "hello")
+  local seen
+  opts.format = function(text, config_path)
+    seen = config_path
+    return text
+  end
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160, rumdl_config = "/p.toml" }, opts)
+  expect.equality(seen, "/p.toml")
 end
 
 T["open"]["leaves the pane read-only and the cursor in the prompt"] = function()
