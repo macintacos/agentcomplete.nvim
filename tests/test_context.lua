@@ -901,11 +901,11 @@ local function session_row(id, parent, directory, created, updated)
 end
 
 ---An assistant turn: one `message` row, and one `part` row per `{ type, text }` pair.
-local function turn(session, id, created, parts)
+local function turn(session_id, id, created, parts)
   local rows = {
     ("insert into message values('%s','%s',%d,'%s');"):format(
       id,
-      session,
+      session_id,
       created,
       vim.json.encode { role = "assistant" }
     ),
@@ -915,7 +915,7 @@ local function turn(session, id, created, parts)
       id,
       i,
       id,
-      session,
+      session_id,
       created + i,
       vim.json.encode { type = part[1], text = part[2] }
     )

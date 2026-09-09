@@ -107,7 +107,7 @@ function M.install_opencode_plugin(source, config_home)
 end
 
 ---@type table<string, string>
-local INSTALL_REPORT = {
+local INSTALL_MESSAGES = {
   created = "installed the OpenCode plugin at ",
   current = "the OpenCode plugin is already installed at ",
   conflict = "remove it and re-run — refusing to overwrite the file already at ",
@@ -177,7 +177,7 @@ function M.setup(opts)
     end
     local status, target = M.install_opencode_plugin(source, scan.opencode_config_home())
     local level = (status == "created" or status == "current") and vim.log.levels.INFO or vim.log.levels.ERROR
-    vim.notify("agentcomplete: " .. INSTALL_REPORT[status] .. target, level)
+    vim.notify("agentcomplete: " .. INSTALL_MESSAGES[status] .. target, level)
   end, { desc = "Symlink agentcomplete's session-pointer plugin into OpenCode's config" })
 
   if M.config.enabled then

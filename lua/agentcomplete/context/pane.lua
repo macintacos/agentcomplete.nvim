@@ -191,8 +191,8 @@ function M.open(buf, opts)
 
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  local frame = vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver, opts.rung))
-  local win = vim.api.nvim_open_win(pane_buf, false, frame)
+  local win_config = vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver, opts.rung))
+  local win = vim.api.nvim_open_win(pane_buf, false, win_config)
 
   -- Contents and filetype after the window, not before: window-local options are set against
   -- whichever window is current, so a filetype set while the pane has none sends every
