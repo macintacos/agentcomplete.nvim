@@ -322,9 +322,30 @@ T["format"]["points rumdl at a config path when one is given"] = function()
   expect.equality(record.cmd, { "rumdl", "fmt", "-c", "/p.toml", "-" })
 end
 
+-- `vim.system` spawns without a shell, so a `~` the user wrote in `context.rumdl_config`
+-- reaches rumdl literally and it exits with "config file not found".
+T["format"]["expands a ~ in the config path"] = function()
+  local context = require "agentcomplete.context"
+  local record = {}
+  context.format("*  a\n", "~/p.toml", recording_system(record))
+  expect.equality(record.cmd[4], vim.fs.normalize "~/p.toml")
+end
+
 T["format"]["falls back to the raw text when the formatter fails"] = function()
   local context = require "agentcomplete.context"
   expect.equality(context.format("*  a\n", nil, fake_system(1, "")), "*  a\n")
+end
+
+T["format"]["reports why it fell back, naming the config path it was given"] = function()
+  local context = require "agentcomplete.context"
+  local _, err = context.format("*  a\n", "/p.toml", fake_system(1, ""))
+  expect.equality(assert(err, "no error reported"):find("/p.toml", 1, true) ~= nil, true)
+end
+
+T["format"]["reports nothing when the formatter succeeded"] = function()
+  local context = require "agentcomplete.context"
+  local _, err = context.format("*  a\n", nil, fake_system(0, "- a\n"))
+  expect.equality(err, nil)
 end
 
 T["format"]["falls back to the raw text when the formatter is absent"] = function()
@@ -680,6 +701,19 @@ T["open"]["records what it resolved for the diagnostics report"] = function()
   expect.equality(context._state[buf].session_id, SID)
   expect.equality(context._state[buf].transcript, "/t.jsonl")
   expect.equality(context._state[buf].bytes, 5)
+end
+
+-- The only pane failure a user can cause is a bad 'context.rumdl_config', and it costs
+-- formatting rather than the pane — so the log is the only place it can surface.
+T["open"]["logs a formatter that fell back to the raw message"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local opts = with_resolver(ok_result "hello")
+  opts.format = function(text)
+    return text, "rumdl formatting failed with config /p.toml"
+  end
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  expect.equality(vim.fn.readfile(opts.log_path)[1]:find("/p.toml", 1, true) ~= nil, true)
 end
 
 T["open"]["logs a resolver failure instead of opening a pane"] = function()

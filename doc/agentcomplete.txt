@@ -200,10 +200,13 @@ The full default configuration, with every option: >lua
 			and takes 40% of it; below that, underneath. Re-checked
 			whenever the terminal is resized.
 
-'context.rumdl_config'	string (default `nil`). Path to a rumdl config file,
-			used to format the message the pane shows. Left unset,
-			the message is formatted with rumdl's own built-in
-			defaults. See |agentcomplete-context|.
+'context.rumdl_config'	string (default `nil`). Absolute path to a rumdl config
+			file, used to format the message the pane shows. A
+			relative path resolves against Neovim's working
+			directory, which is the dependence this option exists
+			to escape. Left unset, the message is formatted with
+			rumdl's own built-in defaults. See
+			|agentcomplete-context|.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -462,12 +465,13 @@ instead of leaving you in a message you cannot reply to; you never have to
 close the pane yourself.
 
 When `rumdl` is on $PATH the message is formatted before being shown, with
-rumdl's own built-in defaults — prose is left unwrapped, and no `.rumdl.toml`
-near the editor's working directory is consulted, so the pane reads the same
-whichever project you are in. Point 'context.rumdl_config' at a config file to
-format with your own rules instead. A missing binary or a failed run — an
-unreadable 'context.rumdl_config' among them — shows the raw message instead:
-formatting never costs you the pane.
+rumdl's own built-in defaults — prose is left unwrapped and the pane wraps it
+to its own width, and no `.rumdl.toml` near the editor's working directory is
+consulted, so the pane reads the same whichever project you are in. Point
+'context.rumdl_config' at a config file to format with your own rules instead.
+A missing binary or a failed run — an unreadable 'context.rumdl_config' among
+them — shows the raw message instead: formatting never costs you the pane. The
+fallback is recorded in the log named below.
 
 Claude Code has an `externalEditorContext` setting of its own that renders
 recent conversation into the prompt buffer, above a "Write your reply below

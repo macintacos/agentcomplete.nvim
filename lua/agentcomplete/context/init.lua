@@ -103,24 +103,28 @@ local function has_editor_context(buf)
 end
 
 ---Pipe `text` through `rumdl fmt`. Without `config_path` it formats with rumdl's built-in
----defaults: the pane's wrapping must not depend on whichever project the editor's cwd happens
----to sit in, whose `.rumdl.toml` rumdl would otherwise discover. A missing binary, a non-zero
----exit — an unreadable `config_path` among them — or a formatter that outruns
+---defaults: the pane's formatting must not depend on whichever project the editor's cwd
+---happens to sit in, whose `.rumdl.toml` rumdl would otherwise discover. A missing binary, a
+---non-zero exit — an unreadable `config_path` among them — or a formatter that outruns
 ---`FORMAT_TIMEOUT_MS` yields the raw text: the pane never fails over formatting. This runs on
 ---the main loop as the prompt opens, so the wait is bounded rather than left to hang.
 ---@param text string
----@param config_path? string Path to a rumdl config file; defaults to rumdl's own defaults.
+---@param config_path? string Path to a rumdl config file.
 ---@param system? fun(cmd: string[], opts: table): table Defaults to `vim.system`; injected in tests.
 ---@return string
+---@return string|nil err Why the raw text came back, when formatting was skipped.
 function M.format(text, config_path, system)
   system = system or vim.system
-  local cmd = config_path and { "rumdl", "fmt", "-c", config_path, "-" } or { "rumdl", "fmt", "--no-config", "-" }
+  -- `vim.system` spawns without a shell, so a `~` reaches rumdl literally and it exits
+  -- "config file not found". Same normalization `highlight.file_exists` gives a user's path.
+  local path = config_path and vim.fs.normalize(config_path)
+  local cmd = path and { "rumdl", "fmt", "-c", path, "-" } or { "rumdl", "fmt", "--no-config", "-" }
   local ok, proc = pcall(function()
     return system(cmd, { stdin = text, text = true }):wait(FORMAT_TIMEOUT_MS)
   end)
   -- `wait(timeout)` returns nil rather than a result table when the timeout fires.
   if not ok or type(proc) ~= "table" or proc.code ~= 0 or type(proc.stdout) ~= "string" or proc.stdout == "" then
-    return text
+    return text, "rumdl formatting failed" .. (path and (" with config " .. path) or "")
   end
   return proc.stdout
 end
@@ -161,7 +165,7 @@ end
 ---@param result AgentComplete.Context.Result
 ---@param config AgentComplete.Context.Options
 ---@param log_path string
----@param format fun(text: string, config_path?: string): string
+---@param format fun(text: string, config_path?: string): string, string|nil
 local function show(buf, result, config, log_path, format)
   if not result.ok then
     M._state[buf] = { resolver = result.resolver, rung = result.rung, err = result.err }
@@ -173,9 +177,15 @@ local function show(buf, result, config, log_path, format)
   if result.rung then
     M.log(log_path, result.resolver .. " resolved via " .. result.rung)
   end
+  -- A bad `rumdl_config` is the one pane failure a user can cause, and it costs formatting
+  -- rather than the pane — so nothing but the log would ever say the message came back raw.
+  local text, format_err = format(result.text or "", config.rumdl_config)
+  if format_err then
+    M.log(log_path, format_err)
+  end
   local win = pane.open(buf, {
     group = assert(M._augroups[buf], "pane built for an unattached buffer"),
-    text = format(result.text or "", config.rumdl_config),
+    text = text,
     min_width = config.min_width,
     resolver = result.resolver,
     rung = result.rung,
@@ -202,7 +212,7 @@ end
 ---@class AgentComplete.Context.Seams
 ---@field log_path? string Where a failure is recorded; defaults to `<cwd>/.tmp/`.
 ---@field headless? boolean Whether there is no UI to split; read from the editor when absent.
----@field format? fun(text: string, config_path?: string): string Defaults to `M.format`.
+---@field format? fun(text: string, config_path?: string): string, string|nil Defaults to `M.format`.
 ---@field resolver? table Passed through to the claiming resolver.
 
 ---Resolve the agent's last message for `buf` and show it beside the prompt. Idempotent per
