@@ -5,7 +5,7 @@
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
 ---@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it opens as a vertical split rather than a horizontal one.
----@field opencode { show_all_builtin_commands: boolean, resolve_via_cli: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed. When `resolve_via_cli` is true (the default), OpenCode prompt buffers also source skills and commands asynchronously from `opencode debug skill` / `opencode debug config` (merged with, and de-duplicated against, the filesystem scan) — the only way plugin-contributed commands are seen.
+---@field opencode { show_all_builtin_commands: boolean, resolve_via_cli: boolean, install_plugin: boolean } OpenCode-specific options. When `show_all_builtin_commands` is true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed. When `resolve_via_cli` is true (the default), OpenCode prompt buffers also source skills and commands asynchronously from `opencode debug skill` / `opencode debug config` (merged with, and de-duplicated against, the filesystem scan) — the only way plugin-contributed commands are seen. When `install_plugin` is true, `setup()` symlinks the session-pointer plugin just as `:AgentCompleteInstallOpenCodePlugin` does, so a config synced across machines installs it on each of them.
 
 ---@class AgentComplete
 local M = {}
@@ -25,7 +25,7 @@ local defaults = {
   sources = { slash = true, file = true },
   allowed_sources = {},
   context = { enabled = true, min_width = 160 },
-  opencode = { show_all_builtin_commands = false, resolve_via_cli = true },
+  opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false },
 }
 
 ---@type AgentComplete.Config
@@ -112,7 +112,26 @@ local INSTALL_MESSAGES = {
   current = "the OpenCode plugin is already installed at ",
   conflict = "remove it and re-run — refusing to overwrite the file already at ",
   failed = "could not symlink the OpenCode plugin into ",
+  missing = "no opencode/agentcomplete.ts on the runtimepath",
 }
+
+---Resolve the shipped plugin on the runtimepath and symlink it into OpenCode's config home.
+---@return "created"|"current"|"conflict"|"failed"|"missing" status
+---@return string target Where it landed, what stood in the way, or "" when unresolved.
+local function install_shipped_plugin()
+  local source = vim.api.nvim_get_runtime_file("opencode/agentcomplete.ts", false)[1]
+  if not source then
+    return "missing", ""
+  end
+  return M.install_opencode_plugin(source, scan.opencode_config_home())
+end
+
+---@param status "created"|"current"|"conflict"|"failed"|"missing"
+---@param target string
+local function notify_install(status, target)
+  local level = (status == "created" or status == "current") and vim.log.levels.INFO or vim.log.levels.ERROR
+  vim.notify("agentcomplete: " .. INSTALL_MESSAGES[status] .. target, level)
+end
 
 ---Attach completion, token highlighting, and the context pane to a buffer if a session is
 ---detected (or forced).
@@ -169,16 +188,19 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("AgentCompleteDetach", function()
     M.detach(0)
   end, { desc = "Detach agentcomplete from the current buffer" })
-  -- Never from `setup()`: writing into another tool's config directory unasked is a surprise.
+  -- From `setup()` only when asked: writing into another tool's config directory unasked is
+  -- a surprise.
   vim.api.nvim_create_user_command("AgentCompleteInstallOpenCodePlugin", function()
-    local source = vim.api.nvim_get_runtime_file("opencode/agentcomplete.ts", false)[1]
-    if not source then
-      return vim.notify("agentcomplete: no opencode/agentcomplete.ts on the runtimepath", vim.log.levels.ERROR)
-    end
-    local status, target = M.install_opencode_plugin(source, scan.opencode_config_home())
-    local level = (status == "created" or status == "current") and vim.log.levels.INFO or vim.log.levels.ERROR
-    vim.notify("agentcomplete: " .. INSTALL_MESSAGES[status] .. target, level)
+    notify_install(install_shipped_plugin())
   end, { desc = "Symlink agentcomplete's session-pointer plugin into OpenCode's config" })
+
+  if M.config.opencode.install_plugin then
+    local status, target = install_shipped_plugin()
+    -- Silent on the steady state, which is every launch after the first.
+    if status ~= "current" then
+      notify_install(status, target)
+    end
+  end
 
   if M.config.enabled then
     local grp = vim.api.nvim_create_augroup("AgentComplete", { clear = true })
