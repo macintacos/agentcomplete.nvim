@@ -1,0 +1,9 @@
+{
+  "name": "agentcomplete-opencode",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.29",
+    "typescript": "^5.8.2"
+  }
+}

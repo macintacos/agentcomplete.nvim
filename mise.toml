@@ -28,6 +28,11 @@ stylua                    = "latest" # Lua format (config in stylua.toml)
 lua-language-server       = "latest" # LuaCATS type-check (config in .luarc.json)
 neovim                    = "latest" # headless test runtime (mini.test)
 
+# TypeScript toolchain for the OpenCode plugin (opencode/).
+bun         = "latest" # runtime, package manager, and test runner — no bundler
+oxlint      = "latest" # TypeScript lint
+"npm:oxfmt" = "latest" # TypeScript format
+
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]
 postinstall = "hk install --mise"

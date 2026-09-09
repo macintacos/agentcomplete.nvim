@@ -36,3 +36,7 @@ if [ ! -d "$blink_dir/.git" ]; then
 fi
 git -C "$blink_dir" fetch --tags --quiet origin
 git -C "$blink_dir" checkout --quiet "$blink_tag"
+
+# The OpenCode plugin's type-check step runs ./node_modules/.bin/tsc, and its
+# @opencode-ai/plugin types must resolve — neither exists until bun installs them.
+(cd opencode && bun install)
