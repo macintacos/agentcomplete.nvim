@@ -101,6 +101,14 @@ local function val(v)
   return tostring(v)
 end
 
+---The installed OpenCode plugin, or nil when `:AgentCompleteInstallOpenCodePlugin` has not
+---run. Without it the resolver has no pointer file and falls back to guessing a session.
+---@return string|nil
+local function installed_plugin()
+  local path = require("agentcomplete.scan").opencode_config_home() .. "/plugin/agentcomplete.ts"
+  return vim.loop.fs_lstat(path) and path or nil
+end
+
 ---@param t string[]|nil
 ---@return string
 local function list(t)
@@ -118,6 +126,7 @@ end
 ---@field discovery { skills: integer, cli_skills: integer, commands: integer, cli_commands: integer, extra_commands: integer, files: integer }|nil
 ---@field highlighting { attached: boolean, painted: integer, groups: { AgentCompleteSkill: string|nil, AgentCompleteFile: string|nil }, slash_set: integer|nil }
 ---@field context AgentComplete.Context.State|nil
+---@field pointer_dir? string Where the OpenCode resolver looks for session pointers.
 ---@field blink AgentComplete.Diagnostics.Suppression
 ---@field env table<string, string|nil>
 
@@ -201,6 +210,7 @@ function M.render(report)
   local c = report.context
   if c then
     add("- resolver:                 " .. val(c.resolver))
+    add("- rung:                     " .. val(c.rung))
     add("- session id:               " .. val(c.session_id))
     add("- transcript:               " .. val(c.transcript))
     add("- message bytes:            " .. val(c.bytes))
@@ -208,6 +218,7 @@ function M.render(report)
   else
     add "- (no context resolved)"
   end
+  add("- pointer dir:              " .. val(report.pointer_dir))
   add ""
 
   add "## blink suppression"
@@ -231,9 +242,12 @@ function M.render(report)
   add("- CLAUDE_CODE_SESSION_ID:  " .. val(env.CLAUDE_CODE_SESSION_ID))
   add("- OPENCODE:                " .. val(env.OPENCODE))
   add("- OPENCODE_PID:            " .. val(env.OPENCODE_PID))
+  add("- OPENCODE_SESSION_ID:     " .. val(env.OPENCODE_SESSION_ID))
   add("- AGENT:                   " .. val(env.AGENT))
   add("- OPENCODE_CONFIG_DIR:     " .. val(env.OPENCODE_CONFIG_DIR))
   add("- XDG_CONFIG_HOME:         " .. val(env.XDG_CONFIG_HOME))
+  add("- XDG_STATE_HOME:          " .. val(env.XDG_STATE_HOME))
+  add("- opencode plugin:         " .. (env.opencode_plugin or "(not installed)"))
   add("- EDITOR:                  " .. val(env.EDITOR))
   add("- VISUAL:                  " .. val(env.VISUAL))
   add("- cwd:                     " .. val(env.cwd))
@@ -346,6 +360,7 @@ function M.collect(opts)
     discovery = discovery,
     highlighting = highlighting,
     context = context._state[buf],
+    pointer_dir = require("agentcomplete.context.opencode").pointer_dir(),
     blink = suppression,
     env = {
       AGENTCOMPLETE_CWD = vim.env.AGENTCOMPLETE_CWD,
@@ -354,9 +369,12 @@ function M.collect(opts)
       CLAUDE_CODE_SESSION_ID = vim.env.CLAUDE_CODE_SESSION_ID,
       OPENCODE = vim.env.OPENCODE,
       OPENCODE_PID = vim.env.OPENCODE_PID,
+      OPENCODE_SESSION_ID = vim.env.OPENCODE_SESSION_ID,
       AGENT = vim.env.AGENT,
       OPENCODE_CONFIG_DIR = vim.env.OPENCODE_CONFIG_DIR,
       XDG_CONFIG_HOME = vim.env.XDG_CONFIG_HOME,
+      XDG_STATE_HOME = vim.env.XDG_STATE_HOME,
+      opencode_plugin = installed_plugin(),
       EDITOR = vim.env.EDITOR,
       VISUAL = vim.env.VISUAL,
       cwd = vim.loop.cwd() or vim.fn.getcwd(),

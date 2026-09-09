@@ -85,7 +85,9 @@ M._augroups = {}
 
 ---Claude Code's own `externalEditorContext` renders the conversation into the prompt buffer
 ---above this line. Matched on the sentence rather than the full box-drawn delimiter, so a
----change to its padding cannot silently show the same message twice.
+---change to its padding cannot silently show the same message twice. This and the tool check
+---guarding it are the registry's one piece of per-tool knowledge — cheaper than a `skip` hook
+---on the resolver contract that only Claude Code would ever implement.
 local DELIMITER = "Write your reply below this line"
 
 ---How long `rumdl` gets before the raw message is shown instead.
@@ -207,7 +209,12 @@ function M.open(buf, session, config, opts)
   if headless == nil then
     headless = #vim.api.nvim_list_uis() == 0
   end
-  if not config.enabled or headless or M._augroups[buf] or has_editor_context(buf) then
+  if
+    not config.enabled
+    or headless
+    or M._augroups[buf]
+    or (session.tool == "claude-code" and has_editor_context(buf))
+  then
     return
   end
 

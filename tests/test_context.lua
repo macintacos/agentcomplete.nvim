@@ -607,6 +607,14 @@ T["open"]["skips a buffer Claude Code already rendered context into"] = function
   expect.equality(#vim.api.nvim_list_wins(), 1)
 end
 
+-- The sentence is Claude Code's, so only a Claude Code buffer proves anything by carrying it.
+T["open"]["opens for an OpenCode buffer that happens to carry that sentence"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer { "quoting: Write your reply below this line", "" }
+  context.open(buf, session_for "opencode", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  expect.equality(#vim.api.nvim_list_wins() > 1, true)
+end
+
 T["open"]["skips when the feature is disabled"] = function()
   local context = require "agentcomplete.context"
   local buf = prompt_buffer()

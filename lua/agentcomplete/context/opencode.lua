@@ -121,9 +121,9 @@ function M.join_rows(json)
 end
 
 ---Where the OpenCode plugin records which session a process belongs to.
----@param state_root string|nil
+---@param state_root? string
 ---@return string
-local function pointer_dir(state_root)
+function M.pointer_dir(state_root)
   local xdg = vim.env.XDG_STATE_HOME
   local state = state_root or ((xdg and xdg ~= "") and xdg or vim.fs.normalize "~/.local/state")
   return state .. "/opencode/agentcomplete"
@@ -193,7 +193,7 @@ local function session_expr(cwd, opts)
     return quote(exported), "$OPENCODE_SESSION_ID"
   end
   local system = opts.system or vim.fn.system
-  local pointer = M.pick_pointer(pointer_records(pointer_dir(opts.state_root)), pid_chain(system), cwd)
+  local pointer = M.pick_pointer(pointer_records(M.pointer_dir(opts.state_root)), pid_chain(system), cwd)
   if pointer then
     return quote(pointer.sessionID), "pointer file"
   end
