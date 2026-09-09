@@ -57,12 +57,42 @@ T["install_opencode_plugin"]["refuses when something else already occupies the t
   expect.equality(vim.fn.readfile(home .. "/plugin/agentcomplete.ts"), { "mine" })
 end
 
-local saved_xdg, saved_notify, notes
+-- A link we wrote for a checkout that has since moved is indistinguishable from a stale one
+-- the user wrote; re-pointing it is what keeps a moved checkout from erroring on every launch.
+T["install_opencode_plugin"]["re-points a link left by another checkout"] = function()
+  local stale, source, home = tmpdir() .. "/opencode/agentcomplete.ts", tmpdir() .. "/agentcomplete.ts", tmpdir()
+  vim.fn.writefile({ "" }, source)
+  vim.fn.mkdir(home .. "/plugin", "p")
+  vim.loop.fs_symlink(stale, home .. "/plugin/agentcomplete.ts")
+  local status, target = require("agentcomplete").install_opencode_plugin(source, home)
+  expect.equality(status, "relinked")
+  expect.equality(vim.loop.fs_readlink(target), source)
+end
+
+T["install_opencode_plugin"]["refuses a symlink that is not one of ours"] = function()
+  local source, home = tmpdir() .. "/agentcomplete.ts", tmpdir()
+  vim.fn.writefile({ "" }, source)
+  vim.fn.mkdir(home .. "/plugin", "p")
+  vim.loop.fs_symlink(tmpdir() .. "/notes.md", home .. "/plugin/agentcomplete.ts")
+  expect.equality(require("agentcomplete").install_opencode_plugin(source, home), "conflict")
+end
+
+---Put a stub `opencode` on PATH, so what `setup()` does is decided by the test rather than by
+---whether the machine running it happens to have OpenCode installed.
+local function stub_opencode_on_path()
+  local bin = tmpdir()
+  vim.fn.writefile({ "#!/bin/sh" }, bin .. "/opencode")
+  vim.fn.setfperm(bin .. "/opencode", "rwxr-xr-x")
+  vim.env.PATH = bin .. ":" .. vim.env.PATH
+end
+
+local saved_xdg, saved_path, saved_notify, notes
 T["install_plugin"] = new_set {
   hooks = {
     pre_case = function()
-      saved_xdg = vim.env.XDG_CONFIG_HOME
+      saved_xdg, saved_path = vim.env.XDG_CONFIG_HOME, vim.env.PATH
       vim.env.XDG_CONFIG_HOME = tmpdir()
+      stub_opencode_on_path()
       notes, saved_notify = {}, vim.notify
       ---@diagnostic disable-next-line: duplicate-set-field
       vim.notify = function(msg, level)
@@ -71,6 +101,7 @@ T["install_plugin"] = new_set {
     end,
     post_case = function()
       vim.env.XDG_CONFIG_HOME = saved_xdg
+      vim.env.PATH = saved_path
       vim.notify = saved_notify
     end,
   },
@@ -104,11 +135,42 @@ T["install_plugin"]["reports a conflict rather than overwriting what is already 
   expect.equality(vim.fn.readfile(plugin_dir .. "/agentcomplete.ts"), { "mine" })
 end
 
+-- The flag ships in a synced config, so it runs on machines the user is not thinking about;
+-- installing there would plant an OpenCode config directory on a machine that has never had one.
+T["install_plugin"]["installs nothing on a machine without OpenCode"] = function()
+  vim.env.PATH = tmpdir()
+  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  expect.equality(vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode"), nil)
+  expect.equality(#notes, 0)
+end
+
 T["install_plugin"]["reports the install once, then stays quiet on later setups"] = function()
   require("agentcomplete").setup { opencode = { install_plugin = true } }
   require("agentcomplete").setup { opencode = { install_plugin = true } }
   expect.equality(#notes, 1)
   expect.equality(notes[1].level, vim.log.levels.INFO)
+end
+
+-- The command is an explicit request, so unlike the flag it installs wherever it is typed —
+-- including a machine whose OpenCode is not on Neovim's PATH.
+T["install_plugin"]["the command installs and reports even without OpenCode on PATH"] = function()
+  vim.env.PATH = tmpdir()
+  require("agentcomplete").setup {}
+  vim.cmd "AgentCompleteInstallOpenCodePlugin"
+  expect.equality(vim.loop.fs_stat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts") ~= nil, true)
+  expect.equality(#notes, 1)
+  expect.equality(notes[1].level, vim.log.levels.INFO)
+end
+
+T["install_plugin"]["the command reports when the shipped plugin is off the runtimepath"] = function()
+  local saved_rtp = vim.o.runtimepath
+  vim.o.runtimepath = tmpdir()
+  require("agentcomplete").setup {}
+  vim.cmd "AgentCompleteInstallOpenCodePlugin"
+  vim.o.runtimepath = saved_rtp
+  expect.equality(vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode"), nil)
+  expect.equality(#notes, 1)
+  expect.equality(notes[1].level, vim.log.levels.ERROR)
 end
 
 T["setup registers the Claude Code detector"] = function()

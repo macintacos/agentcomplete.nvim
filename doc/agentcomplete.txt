@@ -231,7 +231,13 @@ The full default configuration, with every option: >lua
 			one-shot you have to remember on each new machine,
 			while `setup()` runs wherever your config does, and
 			without the plugin |agentcomplete-context| falls back
-			to a `guessed` session. OpenCode-only.
+			to a `guessed` session.
+
+			Because that config travels to machines that have no
+			OpenCode, the flag installs only where `opencode` is
+			on your `$PATH`; the command itself is an explicit
+			request and installs wherever you type it.
+			OpenCode-only.
 
 ==============================================================================
 5. blink.cmp integration
@@ -341,9 +347,10 @@ the editor's working directory.
 			conversation instead of guessing at it.
 
 			A symlink rather than a copy, so the installed plugin
-			follows the checkout when agentcomplete updates. It
-			refuses rather than overwrites when a file is already
-			at that path.
+			follows the checkout when agentcomplete updates. A
+			link left by a checkout that has since moved is
+			re-pointed at the current one; a regular file at that
+			path is yours, and is refused rather than overwritten.
 
 			It does not run from `setup()` unless
 			'opencode.install_plugin' asks it to: writing into
