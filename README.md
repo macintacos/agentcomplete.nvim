@@ -35,8 +35,8 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```
 
 Or call `require("agentcomplete").setup({})` with your plugin manager of choice. That is
-the only setup required — there is no companion plugin to install on the Claude Code or
-OpenCode side. If detection ever misses (e.g. an unusual launch), force it on with
+the only setup required on the Claude Code side. OpenCode users have one optional extra
+step — see below. If detection ever misses (e.g. an unusual launch), force it on with
 `:AgentCompleteAttach`.
 
 ## Setup gotchas
@@ -77,6 +77,21 @@ agentcomplete's `setup()` in the right order:
 
 Once registered, the source self-gates — it stays dormant everywhere except a detected
 prompt buffer, so listing it above is harmless.
+
+### Using OpenCode? Install the session pointer plugin (optional)
+
+agentcomplete shows the agent's last message in a pane beside your prompt. OpenCode hands
+its editor no session id, so without help agentcomplete has to guess which conversation
+the prompt belongs to — right for one OpenCode per project, wrong when two share a
+directory. Run this once to replace the guess with a certainty:
+
+```vim
+:AgentCompleteInstallOpenCodePlugin
+```
+
+It symlinks a small plugin into OpenCode's config directory; restart OpenCode to pick it
+up. Skipping it costs you only that certainty — the pane still opens, and labels itself
+`guessed`. See `:help agentcomplete-context`.
 
 ### Prefer zero config?
 
