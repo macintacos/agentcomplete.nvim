@@ -160,6 +160,7 @@ The full default configuration, with every option: >lua
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
 	    resolve_via_cli = true,            -- also source skills/commands from `opencode debug`
+	    install_plugin = false,            -- symlink the session-pointer plugin from setup()
 	  },
 	})
 <
@@ -218,6 +219,19 @@ The full default configuration, with every option: >lua
 			Set to `false` to skip the subprocesses, leaving
 			completion to the filesystem scan and the
 			`opencode.json[c]` command map. OpenCode-only.
+
+'opencode.install_plugin'
+			boolean (default `false`). When true, `setup()`
+			performs the same symlink as
+			|:AgentCompleteInstallOpenCodePlugin|, reporting only
+			when the outcome is something other than "already
+			installed" — so a conflict or a failure is reported on
+			every launch until you resolve it. Set it in a Neovim
+			config synced across machines: the command is a
+			one-shot you have to remember on each new machine,
+			while `setup()` runs wherever your config does, and
+			without the plugin |agentcomplete-context| falls back
+			to a `guessed` session. OpenCode-only.
 
 ==============================================================================
 5. blink.cmp integration
@@ -328,10 +342,12 @@ the editor's working directory.
 
 			A symlink rather than a copy, so the installed plugin
 			follows the checkout when agentcomplete updates. It
-			never runs from `setup()` — writing into another
-			tool's config directory unasked is a surprise — and it
 			refuses rather than overwrites when a file is already
 			at that path.
+
+			It does not run from `setup()` unless
+			'opencode.install_plugin' asks it to: writing into
+			another tool's config directory unasked is a surprise.
 
 ==============================================================================
 10. Completion sources
@@ -480,7 +496,8 @@ the one that answered — a guess is never shown as a certainty:
 			is why it says so in the border.
 
 A `guessed` header means the pane may be showing another conversation. Install
-the plugin to replace the guess with a certainty.
+the plugin to replace the guess with a certainty, either with
+|:AgentCompleteInstallOpenCodePlugin| or by setting 'opencode.install_plugin'.
 
 ==============================================================================
 13. Diagnostics

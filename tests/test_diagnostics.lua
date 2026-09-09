@@ -272,12 +272,21 @@ end
 T["render"]["surfaces the CLI resolver toggle and its resolved skill count"] = function()
   local diag = require "agentcomplete.diagnostics"
   local report = full_report()
-  report.config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true }
+  report.config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false }
   report.discovery.cli_skills = 17
   local out = diag.render(report)
   expect.equality(has(out, "resolve_via_cli"), true)
   expect.equality(has(out, "opencode debug skill"), true)
   expect.equality(has(out, "17"), true) -- the CLI-resolved skill count
+end
+
+-- A `guessed` context rung with no plugin installed forks on whether the user ever asked for the
+-- install; without this line the report cannot settle it.
+T["render"]["surfaces whether setup() was asked to install the OpenCode plugin"] = function()
+  local diag = require "agentcomplete.diagnostics"
+  local report = full_report()
+  report.config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = true }
+  expect.equality(has(diag.render(report), "opencode.install_plugin:            yes"), true)
 end
 
 -- Counting commands per source is what makes a discovery path that searched the wrong directory

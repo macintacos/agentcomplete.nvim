@@ -57,6 +57,60 @@ T["install_opencode_plugin"]["refuses when something else already occupies the t
   expect.equality(vim.fn.readfile(home .. "/plugin/agentcomplete.ts"), { "mine" })
 end
 
+local saved_xdg, saved_notify, notes
+T["install_plugin"] = new_set {
+  hooks = {
+    pre_case = function()
+      saved_xdg = vim.env.XDG_CONFIG_HOME
+      vim.env.XDG_CONFIG_HOME = tmpdir()
+      notes, saved_notify = {}, vim.notify
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.notify = function(msg, level)
+        table.insert(notes, { msg = msg, level = level })
+      end
+    end,
+    post_case = function()
+      vim.env.XDG_CONFIG_HOME = saved_xdg
+      vim.notify = saved_notify
+    end,
+  },
+}
+
+T["install_plugin"]["defaults off, and installs nothing"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup {}
+  expect.equality(agentcomplete.config.opencode.install_plugin, false)
+  expect.equality(vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"), nil)
+end
+
+T["install_plugin"]["symlinks the shipped plugin when opted in"] = function()
+  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  local target = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"
+  local linked = vim.loop.fs_readlink(target)
+  expect.equality(type(linked), "string")
+  ---@cast linked string
+  expect.equality(vim.endswith(linked, "opencode/agentcomplete.ts"), true)
+  -- fs_stat follows the link, so this is what separates an installed plugin from a dangling one.
+  expect.equality(vim.loop.fs_stat(target) ~= nil, true)
+end
+
+T["install_plugin"]["reports a conflict rather than overwriting what is already there"] = function()
+  local plugin_dir = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin"
+  vim.fn.mkdir(plugin_dir, "p")
+  vim.fn.writefile({ "mine" }, plugin_dir .. "/agentcomplete.ts")
+  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  expect.equality(#notes, 1)
+  expect.equality(notes[1].level, vim.log.levels.ERROR)
+  expect.equality(vim.fn.readfile(plugin_dir .. "/agentcomplete.ts"), { "mine" })
+end
+
+T["install_plugin"]["reports the install once, then stays quiet on later setups"] = function()
+  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  expect.equality(#notes, 1)
+  expect.equality(notes[1].level, vim.log.levels.INFO)
+end
+
 T["setup registers the Claude Code detector"] = function()
   require("agentcomplete").setup()
   local detect = require "agentcomplete.detect"
