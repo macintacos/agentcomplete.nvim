@@ -4,6 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.29",
+    "@types/node": "^26.5.0",
     "typescript": "^5.8.2"
   }
 }
