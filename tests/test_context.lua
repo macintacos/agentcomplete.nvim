@@ -455,6 +455,13 @@ local function title_text(win)
   end, vim.api.nvim_win_get_config(win).title))
 end
 
+---The text of a float's footer, with its highlight groups dropped.
+local function footer_text(win)
+  return table.concat(vim.tbl_map(function(chunk)
+    return chunk[1]
+  end, vim.api.nvim_win_get_config(win).footer))
+end
+
 ---The split the float sits over, i.e. the remaining non-floating window that is not `prompt_win`.
 local function spacer_win(prompt_win)
   for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -525,6 +532,42 @@ T["open"]["names the resolution rung in the border"] = function()
   local result = { ok = true, resolver = "opencode", rung = "pointer file", text = "hello" }
   context.open(buf, session_for "opencode", { enabled = true, min_width = 160 }, with_resolver(result))
   expect.equality(title_text(assert(pane_win())), "─ opencode · pointer file · last message ")
+end
+
+-- The pane is reference material for the prompt beside it, so the keys that page it belong
+-- where the reader is already looking rather than in the help alone.
+T["open"]["advertises the scroll keys in the footer"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = "<C-b>" } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ ^B/^F scroll · read-only ─")
+end
+
+T["open"]["advertises only the scroll key that is mapped"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ ^F scroll · read-only ─")
+end
+
+T["open"]["keeps the footer to what the pane still is when no key scrolls it"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = false, scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ read-only ─")
+end
+
+-- Anything that is not a plain control key is shown as Vim spells it, since there is no
+-- shorter form of it a reader would recognise.
+T["open"]["shows a non-control scroll key by its Vim notation"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<PageDown>", scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ <PageDown> scroll · read-only ─")
 end
 
 -- The pane is the one markdown in the editor nobody will edit, so the markup that exists to

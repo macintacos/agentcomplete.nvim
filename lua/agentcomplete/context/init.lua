@@ -159,6 +159,7 @@ end
 ---@field enabled boolean Whether attaching opens the pane at all.
 ---@field min_width integer Terminal width at or above which the pane opens as a vertical split.
 ---@field rumdl_config? string Path to a rumdl config file for the pane's formatting; unset formats with rumdl's built-in defaults.
+---@field keys? { scroll_down: string|false, scroll_up: string|false } Prompt-buffer keys that page the pane; either `false` to leave that key alone.
 
 ---Build the pane for a resolved message, or record and log a resolver's failure.
 ---@param buf integer
@@ -189,6 +190,7 @@ local function show(buf, result, config, log_path, format)
     min_width = config.min_width,
     resolver = result.resolver,
     rung = result.rung,
+    keys = config.keys,
     on_close = function()
       M.close(buf)
     end,

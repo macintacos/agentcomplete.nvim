@@ -71,23 +71,44 @@ local function geometry(spacer)
   }
 end
 
----The frame: who is speaking, and that you cannot answer here. Two-tone so the agent's name
----reads first and the labels recede into the border.
+---A key as the footer shows it: `<C-f>` becomes `^F`, and anything that is not a plain
+---control key stays as Vim spells it.
+---@param lhs string
+---@return string
+local function label(lhs)
+  local keys = vim.fn.keytrans(vim.api.nvim_replace_termcodes(lhs, true, true, true))
+  return (keys:gsub("^<C%-(%u)>$", "^%1"))
+end
+
+---Up before down, so the footer reads in the direction the message does.
+local SCROLL_ACTIONS = { "scroll_up", "scroll_down" }
+
+---The frame: who is speaking, how to read past the first screen, and that you cannot answer
+---here. Two-tone so the agent's name reads first and the labels recede into the border.
 ---@param resolver string
 ---@param rung string|nil
+---@param keys table<string, string|false>|nil
 ---@return vim.api.keyset.win_config
-local function chrome(resolver, rung)
+local function chrome(resolver, rung, keys)
   local title = { { "─ ", "FloatBorder" }, { resolver, "Title" } }
   if rung then
     title[#title + 1] = { " · " .. rung, "Comment" }
   end
   title[#title + 1] = { " · last message ", "Comment" }
+  local scrolls = {}
+  for _, action in ipairs(SCROLL_ACTIONS) do
+    local lhs = keys and keys[action]
+    if lhs then
+      scrolls[#scrolls + 1] = label(lhs)
+    end
+  end
+  local hint = #scrolls > 0 and (table.concat(scrolls, "/") .. " scroll · read-only") or "read-only"
   return {
     style = "minimal",
     border = "rounded",
     title = title,
     title_pos = "left",
-    footer = { { "─ ", "FloatBorder" }, { "read-only", "Comment" }, { " ─", "FloatBorder" } },
+    footer = { { "─ ", "FloatBorder" }, { hint, "Comment" }, { " ─", "FloatBorder" } },
     footer_pos = "right",
   }
 end
@@ -176,6 +197,7 @@ end
 ---@field min_width integer Terminal width at or above which the pane sits beside the prompt.
 ---@field resolver string Name shown in the border.
 ---@field rung? string Which step of the resolver's chain produced the session, shown beside its name.
+---@field keys? table<string, string|false> Prompt-buffer keys that page the pane, by action; `false` disables one.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
 ---Build the pane beside `buf`. Vertical at or above `min_width`, horizontal below it.
@@ -191,7 +213,7 @@ function M.open(buf, opts)
 
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  local win_config = vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver, opts.rung))
+  local win_config = vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver, opts.rung, opts.keys))
   local win = vim.api.nvim_open_win(pane_buf, false, win_config)
 
   -- Contents and filetype after the window, not before: window-local options are set against
