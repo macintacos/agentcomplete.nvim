@@ -80,6 +80,12 @@ agentcomplete's `setup()` in the right order:
 Once registered, the source self-gates — it stays dormant everywhere except a detected
 prompt buffer, so listing it above is harmless.
 
+agentcomplete also maps `<C-b>` and `<C-f>` in the prompt buffer to scroll its context
+pane, which blink's presets use to scroll the documentation window. Both work — blink
+falls back to agentcomplete's mapping when its docs are closed — but see
+`:help agentcomplete-context-keys` for the one case where they collide, and how to pick
+different keys.
+
 ### Using OpenCode? Install the session pointer plugin (optional)
 
 agentcomplete shows the agent's last message in a pane beside your prompt. OpenCode hands
