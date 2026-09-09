@@ -87,18 +87,24 @@ end
 
 ---Symlink the shipped OpenCode plugin into `<config_home>/plugin/`, so OpenCode loads it and
 ---the context pane can resolve a session by pointer file rather than by guess. A symlink
----rather than a copy, so the installed plugin tracks the checkout. Anything already at the
----target is left alone: it is the user's, and an older checkout's link reads the same as a
----hand-written plugin.
+---rather than a copy, so the installed plugin tracks the checkout.
+---
+---A symlink to some other `opencode/agentcomplete.ts` is taken to be ours from a checkout that
+---has moved, and is re-pointed. A regular file is the user's and is left alone. The two are
+---told apart by shape alone, so a hand-written symlink of that name is re-pointed too.
 ---@param source string The shipped `agentcomplete.ts`.
 ---@param config_home string OpenCode's config home.
----@return "created"|"current"|"conflict"|"failed" status
+---@return "created"|"current"|"relinked"|"conflict"|"failed" status
 ---@return string target Where the plugin was installed, or what stood in the way.
 function M.install_opencode_plugin(source, config_home)
   local target = config_home .. "/plugin/agentcomplete.ts"
   local linked = vim.loop.fs_readlink(target)
   if linked == source then
     return "current", target
+  end
+  if linked and vim.endswith(linked, "opencode/agentcomplete.ts") then
+    local ok = vim.loop.fs_unlink(target) and vim.loop.fs_symlink(source, target)
+    return ok and "relinked" or "failed", target
   end
   if vim.loop.fs_lstat(target) then
     return "conflict", target
@@ -116,13 +122,14 @@ end
 local INSTALL_MESSAGES = {
   created = "installed the OpenCode plugin at ",
   current = "the OpenCode plugin is already installed at ",
+  relinked = "re-pointed the OpenCode plugin at this checkout: ",
   conflict = "remove it and re-run — refusing to overwrite the file already at ",
   failed = "could not symlink the OpenCode plugin into ",
   missing = "no opencode/agentcomplete.ts on the runtimepath",
 }
 
 ---Resolve the shipped plugin on the runtimepath and symlink it into OpenCode's config home.
----@return "created"|"current"|"conflict"|"failed"|"missing" status
+---@return "created"|"current"|"relinked"|"conflict"|"failed"|"missing" status
 ---@return string target Where it landed, what stood in the way, or "" when unresolved.
 local function install_opencode_plugin_from_rtp()
   local source = vim.api.nvim_get_runtime_file("opencode/agentcomplete.ts", false)[1]
@@ -134,10 +141,11 @@ local function install_opencode_plugin_from_rtp()
 end
 
 ---Report an install outcome, at ERROR unless the plugin ended up in place.
----@param status "created"|"current"|"conflict"|"failed"|"missing"
+---@param status "created"|"current"|"relinked"|"conflict"|"failed"|"missing"
 ---@param target string
 local function notify_install(status, target)
-  local level = (status == "created" or status == "current") and vim.log.levels.INFO or vim.log.levels.ERROR
+  local installed = status == "created" or status == "current" or status == "relinked"
+  local level = installed and vim.log.levels.INFO or vim.log.levels.ERROR
   vim.notify("agentcomplete: " .. INSTALL_MESSAGES[status] .. target, level)
 end
 
@@ -200,8 +208,10 @@ function M.setup(opts)
     notify_install(install_opencode_plugin_from_rtp())
   end, { desc = "Symlink agentcomplete's session-pointer plugin into OpenCode's config" })
 
-  -- Opt-in: writing into another tool's config directory unasked is a surprise.
-  if M.config.opencode.install_plugin then
+  -- Opt-in: writing into another tool's config directory unasked is a surprise. And opting in
+  -- travels with a synced config, so the machine has to have OpenCode before this writes to it
+  -- — typing the command is the explicit request that installs anywhere.
+  if M.config.opencode.install_plugin and vim.fn.executable "opencode" == 1 then
     local status, target = install_opencode_plugin_from_rtp()
     -- `current` is every launch after the first; report only what changed or broke.
     if status ~= "current" then
