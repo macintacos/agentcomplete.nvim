@@ -570,6 +570,91 @@ T["open"]["shows a non-control scroll key by its Vim notation"] = function()
   expect.equality(footer_text(assert(pane_win())), "─ <PageDown> scroll · read-only ─")
 end
 
+local SCROLL_KEYS = { scroll_down = "<C-f>", scroll_up = "<C-b>" }
+
+---A message long enough that the pane has somewhere to page to.
+local function long_message()
+  local lines = {}
+  for i = 1, 200 do
+    lines[i] = "line " .. i
+  end
+  return table.concat(lines, "\n")
+end
+
+---`buf`'s mapping of `lhs` in `mode`, or nil when it has none.
+local function mapping(buf, mode, lhs)
+  local wanted = vim.fn.keytrans(vim.api.nvim_replace_termcodes(lhs, true, true, true))
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+    if map.lhs == wanted then
+      return map
+    end
+  end
+end
+
+---Press `lhs` in the current window, running the mapping it fires.
+local function press(lhs)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(lhs, true, false, true), "x", false)
+end
+
+---The line the pane is showing from.
+local function pane_line()
+  return vim.fn.line("w0", assert(pane_win()))
+end
+
+-- Reading past the pane's first screen otherwise means moving the cursor into it and back,
+-- which cannot be done without dropping out of the prompt's insert mode.
+T["open"]["pages the pane from the prompt in normal mode"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
+  press "<C-f>"
+  local paged = pane_line()
+  expect.equality(paged > 1, true)
+  press "<C-b>"
+  expect.equality(pane_line() < paged, true)
+end
+
+-- Insert mode is the whole point -- the keys page the message without the reader dropping out
+-- of the reply they are composing -- and the prompt's window staying current is what leaves
+-- that mode intact.
+T["open"]["pages the pane from insert mode without disturbing the prompt"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
+  local prompt_win, prompt_cursor = vim.api.nvim_get_current_win(), vim.api.nvim_win_get_cursor(0)
+  assert(mapping(buf, "i", "<C-f>")).callback()
+  expect.equality(pane_line() > 1, true)
+  expect.equality(vim.api.nvim_get_current_win(), prompt_win)
+  expect.equality(vim.api.nvim_win_get_cursor(0), prompt_cursor)
+end
+
+T["open"]["takes the scroll keys back off the prompt when the pane closes"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(mapping(buf, "n", "<C-f>") ~= nil, true)
+  expect.equality(mapping(buf, "i", "<C-b>") ~= nil, true)
+  context.close(buf)
+  expect.equality(mapping(buf, "n", "<C-f>"), nil)
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
+-- `false` is how a user keeps a key they have their own use for -- blink.cmp's documentation
+-- scroll being the one this plugin is most likely to be sitting next to.
+T["open"]["leaves a scroll key alone when it is disabled"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(mapping(buf, "i", "<C-f>") ~= nil, true)
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
 -- The pane is the one markdown in the editor nobody will edit, so the markup that exists to
 -- be edited is what it hides. Everything a gutter is for -- line numbers to jump to, signs,
 -- folds -- addresses a buffer you act on, and this is a buffer you read.

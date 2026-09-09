@@ -9,8 +9,9 @@
 local M = {}
 
 ---The pane's two windows, per prompt buffer: `win` is the float holding the message, `spacer`
----the split it sits over.
----@type table<integer, { win: integer, spacer: integer }>
+---the split it sits over. `keys` is what `open` mapped on the prompt, so `close` removes
+---exactly that without needing the configuration again.
+---@type table<integer, { win: integer, spacer: integer, keys: string[] }>
 M._panes = {}
 
 ---What the pane turns off beyond `style = "minimal"`, which already clears 'number',
@@ -80,8 +81,25 @@ local function label(lhs)
   return (keys:gsub("^<C%-(%u)>$", "^%1"))
 end
 
----Up before down, so the footer reads in the direction the message does.
-local SCROLL_ACTIONS = { "scroll_up", "scroll_down" }
+---The two ways to page the pane: the option each is configured by, the key Vim pages with as
+---a terminal code, and how the mapping names itself. Up before down, so the footer reads in
+---the direction the message does.
+local SCROLL = {
+  { option = "scroll_up", page = "\2", desc = "agentcomplete: scroll the last-message pane up" },
+  { option = "scroll_down", page = "\6", desc = "agentcomplete: scroll the last-message pane down" },
+}
+
+---Page `win`, leaving the window the reader is in current. Vim's own paging rather than a
+---line count, because the pane wraps and a count would page it erratically.
+---@param win integer
+---@param key string A terminal code from `SCROLL`.
+local function page(win, key)
+  if vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_win_call(win, function()
+      vim.cmd("normal! " .. key)
+    end)
+  end
+end
 
 ---The frame: who is speaking, how to read past the first screen, and that you cannot answer
 ---here. Two-tone so the agent's name reads first and the labels recede into the border.
@@ -96,8 +114,8 @@ local function chrome(resolver, rung, keys)
   end
   title[#title + 1] = { " · last message ", "Comment" }
   local scrolls = {}
-  for _, action in ipairs(SCROLL_ACTIONS) do
-    local lhs = keys and keys[action]
+  for _, scroll in ipairs(SCROLL) do
+    local lhs = keys and keys[scroll.option]
     if lhs then
       scrolls[#scrolls + 1] = label(lhs)
     end
@@ -226,7 +244,20 @@ function M.open(buf, opts)
     vim.wo[win][option] = value
   end
 
-  M._panes[buf] = { win = win, spacer = spacer }
+  -- On the prompt buffer rather than the pane: the pane is reference for the reply being
+  -- composed, so it has to be readable without leaving the reply.
+  local keys = {}
+  for _, scroll in ipairs(SCROLL) do
+    local lhs = opts.keys and opts.keys[scroll.option]
+    if lhs then
+      keys[#keys + 1] = lhs
+      vim.keymap.set({ "n", "i" }, lhs, function()
+        page(win, scroll.page)
+      end, { buffer = buf, desc = scroll.desc })
+    end
+  end
+
+  M._panes[buf] = { win = win, spacer = spacer, keys = keys }
   follow {
     buf = buf,
     group = opts.group,
@@ -239,8 +270,8 @@ function M.open(buf, opts)
   return win
 end
 
----Close the pane's windows and forget them. The augroup its autocmds live in belongs to the
----caller, which is what `on_close` exists to tell.
+---Close the pane's windows, give the prompt its scroll keys back, and forget them. The augroup
+---its autocmds live in belongs to the caller, which is what `on_close` exists to tell.
 ---@param buf integer
 function M.close(buf)
   local pane = M._panes[buf]
@@ -251,6 +282,11 @@ function M.close(buf)
   M._panes[buf] = nil
   for _, win in ipairs { pane.win, pane.spacer } do
     pcall(vim.api.nvim_win_close, win, true)
+  end
+  -- Guarded like the window close above: the prompt buffer may already be wiped, which took
+  -- its buffer-local mappings with it.
+  for _, lhs in ipairs(pane.keys) do
+    pcall(vim.keymap.del, { "n", "i" }, lhs, { buffer = buf })
   end
 end
 
