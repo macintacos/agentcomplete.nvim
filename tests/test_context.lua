@@ -613,11 +613,10 @@ T["open"]["pages the pane from the prompt in normal mode"] = function()
   expect.equality(pane_line() < paged, true)
 end
 
--- Insert mode is the whole point: the keys page the message without the reader dropping out
--- of the reply they are composing. That the mode itself survives cannot be asserted here --
--- `nvim_feedkeys` ends the pending insert under "x" and blocks under "x!", so `mode()` reads
--- `"n"` afterwards however the keys are fed -- so this pins what does leave it intact, which
--- is the prompt's window staying current across the page.
+-- Insert mode is the point: paging must not drop the reader out of the reply they are
+-- composing. `nvim_feedkeys` always leaves `mode()` reading "n" afterward, so that can't be
+-- asserted directly -- this pins what does survive instead: the prompt's window staying
+-- current across the page.
 T["open"]["pages the pane from insert mode without disturbing the prompt"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
