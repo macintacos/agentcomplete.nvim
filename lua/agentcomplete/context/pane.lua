@@ -1,6 +1,6 @@
----The pane the agent's last message is shown in: the windows it is built from and the
----autocmds that keep them in step with the prompt beside it. Nothing here knows what a
----resolver is — it is handed text and a name to put in the border.
+---The pane the agent's last message is shown in: the windows it is built from, the keys that
+---page them from the prompt beside it, and the autocmds that keep the three in step. Nothing
+---here knows what a resolver is — it is handed text, a name for the border, and keys to map.
 ---
 ---A split cannot carry a border and a float alone would cover the prompt rather than sit
 ---beside it, so the pane is both: a split reserves the room and takes the resize, and a float
@@ -8,9 +8,10 @@
 ---@class AgentComplete.Context.Pane
 local M = {}
 
----The pane's two windows, per prompt buffer: `win` is the float holding the message, `spacer`
----the split it sits over.
----@type table<integer, { win: integer, spacer: integer }>
+---What the pane left behind, per prompt buffer: `win` is the float holding the message,
+---`spacer` the split it sits over, and `keys` what `open` mapped on the prompt, so `close`
+---removes exactly that without needing the configuration again.
+---@type table<integer, { win: integer, spacer: integer, keys: string[] }>
 M._panes = {}
 
 ---What the pane turns off beyond `style = "minimal"`, which already clears 'number',
@@ -71,23 +72,99 @@ local function geometry(spacer)
   }
 end
 
----The frame: who is speaking, and that you cannot answer here. Two-tone so the agent's name
----reads first and the labels recede into the border.
+---A key as the footer shows it: `<C-f>` becomes `^F`, and anything that is not a plain
+---control key stays as Vim spells it.
+---@param lhs string
+---@return string
+local function label(lhs)
+  local shown = vim.fn.keytrans(vim.api.nvim_replace_termcodes(lhs, true, true, true))
+  return (shown:gsub("^<C%-(%u)>$", "^%1"))
+end
+
+---The two ways to page the pane. Up before down, so the footer reads in the direction the
+---message does.
+local SCROLL = {
+  { option = "scroll_up", keycode = vim.keycode "<C-b>", desc = "agentcomplete: scroll the last-message pane up" },
+  { option = "scroll_down", keycode = vim.keycode "<C-f>", desc = "agentcomplete: scroll the last-message pane down" },
+}
+
+---@class AgentComplete.Context.Pane.Scroll
+---@field lhs string Key to map on the prompt.
+---@field keycode string What Vim pages the pane with.
+---@field desc string How the mapping names itself.
+
+---The scroll keys `keys` asks for, in footer order. One reading of the configuration, so the
+---footer and the mappings cannot come to disagree about what is bound.
+---@param keys AgentComplete.Context.Keys|nil
+---@return AgentComplete.Context.Pane.Scroll[]
+local function configured(keys)
+  local active = {}
+  for _, scroll in ipairs(SCROLL) do
+    local lhs = keys and keys[scroll.option]
+    if lhs then
+      active[#active + 1] = { lhs = lhs, keycode = scroll.keycode, desc = scroll.desc }
+    end
+  end
+  return active
+end
+
+---Give `lhs` back, but only while it is still the mapping `open` set. A neighbour that has
+---remapped it since owns it now — blink.cmp does exactly that on the buffer's first
+---`InsertEnter`, and deleting its mapping would strand the key: blink reinstates nothing,
+---because its own re-apply stops as soon as any of its other mappings is still on the buffer.
+---@param buf integer
+---@param lhs string
+local function unmap(buf, lhs)
+  local wanted = vim.api.nvim_replace_termcodes(lhs, true, true, true)
+  for _, mode in ipairs { "n", "i" } do
+    for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+      local same = vim.api.nvim_replace_termcodes(map.lhs, true, true, true) == wanted
+      if same and vim.startswith(map.desc or "", "agentcomplete:") then
+        vim.keymap.del(mode, lhs, { buffer = buf })
+      end
+    end
+  end
+end
+
+---Page `win`, leaving the window the reader is in current. Vim's own paging rather than a
+---line count, because the pane wraps and a count would page it erratically.
+---
+---Once the pane is gone the key is not ours: blink.cmp resolves the mapping it falls back to
+---once, when it wires the buffer, so it goes on calling this for the buffer's life. Passing
+---the key through unmapped is what keeps it doing something rather than nothing.
+---@param win integer
+---@param key string
+local function page(win, key)
+  if not vim.api.nvim_win_is_valid(win) then
+    return vim.api.nvim_feedkeys(key, "n", false)
+  end
+  vim.api.nvim_win_call(win, function()
+    vim.cmd("normal! " .. key)
+  end)
+end
+
+---The frame: who is speaking, how to read past the first screen, and that you cannot answer
+---here. Two-tone so the agent's name reads first and the labels recede into the border.
 ---@param resolver string
 ---@param rung string|nil
+---@param scrolls AgentComplete.Context.Pane.Scroll[]
 ---@return vim.api.keyset.win_config
-local function chrome(resolver, rung)
+local function chrome(resolver, rung, scrolls)
   local title = { { "─ ", "FloatBorder" }, { resolver, "Title" } }
   if rung then
     title[#title + 1] = { " · " .. rung, "Comment" }
   end
   title[#title + 1] = { " · last message ", "Comment" }
+  local labels = vim.tbl_map(function(scroll)
+    return label(scroll.lhs)
+  end, scrolls)
+  local hint = #labels > 0 and (table.concat(labels, "/") .. " scroll · read-only") or "read-only"
   return {
     style = "minimal",
     border = "rounded",
     title = title,
     title_pos = "left",
-    footer = { { "─ ", "FloatBorder" }, { "read-only", "Comment" }, { " ─", "FloatBorder" } },
+    footer = { { "─ ", "FloatBorder" }, { hint, "Comment" }, { " ─", "FloatBorder" } },
     footer_pos = "right",
   }
 end
@@ -176,6 +253,7 @@ end
 ---@field min_width integer Terminal width at or above which the pane sits beside the prompt.
 ---@field resolver string Name shown in the border.
 ---@field rung? string Which step of the resolver's chain produced the session, shown beside its name.
+---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that page the pane.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
 ---Build the pane beside `buf`. Vertical at or above `min_width`, horizontal below it.
@@ -187,11 +265,15 @@ function M.open(buf, opts)
   if host == -1 then
     return nil
   end
+  -- Before the split: these are the first things here a bad `keys` value can raise from, and
+  -- a raise once the split exists strands it — nothing owns it yet to close it.
+  local scrolls = configured(opts.keys)
+  local frame = chrome(opts.resolver, opts.rung, scrolls)
   local spacer = reserve(host, vim.o.columns >= opts.min_width)
 
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  local win_config = vim.tbl_extend("error", geometry(spacer), chrome(opts.resolver, opts.rung))
+  local win_config = vim.tbl_extend("error", geometry(spacer), frame)
   local win = vim.api.nvim_open_win(pane_buf, false, win_config)
 
   -- Contents and filetype after the window, not before: window-local options are set against
@@ -204,7 +286,16 @@ function M.open(buf, opts)
     vim.wo[win][option] = value
   end
 
-  M._panes[buf] = { win = win, spacer = spacer }
+  -- On the prompt buffer, not the pane: the message has to be readable without leaving the
+  -- reply.
+  local mapped = vim.tbl_map(function(scroll)
+    vim.keymap.set({ "n", "i" }, scroll.lhs, function()
+      page(win, scroll.keycode)
+    end, { buffer = buf, desc = scroll.desc })
+    return scroll.lhs
+  end, scrolls)
+
+  M._panes[buf] = { win = win, spacer = spacer, keys = mapped }
   follow {
     buf = buf,
     group = opts.group,
@@ -217,8 +308,8 @@ function M.open(buf, opts)
   return win
 end
 
----Close the pane's windows and forget them. The augroup its autocmds live in belongs to the
----caller, which is what `on_close` exists to tell.
+---Close the pane's windows, unmap the scroll keys from the prompt, and forget them. The
+---augroup its autocmds live in belongs to the caller, which is what `on_close` exists to tell.
 ---@param buf integer
 function M.close(buf)
   local pane = M._panes[buf]
@@ -229,6 +320,11 @@ function M.close(buf)
   M._panes[buf] = nil
   for _, win in ipairs { pane.win, pane.spacer } do
     pcall(vim.api.nvim_win_close, win, true)
+  end
+  if vim.api.nvim_buf_is_valid(buf) then
+    for _, lhs in ipairs(pane.keys) do
+      unmap(buf, lhs)
+    end
   end
 end
 

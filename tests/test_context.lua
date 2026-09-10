@@ -404,6 +404,9 @@ T["open"] = new_set {
       for buf in pairs(context._state) do
         context.close(buf)
       end
+      -- A case that fed keys and failed before its own cleanup would otherwise leave every
+      -- case after it running in insert mode.
+      vim.cmd "silent! stopinsert"
       vim.cmd "silent! only"
       vim.o.columns = 80
     end,
@@ -453,6 +456,13 @@ local function title_text(win)
   return table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
   end, vim.api.nvim_win_get_config(win).title))
+end
+
+---The text of a float's footer, with its highlight groups dropped.
+local function footer_text(win)
+  return table.concat(vim.tbl_map(function(chunk)
+    return chunk[1]
+  end, vim.api.nvim_win_get_config(win).footer))
 end
 
 ---The split the float sits over, i.e. the remaining non-floating window that is not `prompt_win`.
@@ -508,13 +518,9 @@ T["open"]["frames the message, naming the resolver in the border"] = function()
   local buf = prompt_buffer()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
   local win = assert(pane_win())
-  local config = vim.api.nvim_win_get_config(win)
-  expect.equality(config.border[1], "╭")
+  expect.equality(vim.api.nvim_win_get_config(win).border[1], "╭")
   expect.equality(title_text(win), "─ claude-code · last message ")
-  local footer = table.concat(vim.tbl_map(function(chunk)
-    return chunk[1]
-  end, config.footer))
-  expect.equality(footer:find("read-only", 1, true) ~= nil, true)
+  expect.equality(footer_text(win):find("read-only", 1, true) ~= nil, true)
 end
 
 -- The rung the resolver answered on is what admits a guessed session is a guess, so it belongs
@@ -525,6 +531,158 @@ T["open"]["names the resolution rung in the border"] = function()
   local result = { ok = true, resolver = "opencode", rung = "pointer file", text = "hello" }
   context.open(buf, session_for "opencode", { enabled = true, min_width = 160 }, with_resolver(result))
   expect.equality(title_text(assert(pane_win())), "─ opencode · pointer file · last message ")
+end
+
+local SCROLL_KEYS = { scroll_down = "<C-f>", scroll_up = "<C-b>" }
+
+-- The pane is reference material for the prompt beside it, so the keys that page it belong
+-- where the reader is already looking rather than in the help alone.
+T["open"]["advertises the scroll keys in the footer"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ ^B/^F scroll · read-only ─")
+end
+
+T["open"]["advertises only the scroll key that is mapped"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ ^F scroll · read-only ─")
+end
+
+T["open"]["keeps the footer to what the pane still is when no key scrolls it"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = false, scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ read-only ─")
+end
+
+-- Anything that is not a plain control key is shown as Vim spells it, since there is no
+-- shorter form of it a reader would recognise.
+T["open"]["shows a non-control scroll key by its Vim notation"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<PageDown>", scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(footer_text(assert(pane_win())), "─ <PageDown> scroll · read-only ─")
+end
+
+---A message long enough that the pane has somewhere to page to.
+local function long_message()
+  local lines = {}
+  for i = 1, 200 do
+    lines[i] = "line " .. i
+  end
+  return table.concat(lines, "\n")
+end
+
+---`buf`'s mapping of `lhs` in `mode`, or nil when it has none.
+local function mapping(buf, mode, lhs)
+  local wanted = vim.fn.keytrans(vim.api.nvim_replace_termcodes(lhs, true, true, true))
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+    if map.lhs == wanted then
+      return map
+    end
+  end
+end
+
+---Press `lhs` in the current window, running the mapping it fires.
+local function press(lhs)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(lhs, true, false, true), "x", false)
+end
+
+---The line the pane is showing from.
+local function pane_line()
+  return vim.fn.line("w0", assert(pane_win()))
+end
+
+T["open"]["pages the pane from the prompt in normal mode"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
+  press "<C-f>"
+  local paged = pane_line()
+  expect.equality(paged > 1, true)
+  press "<C-b>"
+  expect.equality(pane_line() < paged, true)
+end
+
+-- Insert mode is the point: paging must not drop the reader out of the reply they are
+-- composing. `nvim_feedkeys` always leaves `mode()` reading "n" afterward, so that can't be
+-- asserted directly -- this pins what does survive instead: the prompt's window staying
+-- current across the page.
+T["open"]["pages the pane from insert mode without disturbing the prompt"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
+  local prompt_win, prompt_cursor = vim.api.nvim_get_current_win(), vim.api.nvim_win_get_cursor(0)
+  press "i<C-f>"
+  expect.equality(pane_line() > 1, true)
+  expect.equality(vim.api.nvim_get_current_win(), prompt_win)
+  expect.equality(vim.api.nvim_win_get_cursor(0), prompt_cursor)
+end
+
+T["open"]["takes the scroll keys back off the prompt when the pane closes"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(mapping(buf, "n", "<C-f>") ~= nil, true)
+  expect.equality(mapping(buf, "i", "<C-b>") ~= nil, true)
+  context.close(buf)
+  expect.equality(mapping(buf, "n", "<C-f>"), nil)
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
+-- blink.cmp resolves the mapping it falls back to once, when it wires the buffer, and holds
+-- that closure for the buffer's life -- so ours goes on being called after the pane it paged
+-- has gone. Swallowing the key there would leave it doing nothing at all.
+T["open"]["hands the key back to the prompt once the pane is gone"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer(vim.split(long_message(), "\n"))
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
+  local map = assert(mapping(buf, "i", "<C-f>"), "the pane maps <C-f>")
+  local stale = assert(map.callback, "the mapping runs a callback")
+  context.close(buf)
+  local prompt_win = vim.api.nvim_get_current_win()
+  stale()
+  press ""
+  expect.equality(vim.fn.line("w0", prompt_win) > 1, true)
+end
+
+-- A neighbour that remaps one of these keys after the pane opens owns it from then on --
+-- blink.cmp does exactly that, on the buffer's first `InsertEnter` -- so closing the pane
+-- must not take their mapping away with ours.
+T["open"]["leaves a scroll key a neighbour has since remapped"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  vim.keymap.set({ "n", "i" }, "<C-f>", function() end, { buffer = buf, desc = "neighbour: scroll docs" })
+  context.close(buf)
+  expect.equality(assert(mapping(buf, "i", "<C-f>")).desc, "neighbour: scroll docs")
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
+-- `false` is how a user keeps a key they have their own use for -- blink.cmp's documentation
+-- scroll being the one this plugin is most likely to be sitting next to.
+T["open"]["leaves a scroll key alone when it is disabled"] = function()
+  local context = require "agentcomplete.context"
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = false } }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  expect.equality(mapping(buf, "i", "<C-f>") ~= nil, true)
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
 end
 
 -- The pane is the one markdown in the editor nobody will edit, so the markup that exists to
