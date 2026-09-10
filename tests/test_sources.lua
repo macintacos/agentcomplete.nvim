@@ -286,6 +286,33 @@ T["items"]["at trigger returns files under cwd matching the query"] = function()
   expect.equality(items[1].kind, "file")
 end
 
+T["items"]["at trigger offers folders, every one ranked above every file"] = function()
+  local sources = require "agentcomplete.sources"
+  local session = fixture_session()
+  write(session.cwd .. "/src/util/helpers.lua", { "" })
+  local items = sources.items(session, { trigger = "@", query = "src", start_col = 1 })
+  -- By path, `src/util/` would sort after two of the files.
+  expect.equality(
+    vim.tbl_map(function(i)
+      return i.kind
+    end, items),
+    { "folder", "folder", "file", "file", "file" }
+  )
+  local folders = vim.tbl_map(function(i)
+    return i.insert_text
+  end, vim.list_slice(items, 1, 2))
+  table.sort(folders)
+  expect.equality(folders, { "src/ ", "src/util/ " })
+end
+
+T["items"]["an accepted folder ends its token, so completion does not reopen"] = function()
+  local sources = require "agentcomplete.sources"
+  local folder = sources.items(fixture_session(), { trigger = "@", query = "sr", start_col = 1 })[1]
+  expect.equality(folder.kind, "folder")
+  local line = "@" .. folder.insert_text
+  expect.equality(sources.context(line, #line), nil)
+end
+
 T["items"]["nil context yields no items"] = function()
   local sources = require "agentcomplete.sources"
   expect.equality(sources.items(fixture_session(), nil), {})

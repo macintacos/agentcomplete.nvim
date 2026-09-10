@@ -134,6 +134,34 @@ T["files"]["respects .gitignore inside a git work-tree"] = function()
   expect.equality(vim.tbl_contains(files, "ignored.log"), false)
 end
 
+T["folders"] = new_set()
+
+T["folders"]["in a work-tree, lists each folder holding a non-ignored file, plus empty ones"] = function()
+  local scan = require "agentcomplete.scan"
+  local root = tmpdir()
+  write(root .. "/src/init.lua", { "" })
+  write(root .. "/src/util/helpers.lua", { "" })
+  write(root .. "/lib/deep/c.lua", { "" })
+  write(root .. "/node_modules/pkg/index.js", { "" })
+  write(root .. "/logs/a.log", { "" })
+  -- A cache that ignores itself, as pytest and rumdl write theirs.
+  write(root .. "/.cache/.gitignore", { "*" })
+  write(root .. "/.gitignore", { "node_modules", "*.log" })
+  vim.fn.mkdir(root .. "/src/empty", "p")
+  vim.fn.system { "git", "-C", root, "init", "-q" }
+  vim.fn.system { "git", "-C", root, "add", "src" }
+  expect.equality(scan.folders(root, scan.files(root)), { "lib/", "lib/deep/", "src/", "src/empty/", "src/util/" })
+end
+
+T["folders"]["outside a work-tree, lists every folder by scandir, skipping dot-directories"] = function()
+  local scan = require "agentcomplete.scan"
+  local root = tmpdir()
+  write(root .. "/src/util/helpers.lua", { "" })
+  write(root .. "/.hidden/x.lua", { "" })
+  vim.fn.mkdir(root .. "/empty", "p")
+  expect.equality(scan.folders(root, scan.files(root)), { "empty/", "src/", "src/util/" })
+end
+
 T["claude_dirs"] = new_set()
 
 T["claude_dirs"]["always includes global (CLAUDE_CONFIG_DIR) and project-local dirs"] = function()

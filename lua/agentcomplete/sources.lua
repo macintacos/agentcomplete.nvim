@@ -16,7 +16,7 @@ local scan = require "agentcomplete.scan"
 ---@class AgentComplete.Item
 ---@field label string Display text, including the trigger (e.g. `/deploy`, `@src/init.lua`).
 ---@field insert_text string Text that replaces the query (the bare name/path).
----@field kind '"skill"'|'"command"'|'"file"'
+---@field kind '"skill"'|'"command"'|'"file"'|'"folder"'
 ---@field detail string|nil Short description shown alongside the item.
 
 ---Parse the completion context from a line and a 0-based byte cursor column.
@@ -143,10 +143,20 @@ function M.items(session, ctx)
       end
     end
   elseif ctx.trigger == "@" and enabled.file ~= false then
-    for _, f in ipairs(scan.files(session.cwd)) do
-      if matches(f, ctx.query) then
-        table.insert(out, { label = "@" .. f, insert_text = f, kind = "file" })
+    local function add_path(path, kind)
+      if matches(path, ctx.query) then
+        -- The space ends the token, so accepting a folder doesn't reopen the menu on its `/`.
+        local insert_text = kind == "folder" and path .. " " or path
+        table.insert(out, { label = "@" .. path, insert_text = insert_text, kind = kind })
       end
+    end
+    -- Folders first, as the native menu keeps this order; blink ranks via `score_offset` instead.
+    local files = scan.files(session.cwd)
+    for _, d in ipairs(scan.folders(session.cwd, files)) do
+      add_path(d, "folder")
+    end
+    for _, f in ipairs(files) do
+      add_path(f, "file")
     end
   end
   return out

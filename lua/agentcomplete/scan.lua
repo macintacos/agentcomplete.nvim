@@ -88,26 +88,112 @@ function M.commands(dirs)
   return out
 end
 
+---Order-preserving de-duplication of a path list.
+---@param list string[]
+---@return string[]
+local function dedup(list)
+  local seen, out = {}, {}
+  for _, v in ipairs(list) do
+    if not seen[v] then
+      seen[v] = true
+      out[#out + 1] = v
+    end
+  end
+  return out
+end
+
+---@param cwd string
+---@return boolean
+local function in_work_tree(cwd)
+  local probe = vim.fn.systemlist { "git", "-C", cwd, "rev-parse", "--is-inside-work-tree" }
+  return vim.v.shell_error == 0 and probe[1] == "true"
+end
+
+---Paths of one `kind` under `cwd`, relative to it: a bounded recursive scandir that
+---skips dotfiles and dot-directories.
+---@param cwd string
+---@param kind '"file"'|'"directory"'
+---@return string[]
+local function walk(cwd, kind)
+  local out = {}
+  for relpath, k in vim.fs.dir(cwd, { depth = 32 }) do
+    if k == kind and not relpath:match "^%." and not relpath:match "/%." then
+      out[#out + 1] = relpath
+    end
+  end
+  return out
+end
+
 ---List files under `cwd` as paths relative to it. Prefers `git ls-files`
 ---(gitignore-aware) inside a work-tree; otherwise a bounded recursive scandir
 ---that skips dotfiles and dot-directories.
 ---@param cwd string
 ---@return string[]
 function M.files(cwd)
-  local probe = vim.fn.systemlist { "git", "-C", cwd, "rev-parse", "--is-inside-work-tree" }
-  if vim.v.shell_error == 0 and probe[1] == "true" then
+  if in_work_tree(cwd) then
     local tracked = vim.fn.systemlist { "git", "-C", cwd, "ls-files", "--cached", "--others", "--exclude-standard" }
     if vim.v.shell_error == 0 then
       return tracked
     end
   end
-  local files = {}
-  for relpath, kind in vim.fs.dir(cwd, { depth = 32 }) do
-    if kind == "file" and not relpath:match "^%." and not relpath:match "/%." then
-      table.insert(files, relpath)
+  return walk(cwd, "file")
+end
+
+---Every ancestor folder of `paths`, with a trailing `/`.
+---@param paths string[]
+---@return string[]
+local function ancestors(paths)
+  local dirs = {}
+  for _, p in ipairs(paths) do
+    local i = p:find("/", 1, true)
+    while i do
+      dirs[#dirs + 1] = p:sub(1, i)
+      i = p:find("/", i + 1, true)
     end
   end
-  return files
+  return dirs
+end
+
+---@param path string
+---@return boolean
+local function is_empty_dir(path)
+  return vim.fs.dir(path)() == nil
+end
+
+---Folders under `cwd` according to git, or nil when git fails: each ancestor of `files`, plus
+---every empty folder. `--directory` reports a folder whose contents are all gitignored as if it
+---were empty, so only one that is empty on disk is kept.
+---@param cwd string
+---@param files string[]
+---@return string[]|nil
+local function git_folders(cwd, files)
+  local untracked = vim.fn.systemlist { "git", "-C", cwd, "ls-files", "--others", "--directory", "--exclude-standard" }
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
+  local dirs = ancestors(files)
+  for _, p in ipairs(untracked) do
+    if p:sub(-1) == "/" and is_empty_dir(cwd .. "/" .. p) then
+      dirs[#dirs + 1] = p
+    end
+  end
+  return dirs
+end
+
+---Every folder under `cwd`, relative to it with a trailing `/`, sorted. Inside a work-tree, that
+---is each folder holding a non-ignored file, plus empty ones; otherwise the same scandir
+---`M.files` falls back to.
+---@param cwd string
+---@param files string[] `M.files(cwd)`.
+---@return string[]
+function M.folders(cwd, files)
+  local dirs = in_work_tree(cwd) and git_folders(cwd, files)
+    or vim.tbl_map(function(d)
+      return d .. "/"
+    end, walk(cwd, "directory"))
+  dirs = dedup(dirs)
+  table.sort(dirs)
+  return dirs
 end
 
 ---Resolve Claude Code's config home (honors `$CLAUDE_CONFIG_DIR`).
@@ -169,20 +255,6 @@ local function enabled_plugin_roots(home)
     end
   end
   return roots
-end
-
----Order-preserving de-duplication of a path list.
----@param list string[]
----@return string[]
-local function dedup(list)
-  local seen, out = {}, {}
-  for _, v in ipairs(list) do
-    if not seen[v] then
-      seen[v] = true
-      out[#out + 1] = v
-    end
-  end
-  return out
 end
 
 ---Skill and command search dirs for a Claude Code session rooted at `cwd`:

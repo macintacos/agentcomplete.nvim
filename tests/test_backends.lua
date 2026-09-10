@@ -143,18 +143,50 @@ T["blink"]["file items use the File kind"] = function()
   expect.equality(f.textEdit.newText, "src/main.lua")
 end
 
+T["blink"]["folder items use the Folder kind"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local res = blink.build(fixture_session(), "@src", 0, 4)
+  local d = assert(find(res.items, function(i)
+    return i.label == "@src/lib/"
+  end))
+  expect.equality(d.kind, CIK.Folder)
+  expect.equality(d.textEdit.newText, "src/lib/ ")
+end
+
+T["blink"]["folders outrank every file under blink's score sort"] = function()
+  local blink = require "agentcomplete.backends.blink"
+  local items = blink.build(fixture_session(), "@src", 0, 4).items
+  local folder = assert(find(items, function(i)
+    return i.label == "@src/"
+  end))
+  local file = assert(find(items, function(i)
+    return i.label == "@src/main.lua"
+  end))
+  -- blink ranks on fuzzy score + score_offset, and a fuzzy score is a u16.
+  expect.equality(folder.score_offset - (file.score_offset or 0) > 65535, true)
+end
+
 T["blink"]["@ items are narrowed to the whole typed run, past any /"] = function()
   local blink = require "agentcomplete.backends.blink"
   -- blink's own needle stops at "/", so it cannot narrow "src/li" itself.
-  expect.equality(sorted_labels(blink.build(fixture_session(), "@src/li", 0, 7).items), { "@src/lib/util.lua" })
+  expect.equality(
+    sorted_labels(blink.build(fixture_session(), "@src/li", 0, 7).items),
+    { "@src/lib/", "@src/lib/util.lua" }
+  )
 end
 
 T["blink"]["@ alone is not swallowed by the empty-query matchfuzzy"] = function()
   local blink = require "agentcomplete.backends.blink"
   expect.equality(sorted_labels(blink.build(fixture_session(), "@", 0, 1).items), {
+    "@commands/",
     "@commands/deploy.md",
+    "@skills/",
+    "@skills/deploy-helper/",
     "@skills/deploy-helper/SKILL.md",
+    "@skills/zebra/",
     "@skills/zebra/SKILL.md",
+    "@src/",
+    "@src/lib/",
     "@src/lib/util.lua",
     "@src/main.lua",
   })
@@ -169,18 +201,24 @@ T["blink"]["@ narrowing does not pin the typed / to a path separator"] = functio
   local blink = require "agentcomplete.backends.blink"
   -- "rc" follows the typed "/" but lives in the segment before the real one, so
   -- pinning the slash drops the item entirely.
-  expect.equality(sorted_labels(blink.build(fixture_session(), "@s/rcli", 0, 7).items), { "@src/lib/util.lua" })
+  expect.equality(
+    sorted_labels(blink.build(fixture_session(), "@s/rcli", 0, 7).items),
+    { "@src/lib/", "@src/lib/util.lua" }
+  )
 end
 
 T["blink"]["@ with only slashes typed is not swallowed by matchfuzzy"] = function()
   local blink = require "agentcomplete.backends.blink"
   -- The needle is empty once slashes are dropped, which matchfuzzy answers with {}.
-  expect.equality(#blink.build(fixture_session(), "@/", 0, 2).items, 5)
+  expect.equality(#blink.build(fixture_session(), "@/", 0, 2).items, 11)
 end
 
 T["blink"]["@ narrowing is case-insensitive"] = function()
   local blink = require "agentcomplete.backends.blink"
-  expect.equality(sorted_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items), { "@src/lib/util.lua" })
+  expect.equality(
+    sorted_labels(blink.build(fixture_session(), "@SRC/LI", 0, 7).items),
+    { "@src/lib/", "@src/lib/util.lua" }
+  )
 end
 
 T["blink"]["@ narrowing applies at every run length, so deleting back widens"] = function()
@@ -188,7 +226,7 @@ T["blink"]["@ narrowing applies at every run length, so deleting back widens"] =
   -- Narrows on a slash-free run too, and holds no state, so a shorter run widens.
   expect.equality(
     sorted_labels(blink.build(fixture_session(), "@src", 0, 4).items),
-    { "@src/lib/util.lua", "@src/main.lua" }
+    { "@src/", "@src/lib/", "@src/lib/util.lua", "@src/main.lua" }
   )
 end
 

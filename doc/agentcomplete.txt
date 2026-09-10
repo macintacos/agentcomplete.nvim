@@ -39,7 +39,7 @@ attaches to that prompt buffer and offers exactly the completions that are
 useful while writing a prompt:
 
 	`/`	skills and commands available to the agent in this project
-	`@`	files under the project root
+	`@`	files and folders under the project root
 
 It does nothing in any other buffer. Outside a detected prompt buffer your
 normal completion stack is untouched.
@@ -397,11 +397,15 @@ the native backend, and fuzzy-matches the whole relative path on blink (see
 		`opencode.show_all_builtin_commands` is true. A user-defined
 		command of the same name as a built-in wins.
 
-	`@`	Files under the resolved project root. On blink, `@src/li`
-		finds `src/lib/util.lua`, and the menu keeps narrowing as
-		you type past each `/`. Slashes you type are separators
-		rather than anchors — they need not line up with the ones
-		in the path — so `@.co/grig` still finds
+	`@`	Files and folders under the resolved project root. Folders
+		end in `/` and rank above every file. A folder is offered
+		when it holds a file `@` offers or is empty, so gitignored
+		folders are not. Accepting a folder inserts a space after
+		it, ending the token so the menu closes. On blink,
+		`@src/li` finds `src/lib/util.lua`, and the menu keeps
+		narrowing as you type past each `/`. Slashes you type are
+		separators rather than anchors — they need not line up
+		with the ones in the path — so `@.co/grig` still finds
 		`.codegraph/.gitignore`.
 
 Which directories are searched for each tool is described in
@@ -427,8 +431,8 @@ for resolving `@` tokens, linked to `Directory`. Both links are defined with
 survive the `:hi` `clear` that a colorscheme change runs.
 
 What `@` counts as resolving is deliberately broader than what `@` completion
-offers: anything on disk, directories and gitignored files included, where
-completion is gitignore-aware and files only. Resolution happens at paint
+offers: anything on disk, gitignored files and folders included, where
+completion is gitignore-aware. Resolution happens at paint
 time, not at attach, so a file or skill created after the buffer opened
 highlights on the next repaint; repaints are debounced by about 100ms.
 

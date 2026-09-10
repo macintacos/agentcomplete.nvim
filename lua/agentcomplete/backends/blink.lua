@@ -26,7 +26,11 @@ local M = {}
 local sources = require "agentcomplete.sources"
 local CIK = vim.lsp.protocol.CompletionItemKind
 
-local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File }
+local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File, folder = CIK.Folder }
+
+---blink ranks on fuzzy score + `score_offset`, and a fuzzy score is a u16, so this offset
+---puts every folder above every file.
+local FOLDER_SCORE_OFFSET = 100000
 
 ---Fuzzy-narrow items to `query`, matching the whole relative path as one string.
 ---
@@ -73,6 +77,7 @@ function M.build(session, line, row, col)
       filterText = it.insert_text,
       detail = it.detail,
       kind = KIND[it.kind],
+      score_offset = it.kind == "folder" and FOLDER_SCORE_OFFSET or nil,
       textEdit = {
         newText = it.insert_text,
         range = {
