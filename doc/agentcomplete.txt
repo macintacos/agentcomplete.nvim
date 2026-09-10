@@ -213,11 +213,15 @@ The full default configuration, with every option: >lua
 			rumdl's own built-in defaults. See
 			|agentcomplete-context|.
 
-'context.keys'		table. Keys that page the context pane, mapped on the
-			prompt buffer in normal and insert mode while the pane
-			is open: `scroll_down` (default `<C-f>`) and `scroll_up`
-			(default `<C-b>`). Set either to `false` to leave that
+'context.keys.scroll_down'
+			string | `false` (default `<C-f>`). Key mapped on the
+			prompt buffer, normal and insert mode, that pages the
+			context pane down while it is open. `false` leaves the
 			key alone. See |agentcomplete-context-keys|.
+
+'context.keys.scroll_up'
+			string | `false` (default `<C-b>`). The same, paging
+			back up.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -478,7 +482,7 @@ Reaching it any other way means moving the cursor into the pane and back,
 which you cannot do without dropping out of the reply you are composing. The
 keys page by screen the way Vim's own do, so the pane's wrapped lines are
 counted as they are drawn. Whichever of the two is configured is named in the
-pane's footer, which drops the reminder entirely when neither is.
+pane's footer, which falls back to `read-only` alone when neither is.
 
 Both are 'context.keys', and either may be set to `false` to leave that key
 alone: >lua
@@ -490,8 +494,9 @@ alone: >lua
 <
 The mappings are buffer-local to the prompt and last only as long as the
 pane, so they shadow `<C-f>` and `<C-b>` nowhere else. Inside the prompt they
-do shadow Vim's own paging — though the prompt itself has little to page,
-holding only the reply you are writing.
+do shadow Vim's own paging in normal mode — though the prompt itself has
+little to page, holding only the reply you are writing — and `i_CTRL-F`'s
+reindent in insert, which a prose prompt has no use for.
 
 Using blink.cmp? Its `default`, `enter` and `super-tab` presets map the same
 two keys to scroll the documentation window. Both work: blink installs its
