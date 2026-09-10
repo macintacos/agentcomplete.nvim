@@ -84,13 +84,13 @@ end
 ---The two ways to page the pane. Up before down, so the footer reads in the direction the
 ---message does.
 local SCROLL = {
-  { option = "scroll_up", page = vim.keycode "<C-b>", desc = "agentcomplete: scroll the last-message pane up" },
-  { option = "scroll_down", page = vim.keycode "<C-f>", desc = "agentcomplete: scroll the last-message pane down" },
+  { option = "scroll_up", keycode = vim.keycode "<C-b>", desc = "agentcomplete: scroll the last-message pane up" },
+  { option = "scroll_down", keycode = vim.keycode "<C-f>", desc = "agentcomplete: scroll the last-message pane down" },
 }
 
 ---@class AgentComplete.Context.Pane.Scroll
 ---@field lhs string Key to map on the prompt.
----@field page string What Vim pages the pane with.
+---@field keycode string What Vim pages the pane with.
 ---@field desc string How the mapping names itself.
 
 ---The scroll keys `keys` asks for, in footer order. One reading of the configuration, so the
@@ -102,7 +102,7 @@ local function configured(keys)
   for _, scroll in ipairs(SCROLL) do
     local lhs = keys and keys[scroll.option]
     if lhs then
-      active[#active + 1] = { lhs = lhs, page = scroll.page, desc = scroll.desc }
+      active[#active + 1] = { lhs = lhs, keycode = scroll.keycode, desc = scroll.desc }
     end
   end
   return active
@@ -288,14 +288,14 @@ function M.open(buf, opts)
 
   -- On the prompt buffer, not the pane: the message has to be readable without leaving the
   -- reply.
-  local keys = vim.tbl_map(function(scroll)
+  local mapped = vim.tbl_map(function(scroll)
     vim.keymap.set({ "n", "i" }, scroll.lhs, function()
-      page(win, scroll.page)
+      page(win, scroll.keycode)
     end, { buffer = buf, desc = scroll.desc })
     return scroll.lhs
   end, scrolls)
 
-  M._panes[buf] = { win = win, spacer = spacer, keys = keys }
+  M._panes[buf] = { win = win, spacer = spacer, keys = mapped }
   follow {
     buf = buf,
     group = opts.group,
