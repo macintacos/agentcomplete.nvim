@@ -159,8 +159,8 @@ The full default configuration, with every option: >lua
 	    min_width = 160,     -- columns at or above which that split is vertical
 	    rumdl_config = nil,  -- path to a rumdl config file for the pane's formatting
 	    keys = {
-	      scroll_down = "<C-f>", -- page the pane down from the prompt
-	      scroll_up = "<C-b>",   -- page it back up
+	      scroll_down = "<S-Down>", -- page the pane down from the prompt
+	      scroll_up = "<S-Up>",     -- page it back up
 	    },
 	  },
 	  opencode = {
@@ -214,13 +214,13 @@ The full default configuration, with every option: >lua
 			|agentcomplete-context|.
 
 'context.keys.scroll_down'
-			string | `false` (default `<C-f>`). Key mapped on the
-			prompt buffer, normal and insert mode, that pages the
-			context pane down while it is open. `false` leaves the
-			key alone. See |agentcomplete-context-keys|.
+			string | `false` (default `<S-Down>`). Key mapped on
+			the prompt buffer, normal and insert mode, that pages
+			the context pane down while it is open. `false` leaves
+			the key alone. See |agentcomplete-context-keys|.
 
 'context.keys.scroll_up'
-			string | `false` (default `<C-b>`). The same, paging
+			string | `false` (default `<S-Up>`). The same, paging
 			back up.
 
 'opencode.show_all_builtin_commands'
@@ -465,7 +465,8 @@ beneath the prompt when the terminal is narrower than that. It re-places
 itself as you resize, so a window dragged narrower restacks rather than
 leaving both halves too cramped to read. It is drawn as a rounded-border
 window titled with the agent that spoke, and footed with the keys that page
-it and a reminder that you cannot answer here: "^B/^F scroll · read-only".
+it and a reminder that you cannot answer here:
+"<S-Up>/<S-Down> scroll · read-only".
 
 It reads as a document rather than a buffer you act on: no line numbers, no
 sign or fold column, and markdown markup concealed. That last one is the point
@@ -480,8 +481,8 @@ closes — with 'modifiable' off, so you can move the cursor in to read or copy
 but never type. The cursor starts in the prompt buffer.
 
                                                   *agentcomplete-context-keys*
-A message longer than one screen is paged from the prompt itself: `<C-f>`
-scrolls the pane down and `<C-b>` back up, in normal and insert mode both.
+A message longer than one screen is paged from the prompt itself: `<S-Down>`
+scrolls the pane down and `<S-Up>` back up, in normal and insert mode both.
 Reaching it any other way means moving the cursor into the pane and back,
 which you cannot do without dropping out of the reply you are composing. The
 keys page by screen the way Vim's own do, so the pane's wrapped lines are
@@ -497,21 +498,9 @@ alone: >lua
 	})
 <
 The mappings are buffer-local to the prompt and last only as long as the
-pane, so they shadow `<C-f>` and `<C-b>` nowhere else. Inside the prompt they
-do shadow Vim's own paging in normal mode — though the prompt itself has
-little to page, holding only the reply you are writing — and `i_CTRL-F`'s
-reindent in insert, which a prose prompt has no use for.
-
-Using blink.cmp? Its `default`, `enter` and `super-tab` presets map the same
-two keys to scroll the documentation window. Both work: blink installs its
-mappings on the first |InsertEnter| in the buffer and captures whatever was
-mapped before as its fallback, so the docs window scrolls while it is open
-and the pane scrolls otherwise. A pane that opens only *after* that first
-insert is the exception: it replaces blink's mappings for those two keys in
-that buffer, permanently, and blink's doc scroll is unavailable there. Two
-things do that — |:AgentCompleteAttach| run once you are already typing, and
-an OpenCode session lookup that takes long enough to finish after your first
-insert. Point 'context.keys' at other keys if you need both.
+pane, so they shadow `<S-Down>` and `<S-Up>` nowhere else. Inside the prompt
+they do shadow Vim's own paging — though the prompt itself has little to
+page, holding only the reply you are writing.
 
 The pane belongs to the prompt and goes when the prompt does. Quitting the
 prompt window dismisses the pane first, so `:q` returns you to the agent
