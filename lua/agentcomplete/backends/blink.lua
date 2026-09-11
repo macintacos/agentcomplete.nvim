@@ -14,9 +14,10 @@
 ---immediately after a slash), so it re-widens the menu to every file. Skill and
 ---command names are `:`-namespaced, so the needle never collapses on them.
 ---
----`get_trigger_characters` keeps `/` deliberately: dropping it makes typing `/`
----fall through blink's `on_char_added` to `trigger.hide()`, closing the menu
----mid-path, and it does not affect the needle or the ranking either way.
+---`get_trigger_characters` keeps `/` and `.` deliberately: neither is a keyword
+---character, so dropping one makes typing it fall through blink's `on_char_added` to
+---`trigger.hide()`, closing the menu mid-path (`src/`, `foo.py`). Neither affects the
+---needle or the ranking.
 ---
 ---`kind` is mapped through `vim.lsp.protocol.CompletionItemKind` (the same
 ---integers blink uses) so this module loads even when blink is not installed.
@@ -244,7 +245,7 @@ function M:enabled()
 end
 
 function M:get_trigger_characters()
-  return { "/", "@" }
+  return { "/", "@", "." }
 end
 
 function M:get_completions(ctx, callback)
