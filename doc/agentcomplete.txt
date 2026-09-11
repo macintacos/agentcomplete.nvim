@@ -159,8 +159,8 @@ The full default configuration, with every option: >lua
 	    min_width = 160,     -- columns at or above which that split is vertical
 	    rumdl_config = nil,  -- path to a rumdl config file for the pane's formatting
 	    keys = {
-	      scroll_down = "<S-Down>", -- page the pane down from the prompt
-	      scroll_up = "<S-Up>",     -- page it back up
+	      scroll_down = "<S-Down>", -- scroll the pane down a line from the prompt
+	      scroll_up = "<S-Up>",     -- scroll it back up
 	    },
 	  },
 	  opencode = {
@@ -215,13 +215,14 @@ The full default configuration, with every option: >lua
 
 'context.keys.scroll_down'
 			string | `false` (default `<S-Down>`). Key mapped on
-			the prompt buffer, normal and insert mode, that pages
-			the context pane down while it is open. `false` leaves
-			the key alone. See |agentcomplete-context-keys|.
+			the prompt buffer, normal and insert mode, that
+			scrolls the context pane down a line while it is open.
+			`false` leaves the key alone. See
+			|agentcomplete-context-keys|.
 
 'context.keys.scroll_up'
-			string | `false` (default `<S-Up>`). The same, paging
-			back up.
+			string | `false` (default `<S-Up>`). The same,
+			scrolling back up.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -464,7 +465,7 @@ composing is the work, and the message is reference for it — and moves
 beneath the prompt when the terminal is narrower than that. It re-places
 itself as you resize, so a window dragged narrower restacks rather than
 leaving both halves too cramped to read. It is drawn as a rounded-border
-window titled with the agent that spoke, and footed with the keys that page
+window titled with the agent that spoke, and footed with the keys that scroll
 it and a reminder that you cannot answer here:
 "<S-Up>/<S-Down> scroll · read-only".
 
@@ -481,13 +482,14 @@ closes — with 'modifiable' off, so you can move the cursor in to read or copy
 but never type. The cursor starts in the prompt buffer.
 
                                                   *agentcomplete-context-keys*
-A message longer than one screen is paged from the prompt itself: `<S-Down>`
-scrolls the pane down and `<S-Up>` back up, in normal and insert mode both.
-Reaching it any other way means moving the cursor into the pane and back,
-which you cannot do without dropping out of the reply you are composing. The
-keys page by screen the way Vim's own do, so the pane's wrapped lines are
-counted as they are drawn. Whichever of the two is configured is named in the
-pane's footer, which falls back to `read-only` alone when neither is.
+A message longer than one screen is read from the prompt itself: `<S-Down>`
+scrolls the pane down a line and `<S-Up>` back up, in normal and insert mode
+both; hold either to keep going. Reaching it any other way means moving the
+cursor into the pane and back, which you cannot do without dropping out of
+the reply you are composing. Lines are counted as the pane draws them, so a
+long paragraph it wraps scrolls a row at a time rather than all at once.
+Whichever of the two is configured is named in the pane's footer, which
+falls back to `read-only` alone when neither is.
 
 Both are 'context.keys', and either may be set to `false` to leave that key
 alone: >lua

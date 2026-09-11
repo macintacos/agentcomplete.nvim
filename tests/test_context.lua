@@ -535,7 +535,7 @@ end
 
 local SCROLL_KEYS = { scroll_down = "<C-f>", scroll_up = "<C-b>" }
 
--- The pane is reference material for the prompt beside it, so the keys that page it belong
+-- The pane is reference material for the prompt beside it, so the keys that scroll it belong
 -- where the reader is already looking rather than in the help alone.
 T["open"]["advertises the scroll keys in the footer"] = function()
   local context = require "agentcomplete.context"
@@ -571,7 +571,7 @@ T["open"]["shows a non-control scroll key by its Vim notation"] = function()
   expect.equality(footer_text(assert(pane_win())), "─ <PageDown> scroll · read-only ─")
 end
 
----A message long enough that the pane has somewhere to page to.
+---A message long enough that the pane has somewhere to scroll to.
 local function long_message()
   local lines = {}
   for i = 1, 200 do
@@ -600,24 +600,36 @@ local function pane_line()
   return vim.fn.line("w0", assert(pane_win()))
 end
 
-T["open"]["pages the pane from the prompt in normal mode"] = function()
+T["open"]["scrolls the pane a line per press from the prompt in normal mode"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
   context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
   press "<C-f>"
-  local paged = pane_line()
-  expect.equality(paged > 1, true)
+  expect.equality(pane_line(), 2)
   press "<C-b>"
-  expect.equality(pane_line() < paged, true)
+  expect.equality(pane_line(), 1)
 end
 
--- Insert mode is the point: paging must not drop the reader out of the reply they are
+-- Vim counts a wrapped paragraph as one line, so stepping by lines would jump it whole.
+T["open"]["scrolls a wrapped paragraph a row at a time"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  local text = string.rep("word ", 200) .. "\n" .. long_message()
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(text)))
+  press "<C-f>"
+  local view = vim.api.nvim_win_call(assert(pane_win()), vim.fn.winsaveview)
+  expect.equality({ view.topline, view.skipcol > 0 }, { 1, true })
+end
+
+-- Insert mode is the point: scrolling must not drop the reader out of the reply they are
 -- composing. `nvim_feedkeys` always leaves `mode()` reading "n" afterward, so that can't be
 -- asserted directly -- this pins what does survive instead: the prompt's window staying
--- current across the page.
-T["open"]["pages the pane from insert mode without disturbing the prompt"] = function()
+-- current across the scroll.
+T["open"]["scrolls the pane from insert mode without disturbing the prompt"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
   local buf = prompt_buffer()
@@ -643,8 +655,8 @@ T["open"]["takes the scroll keys back off the prompt when the pane closes"] = fu
 end
 
 -- blink.cmp resolves the mapping it falls back to once, when it wires the buffer, and holds
--- that closure for the buffer's life -- so ours goes on being called after the pane it paged
--- has gone. Swallowing the key there would leave it doing nothing at all.
+-- that closure for the buffer's life -- so ours goes on being called after the pane it scrolled
+-- has gone. There the key has to do what it does unmapped: `<C-f>` pages the prompt.
 T["open"]["hands the key back to the prompt once the pane is gone"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
@@ -657,7 +669,7 @@ T["open"]["hands the key back to the prompt once the pane is gone"] = function()
   local prompt_win = vim.api.nvim_get_current_win()
   stale()
   press ""
-  expect.equality(vim.fn.line("w0", prompt_win) > 1, true)
+  expect.equality(vim.fn.line("w0", prompt_win) > 2, true)
 end
 
 -- A neighbour that remaps one of these keys after the pane opens owns it from then on --

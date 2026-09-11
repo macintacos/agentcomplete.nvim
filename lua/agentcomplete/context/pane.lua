@@ -1,5 +1,5 @@
 ---The pane the agent's last message is shown in: the windows it is built from, the keys that
----page them from the prompt beside it, and the autocmds that keep the three in step. Nothing
+---scroll them from the prompt beside it, and the autocmds that keep the three in step. Nothing
 ---here knows what a resolver is — it is handed text, a name for the border, and keys to map.
 ---
 ---A split cannot carry a border and a float alone would cover the prompt rather than sit
@@ -19,10 +19,12 @@ M._panes = {}
 ---point of the pane rather than a detail of it: markdown markup exists to be edited, and this
 ---is the one markdown in the editor nobody will edit. The inset is a 'statuscolumn' rather
 ---than padding on the text, which would land in every yank and hide the markup from the
----parser that renders it.
+---parser that renders it. 'smoothscroll' lets the scroll keys step through a paragraph the
+---pane wraps a row at a time, where Vim would otherwise skip it whole as one line.
 local PANE_OPTIONS = {
   wrap = true,
   linebreak = true,
+  smoothscroll = true,
   conceallevel = 3,
   concealcursor = "nc",
   signcolumn = "no",
@@ -81,16 +83,16 @@ local function label(lhs)
   return (shown:gsub("^<C%-(%u)>$", "^%1"))
 end
 
----The two ways to page the pane. Up before down, so the footer reads in the direction the
+---The two ways to scroll the pane. Up before down, so the footer reads in the direction the
 ---message does.
 local SCROLL = {
-  { option = "scroll_up", keycode = vim.keycode "<C-b>", desc = "agentcomplete: scroll the last-message pane up" },
-  { option = "scroll_down", keycode = vim.keycode "<C-f>", desc = "agentcomplete: scroll the last-message pane down" },
+  { option = "scroll_up", keycode = vim.keycode "<C-y>", desc = "agentcomplete: scroll the last-message pane up" },
+  { option = "scroll_down", keycode = vim.keycode "<C-e>", desc = "agentcomplete: scroll the last-message pane down" },
 }
 
 ---@class AgentComplete.Context.Pane.Scroll
 ---@field lhs string Key to map on the prompt.
----@field keycode string What Vim pages the pane with.
+---@field keycode string What Vim scrolls the pane with.
 ---@field desc string How the mapping names itself.
 
 ---The scroll keys `keys` asks for, in footer order. One reading of the configuration, so the
@@ -126,20 +128,20 @@ local function unmap(buf, lhs)
   end
 end
 
----Page `win`, leaving the window the reader is in current. Vim's own paging rather than a
----line count, because the pane wraps and a count would page it erratically.
+---Scroll `win` with `keycode`, leaving the window the reader is in current.
 ---
 ---Once the pane is gone the key is not ours: blink.cmp resolves the mapping it falls back to
 ---once, when it wires the buffer, so it goes on calling this for the buffer's life. Passing
----the key through unmapped is what keeps it doing something rather than nothing.
+---`lhs` through unmapped is what keeps it doing something rather than nothing.
 ---@param win integer
----@param key string
-local function page(win, key)
+---@param keycode string
+---@param lhs string The key the reader pressed.
+local function scroll_pane(win, keycode, lhs)
   if not vim.api.nvim_win_is_valid(win) then
-    return vim.api.nvim_feedkeys(key, "n", false)
+    return vim.api.nvim_feedkeys(vim.keycode(lhs), "n", false)
   end
   vim.api.nvim_win_call(win, function()
-    vim.cmd("normal! " .. key)
+    vim.cmd("normal! " .. keycode)
   end)
 end
 
@@ -253,7 +255,7 @@ end
 ---@field min_width integer Terminal width at or above which the pane sits beside the prompt.
 ---@field resolver string Name shown in the border.
 ---@field rung? string Which step of the resolver's chain produced the session, shown beside its name.
----@field keys? AgentComplete.Context.Keys Prompt-buffer keys that page the pane.
+---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
 ---Build the pane beside `buf`. Vertical at or above `min_width`, horizontal below it.
@@ -290,7 +292,7 @@ function M.open(buf, opts)
   -- reply.
   local mapped = vim.tbl_map(function(scroll)
     vim.keymap.set({ "n", "i" }, scroll.lhs, function()
-      page(win, scroll.keycode)
+      scroll_pane(win, scroll.keycode, scroll.lhs)
     end, { buffer = buf, desc = scroll.desc })
     return scroll.lhs
   end, scrolls)
