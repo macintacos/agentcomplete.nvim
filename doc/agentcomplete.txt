@@ -157,6 +157,7 @@ The full default configuration, with every option: >lua
 	  context = {
 	    enabled = true,      -- read-only split showing the agent's last message
 	    min_width = 160,     -- columns at or above which that split is vertical
+	    stacked = "below",   -- "below" | "above": which side it takes under min_width
 	    rumdl_config = nil,  -- path to a rumdl config file for the pane's formatting
 	    keys = {
 	      scroll_down = "<S-Down>", -- scroll the pane down a line from the prompt
@@ -204,6 +205,12 @@ The full default configuration, with every option: >lua
 			which the context pane sits to the right of the prompt
 			and takes 40% of it; below that, underneath. Re-checked
 			whenever the terminal is resized.
+
+'context.stacked'	`"below"` | `"above"` (default `"below"`). Which side of
+			the prompt the pane takes when the terminal is narrower
+			than 'context.min_width' and the two are stacked rather
+			than side by side. Unrelated to the wide layout, which
+			is always to the right. See |agentcomplete-context|.
 
 'context.rumdl_config'	string (default `nil`). Absolute path to a rumdl config
 			file, used to format the message the pane shows. A
@@ -461,13 +468,20 @@ agent opens for you carries no conversation at all.
 
 The pane goes to the right of the prompt when the terminal is at least
 'context.min_width' columns wide, taking 40% of it — the reply you are
-composing is the work, and the message is reference for it — and moves
-beneath the prompt when the terminal is narrower than that. It re-places
-itself as you resize, so a window dragged narrower restacks rather than
-leaving both halves too cramped to read. It is drawn as a rounded-border
-window titled with the agent that spoke, and footed with the keys that scroll
-it and a reminder that you cannot answer here:
-"<S-Up>/<S-Down> scroll · read-only".
+composing is the work, and the message is reference for it — and stacks with
+the prompt when the terminal is narrower than that. It re-places itself as you
+resize, so a window dragged narrower restacks rather than leaving both halves
+too cramped to read.
+
+Stacked, the pane goes beneath the prompt. Set 'context.stacked' to `"above"`
+to read the conversation top-down instead, the message over the reply to it: >lua
+	require("agentcomplete").setup({
+	  context = { stacked = "above" },
+	})
+<
+Either way it is drawn as a rounded-border window titled with the agent that
+spoke, and footed with the keys that scroll it and a reminder that you cannot
+answer here: "<S-Up>/<S-Down> scroll · read-only".
 
 It reads as a document rather than a buffer you act on: no line numbers, no
 sign or fold column, and markdown markup concealed. That last one is the point

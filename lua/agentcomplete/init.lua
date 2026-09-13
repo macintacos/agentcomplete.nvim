@@ -29,7 +29,12 @@ local defaults = {
   detect = "auto",
   sources = { slash = true, file = true },
   allowed_sources = {},
-  context = { enabled = true, min_width = 160, keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>" } },
+  context = {
+    enabled = true,
+    min_width = 160,
+    stacked = "below",
+    keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>" },
+  },
   opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false },
 }
 

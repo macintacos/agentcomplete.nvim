@@ -158,6 +158,7 @@ end
 ---@class AgentComplete.Context.Options
 ---@field enabled boolean Whether attaching opens the pane at all.
 ---@field min_width integer Terminal width at or above which the pane opens as a vertical split.
+---@field stacked? "above"|"below" Which side of the prompt the pane takes below `min_width`; defaults to `below`.
 ---@field rumdl_config? string Path to a rumdl config file for the pane's formatting; unset formats with rumdl's built-in defaults.
 ---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
 
@@ -192,6 +193,7 @@ local function show(buf, result, config, log_path, format)
     group = assert(M._augroups[buf], "pane built for an unattached buffer"),
     text = text,
     min_width = config.min_width,
+    stacked = config.stacked,
     resolver = result.resolver,
     rung = result.rung,
     keys = config.keys,

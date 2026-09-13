@@ -486,8 +486,23 @@ T["open"]["splits horizontally when the terminal is narrower than min_width"] = 
   local context = require "agentcomplete.context"
   vim.o.columns = 80
   local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  expect.equality(vim.fn.winlayout()[1], "col")
+  local layout = vim.fn.winlayout()
+  expect.equality(layout[1], "col")
+  expect.equality(layout[2][1][2], prompt_win)
+end
+
+T["open"]["stacks the pane above the prompt when asked to"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 80
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  local config = { enabled = true, min_width = 160, stacked = "above" }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  local layout = vim.fn.winlayout()
+  expect.equality(layout[1], "col")
+  expect.equality(layout[2][1][2], spacer_win(prompt_win))
 end
 
 T["open"]["hands the pane's formatter the configured rumdl config path"] = function()
@@ -794,6 +809,23 @@ T["open"]["moves the pane below the prompt when the terminal narrows"] = functio
   vim.api.nvim_exec_autocmds("VimResized", {})
   vim.wait(100)
   expect.equality(vim.fn.winlayout()[1], "col")
+end
+
+-- The same narrowing, with the stacked side configured: a re-place that reached for the default
+-- would drop the pane below the prompt the first time the terminal narrowed.
+T["open"]["moves the pane above the prompt when the terminal narrows"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  local config = { enabled = true, min_width = 160, stacked = "above" }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  vim.o.columns = 80
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  vim.wait(100)
+  local layout = vim.fn.winlayout()
+  expect.equality(layout[1], "col")
+  expect.equality(layout[2][1][2], spacer_win(prompt_win))
 end
 
 -- Quitting the prompt is how the agent CLI is answered, so both of the pane's windows have to

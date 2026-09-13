@@ -38,13 +38,13 @@ local PANE_WIDTH = 0.4
 
 ---Reserve the room the float fills: this split holds the space and takes the resize.
 ---@param host integer Window showing the prompt.
----@param vertical boolean
+---@param split "right"|"above"|"below" Edge of `host` the pane takes.
 ---@return integer
-local function reserve(host, vertical)
+local function reserve(host, split)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
   local win = vim.api.nvim_open_win(buf, false, {
-    split = vertical and "right" or "below",
+    split = split,
     win = host,
   })
   vim.wo[win].number = false
@@ -178,6 +178,7 @@ end
 ---@field win integer Float holding the message.
 ---@field spacer integer Split the float is drawn over.
 ---@field min_width integer Terminal width at or above which the pane sits beside the prompt.
+---@field stacked "above"|"below" Edge it takes below that width.
 ---@field on_close fun() What dismissing the pane means to its owner.
 
 ---Wire the pane to the windows around it.
@@ -192,8 +193,8 @@ local function follow(pane)
   end
 
   ---Re-place the pane for the terminal as it is now: beside the prompt while there is width
-  ---for both, beneath it once there is not. Guarded against its own resizes, which raise the
-  ---very events that call it.
+  ---for both, stacked with it once there is not. Guarded against its own resizes, which raise
+  ---the very events that call it.
   local function place()
     if placing or not valid() then
       return
@@ -204,7 +205,7 @@ local function follow(pane)
       local wanted = vim.o.columns >= pane.min_width
       if wanted ~= beside then
         beside = wanted
-        vim.api.nvim_win_set_config(spacer, { split = beside and "right" or "below", win = host })
+        vim.api.nvim_win_set_config(spacer, { split = beside and "right" or pane.stacked, win = host })
       end
       if beside then
         vim.api.nvim_win_set_width(spacer, math.floor(vim.o.columns * PANE_WIDTH))
@@ -253,12 +254,13 @@ end
 ---@field group integer Augroup the pane's autocmds live in.
 ---@field text string Message to show.
 ---@field min_width integer Terminal width at or above which the pane sits beside the prompt.
+---@field stacked? "above"|"below" Edge it takes below that width; defaults to `below`.
 ---@field resolver string Name shown in the border.
 ---@field rung? string Which step of the resolver's chain produced the session, shown beside its name.
 ---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
----Build the pane beside `buf`. Vertical at or above `min_width`, horizontal below it.
+---Build the pane beside `buf`. Vertical at or above `min_width`, stacked below it.
 ---@param buf integer Prompt buffer the pane belongs to.
 ---@param opts AgentComplete.Context.Pane.Options
 ---@return integer|nil win nil when `buf` is on no screen to split from.
@@ -271,7 +273,8 @@ function M.open(buf, opts)
   -- a raise once the split exists strands it — nothing owns it yet to close it.
   local scrolls = configured(opts.keys)
   local frame = chrome(opts.resolver, opts.rung, scrolls)
-  local spacer = reserve(host, vim.o.columns >= opts.min_width)
+  local stacked = opts.stacked or "below"
+  local spacer = reserve(host, vim.o.columns >= opts.min_width and "right" or stacked)
 
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
@@ -305,6 +308,7 @@ function M.open(buf, opts)
     win = win,
     spacer = spacer,
     min_width = opts.min_width,
+    stacked = stacked,
     on_close = opts.on_close,
   }
   return win
