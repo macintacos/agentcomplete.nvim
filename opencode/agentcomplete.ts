@@ -8,6 +8,7 @@ import type { Plugin } from "@opencode-ai/plugin";
 
 const stateHome = process.env.XDG_STATE_HOME || join(homedir(), ".local", "state");
 const pointer = join(stateHome, "opencode", "agentcomplete", `${process.pid}.json`);
+const staging = `${pointer}.tmp`;
 
 // Which process the plugin runs in — TUI, instance-server child, shared daemon —
 // varies, so record every pid the reader could plausibly hold.
@@ -23,7 +24,6 @@ export const agentcomplete: Plugin = async ({ worktree }) => ({
       await mkdir(dirname(pointer), { recursive: true });
       // Written then renamed: `session.updated` fires throughout a conversation, so a reader
       // landing inside a plain truncate-and-write would see half a record often enough to matter.
-      const staging = `${pointer}.tmp`;
       await writeFile(
         staging,
         // `info.directory`, not the plugin's own: one server can hold sessions in several
@@ -44,7 +44,9 @@ export const agentcomplete: Plugin = async ({ worktree }) => ({
 
   dispose: async () => {
     try {
-      await rm(pointer, { force: true });
+      // The staging file too: an event handler interrupted between its write and its rename
+      // leaves one behind, and nothing else in this directory ever collects it.
+      await Promise.all([rm(pointer, { force: true }), rm(staging, { force: true })]);
     } catch {
       // As above: a stale pointer is recoverable, a throwing teardown is not.
     }
