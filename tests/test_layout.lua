@@ -55,6 +55,20 @@ T["plan"]["never gives the pane more than half the terminal without margins"] = 
   expect.equality(plan { columns = 160, measure = 100, margins = false }, { beside = true, pane = 79 })
 end
 
+T["box"] = new_set()
+
+T["box"]["centers a prompt of the minimum height"] = function()
+  expect.equality(require("agentcomplete.layout").box(36, 1, 10), { top = 13, prompt = 10, bottom = 13 })
+end
+
+T["box"]["grows with the prompt's text, staying centered"] = function()
+  expect.equality(require("agentcomplete.layout").box(36, 15, 10), { top = 10, prompt = 15, bottom = 11 })
+end
+
+T["box"]["stops growing a row short of either edge"] = function()
+  expect.equality(require("agentcomplete.layout").box(36, 50, 10), { top = 1, prompt = 34, bottom = 1 })
+end
+
 T["windows"] = new_set {
   hooks = {
     pre_case = function()
@@ -67,6 +81,7 @@ T["windows"] = new_set {
       end
       vim.cmd "silent! only"
       vim.o.columns = 80
+      vim.o.lines = 24
     end,
   },
 }
@@ -97,11 +112,68 @@ local function row_widths()
   return widths
 end
 
+---The windows in the prompt's column, top to bottom.
+local function prompt_column()
+  return vim.tbl_map(function(node)
+    return node[2]
+  end, vim.fn.winlayout()[2][2][2] --[[@as table]])
+end
+
+---The heights of the windows in the prompt's column, top to bottom.
+local function column_heights()
+  return vim.tbl_map(vim.api.nvim_win_get_height, prompt_column())
+end
+
 T["windows"]["holds the prompt at the measure between margins"] = function()
   vim.o.columns = 200
   local _, host = attached()
   expect.equality(row_widths(), { 57, 84, 57 })
-  expect.equality(vim.fn.winlayout()[2][2][2], host)
+  expect.equality(prompt_column()[2], host)
+end
+
+T["windows"]["boxes the prompt in the middle of the screen when there is no pane"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
+  attached()
+  expect.equality(column_heights(), { 13, 10, 13 })
+end
+
+T["windows"]["grows the box with the prompt's text"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
+  local buf = attached()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  expect.equality(column_heights(), { 10, 15, 11 })
+end
+
+-- A terminal shrunk and grown again scrolls the prompt to keep its cursor in view, and growing
+-- the window back does not scroll it back.
+T["windows"]["shows the prompt from its first line whenever it all fits"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
+  local buf, host = attached()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  vim.api.nvim_win_set_cursor(host, { 15, 0 })
+  vim.fn.winrestview { topline = 8 }
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  expect.equality(vim.fn.line("w0", host), 1)
+end
+
+T["windows"]["tints the box against the margins"] = function()
+  vim.o.columns = 200
+  local _, host = attached()
+  expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt,WinSeparator:AgentCompleteMargin")
+  expect.equality(vim.api.nvim_get_hl(0, { name = "AgentCompletePrompt" }).link, "NormalFloat")
+  -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
+  local top = vim.wo[prompt_column()[1]].winhighlight
+  expect.equality(vim.endswith(top, "StatusLine:AgentCompletePrompt,StatusLineNC:AgentCompletePrompt"), true)
+end
+
+T["windows"]["gives the box's rows and tint up to the pane"] = function()
+  vim.o.columns = 200
+  local buf, host = attached()
+  require("agentcomplete.layout").reserve(buf, PLACEMENT)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 4)
+  expect.equality(vim.wo[host].winhighlight, "")
 end
 
 T["windows"]["opens no margins around a prompt sharing the screen"] = function()
@@ -150,12 +222,13 @@ end
 
 T["windows"]["gives the pane's room back when it is released"] = function()
   vim.o.columns = 200
-  local buf = attached()
+  local buf, host = attached()
   local layout = require "agentcomplete.layout"
   local spacer = assert(layout.reserve(buf, PLACEMENT), "no spacer reserved")
   layout.release(buf)
   expect.equality(vim.api.nvim_win_is_valid(spacer), false)
   expect.equality(row_widths(), { 57, 84, 57 })
+  expect.equality(prompt_column()[2], host)
 end
 
 T["windows"]["sizes the pane beside a prompt with no margins"] = function()
@@ -171,6 +244,10 @@ T["windows"]["hands the cursor back to the prompt from a margin"] = function()
   vim.cmd "wincmd l"
   expect.equality(vim.api.nvim_get_current_win(), host)
   vim.cmd "wincmd h"
+  expect.equality(vim.api.nvim_get_current_win(), host)
+  vim.cmd "wincmd k"
+  expect.equality(vim.api.nvim_get_current_win(), host)
+  vim.cmd "wincmd j"
   expect.equality(vim.api.nvim_get_current_win(), host)
 end
 

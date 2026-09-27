@@ -9,7 +9,7 @@
 ---@field opencode AgentComplete.Config.OpenCode OpenCode-specific options.
 
 ---@class AgentComplete.Config.Composer
----@field enabled boolean When true, the prompt window drops its gutter, wraps prose inside an inset, and is held at `width` between blank margins.
+---@field enabled boolean When true, the prompt window drops its gutter, wraps prose inside an inset, and is held at `width` between blank margins, boxed in the middle of the screen while there is no last message beside it.
 ---@field width integer Columns of text the prompt and the context pane's message each wrap at.
 
 ---@class AgentComplete.Config.OpenCode

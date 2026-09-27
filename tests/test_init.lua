@@ -286,7 +286,7 @@ T["attach"]["frames the prompt with margins when there is a UI to frame"] = func
   local ok = pcall(agentcomplete.attach, buf, { force = true })
   vim.api.nvim_list_uis = list_uis
   expect.equality(ok, true)
-  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 3)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 5)
   agentcomplete.detach(buf)
   expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
 end

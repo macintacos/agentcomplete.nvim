@@ -242,7 +242,9 @@ The full default configuration, with every option: >lua
 
 'composer.enabled'	boolean (default `true`). When true, the prompt window
 			drops its gutter, wraps prose inside an inset, and is
-			held at 'composer.width' between blank margins. When
+			held at 'composer.width' between blank margins, boxed
+			in the middle of the screen while there is no last
+			message to show beside it. When
 			false, it is left exactly as your configuration draws
 			it. See |agentcomplete-composer|.
 
@@ -512,6 +514,14 @@ hold nothing: moving the cursor into one puts it back in the prompt, closing
 either closes both and lets the prompt take the full width, and quitting the
 prompt closes them first, so `:q` still leaves Neovim in one step.
 
+With no last message to show — the |agentcomplete-context| pane is off, found
+nothing to read, or has been closed — the prompt is boxed in the middle of the
+screen instead of running its full height. The box starts ten rows tall and
+grows with your text, staying centered, until it is a row short of the top and
+bottom edges; past that the prompt scrolls. It is tinted so it reads as a box
+against the margins, with your statusline directly beneath it. When the pane
+opens, the prompt takes the full height again.
+
 With the |agentcomplete-context| pane open the page reads as a conversation.
 On a terminal at least 'context.min_width' columns wide the message sits to
 the left of your reply, both at 'composer.width', centered as a pair; when
@@ -538,6 +548,11 @@ The margins draw their background, separators, and statuslines in the
 vanish into the rest of the screen. Link it elsewhere to see where they
 are: >lua
 	vim.api.nvim_set_hl(0, "AgentCompleteMargin", { link = "NormalFloat" })
+<
+The box draws its background, and the row of padding above it, in the
+`AgentCompletePrompt` highlight group, linked by default to `NormalFloat`.
+Link it to `Normal` to draw the box without a tint: >lua
+	vim.api.nvim_set_hl(0, "AgentCompletePrompt", { link = "Normal" })
 <
 Set 'composer.enabled' to `false` to leave the prompt window exactly as your
 own configuration draws it. The context pane still sits to its left at
