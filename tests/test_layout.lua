@@ -69,6 +69,19 @@ T["box"]["stops growing a row short of either edge"] = function()
   expect.equality(require("agentcomplete.layout").box(36, 50, 10), { top = 1, prompt = 34, bottom = 1 })
 end
 
+T["frame"] = new_set()
+
+-- A row out, so the rows between the prompt and its top and bottom margins — separators, or
+-- statuslines — pad the box inside the frame.
+T["frame"]["draws a rounded border a row out from the prompt"] = function()
+  local frame = require("agentcomplete.layout").frame(4, 2)
+  local side = { "│", "│", "│", "│" }
+  expect.equality(frame.top, { row = -2, col = -1, width = 6, height = 1, lines = { "╭────╮" } })
+  expect.equality(frame.left, { row = -1, col = -1, width = 1, height = 4, lines = side })
+  expect.equality(frame.right, { row = -1, col = 4, width = 1, height = 4, lines = side })
+  expect.equality(frame.bottom, { row = 3, col = -1, width = 6, height = 1, lines = { "╰────╯" } })
+end
+
 T["windows"] = new_set {
   hooks = {
     pre_case = function()
@@ -158,10 +171,35 @@ T["windows"]["shows the prompt from its first line whenever it all fits"] = func
   expect.equality(vim.fn.line("w0", host), 1)
 end
 
+---The floats anchored to `win`.
+---@param win integer
+---@return integer[]
+local function anchored_to(win)
+  return vim.tbl_filter(function(float)
+    local config = vim.api.nvim_win_get_config(float)
+    return config.relative == "win" and config.win == win
+  end, vim.api.nvim_tabpage_list_wins(0))
+end
+
+T["windows"]["frames the box, and follows it as it grows"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
+  local buf, host = attached()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  local frame = anchored_to(host)
+  local heights = vim.tbl_map(vim.api.nvim_win_get_height, frame)
+  table.sort(heights)
+  expect.equality(heights, { 1, 1, 17, 17 })
+  for _, win in ipairs(frame) do
+    expect.equality(vim.api.nvim_win_get_config(win).focusable, false)
+    expect.equality(vim.wo[win].winhighlight, "Normal:FloatBorder")
+  end
+end
+
 T["windows"]["tints the box against the margins"] = function()
   vim.o.columns = 200
   local _, host = attached()
-  expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt,WinSeparator:AgentCompleteMargin")
+  expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt")
   expect.equality(vim.api.nvim_get_hl(0, { name = "AgentCompletePrompt" }).link, "NormalFloat")
   -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
   local top = vim.wo[prompt_column()[1]].winhighlight

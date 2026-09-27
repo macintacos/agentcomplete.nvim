@@ -517,10 +517,12 @@ prompt closes them first, so `:q` still leaves Neovim in one step.
 With no last message to show — the |agentcomplete-context| pane is off, found
 nothing to read, or has been closed — the prompt is boxed in the middle of the
 screen instead of running its full height. The box starts ten rows tall and
-grows with your text, staying centered, until it is a row short of the top and
-bottom edges; past that the prompt scrolls. It is tinted so it reads as a box
-against the margins, with your statusline directly beneath it. When the pane
-opens, the prompt takes the full height again.
+grows with your text, staying centered, until it is a few rows short of the
+top and bottom edges; past that the prompt scrolls. It has a rounded border
+like the pane's, with a blank row inside it above your text and another
+below — where the prompt's own statusline sits, when each window has one
+('laststatus' other than 3). When the pane opens, the prompt takes the full
+height again.
 
 With the |agentcomplete-context| pane open the page reads as a conversation.
 On a terminal at least 'context.min_width' columns wide the message sits to
@@ -549,9 +551,11 @@ vanish into the rest of the screen. Link it elsewhere to see where they
 are: >lua
 	vim.api.nvim_set_hl(0, "AgentCompleteMargin", { link = "NormalFloat" })
 <
-The box draws its background, and the row of padding above it, in the
-`AgentCompletePrompt` highlight group, linked by default to `NormalFloat`.
-Link it to `Normal` to draw the box without a tint: >lua
+The box's border is drawn in `FloatBorder`, as the pane's is. Its background
+is the `AgentCompletePrompt` highlight group, linked by default to
+`NormalFloat` — invisible under a colorscheme whose floats have no background
+of their own, such as a transparent one. Link it to `Normal` to draw the box
+without a tint: >lua
 	vim.api.nvim_set_hl(0, "AgentCompletePrompt", { link = "Normal" })
 <
 Set 'composer.enabled' to `false` to leave the prompt window exactly as your

@@ -110,6 +110,35 @@ function M.box(rows, content, min)
   return { top = top, prompt = prompt, bottom = math.max(1, rows - prompt - top) }
 end
 
+---@alias AgentComplete.Layout.Edge "top"|"left"|"right"|"bottom"
+
+---@class AgentComplete.Layout.EdgePlacement
+---@field row integer Relative to the prompt window's top-left.
+---@field col integer
+---@field width integer
+---@field height integer
+---@field lines string[] What the edge draws.
+
+---Each edge of a rounded border around a prompt `width` by `height`. It sits a row out, so the
+---rows between the prompt and its top and bottom margins — separators, or statuslines — pad the
+---box inside it.
+---@param width integer
+---@param height integer
+---@return table<AgentComplete.Layout.Edge, AgentComplete.Layout.EdgePlacement>
+function M.frame(width, height)
+  local rule = string.rep("─", width)
+  local side = {}
+  for row = 1, height + 2 do
+    side[row] = "│"
+  end
+  return {
+    top = { row = -2, col = -1, width = width + 2, height = 1, lines = { "╭" .. rule .. "╮" } },
+    left = { row = -1, col = -1, width = 1, height = height + 2, lines = side },
+    right = { row = -1, col = width, width = 1, height = height + 2, lines = side },
+    bottom = { row = height + 1, col = -1, width = width + 2, height = 1, lines = { "╰" .. rule .. "╯" } },
+  }
+end
+
 ---@class AgentComplete.Layout.Options
 ---@field measure integer Columns of text the prompt and the message each wrap at.
 ---@field margins boolean Whether to hold the prompt at the measure between margins.
@@ -122,6 +151,7 @@ end
 ---@class AgentComplete.Layout.Box
 ---@field top integer Margin above the prompt.
 ---@field bottom integer Margin below it.
+---@field frame table<AgentComplete.Layout.Edge, integer> Float drawing each edge of the border.
 ---@field winhighlight string The prompt's local 'winhighlight' from before the box tinted it.
 
 ---@class AgentComplete.Layout.State
@@ -187,13 +217,43 @@ local function set_winhighlight(win, value)
   vim.api.nvim_set_option_value("winhighlight", value, { win = win, scope = "local" })
 end
 
----Box the prompt in the middle of its column, tinted so it reads as a box against the margins.
+---A float for each edge of the box's border, placed by `fit_box`. A split has no border of its
+---own, so the frame is drawn over the blank cells around it.
+---@param host integer
+---@return table<AgentComplete.Layout.Edge, integer>
+local function open_frame(host)
+  local frame = {}
+  for _, edge in ipairs { "top", "left", "right", "bottom" } do
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].bufhidden = "wipe"
+    frame[edge] = vim.api.nvim_open_win(buf, false, {
+      relative = "win",
+      win = host,
+      row = 0,
+      col = 0,
+      width = 1,
+      height = 1,
+      focusable = false,
+      style = "minimal",
+      zindex = 1,
+      noautocmd = true,
+    })
+    vim.wo[frame[edge]].winhighlight = "Normal:FloatBorder"
+  end
+  return frame
+end
+
+---Box the prompt in the middle of its column, framed and tinted like the context pane.
 ---@param state AgentComplete.Layout.State
 local function open_box(state)
   local winhighlight = vim.api.nvim_get_option_value("winhighlight", { win = state.host, scope = "local" })
-  state.box = { top = blank(state.host, "above"), bottom = blank(state.host, "below"), winhighlight = winhighlight }
-  -- The separator is left the margins' colour so the box's right edge meets the padding row's.
-  local tint = "Normal:AgentCompletePrompt,WinSeparator:AgentCompleteMargin"
+  state.box = {
+    top = blank(state.host, "above"),
+    bottom = blank(state.host, "below"),
+    frame = open_frame(state.host),
+    winhighlight = winhighlight,
+  }
+  local tint = "Normal:AgentCompletePrompt"
   set_winhighlight(state.host, winhighlight == "" and tint or (winhighlight .. "," .. tint))
   -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
   -- A later entry overrides an earlier one for the same group.
@@ -210,11 +270,30 @@ local function close_box(state)
     return
   end
   state.box = nil
-  for _, win in ipairs { box.top, box.bottom } do
+  for _, win in ipairs(vim.list_extend({ box.top, box.bottom }, vim.tbl_values(box.frame))) do
     pcall(vim.api.nvim_win_close, win, true)
   end
   if valid(state.host) then
     set_winhighlight(state.host, box.winhighlight)
+  end
+end
+
+---Draw the frame around the prompt as it is sized now.
+---@param frame table<AgentComplete.Layout.Edge, integer>
+---@param host integer
+local function draw_frame(frame, host)
+  local edges = M.frame(vim.api.nvim_win_get_width(host), vim.api.nvim_win_get_height(host))
+  for edge, win in pairs(frame) do
+    local placement = edges[edge]
+    vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, placement.lines)
+    vim.api.nvim_win_set_config(win, {
+      relative = "win",
+      win = host,
+      row = placement.row,
+      col = placement.col,
+      width = placement.width,
+      height = placement.height,
+    })
   end
 end
 
@@ -229,6 +308,7 @@ local function fit_box(box, host)
   local heights = M.box(rows, content, BOX_HEIGHT)
   vim.api.nvim_win_set_height(box.top, heights.top)
   vim.api.nvim_win_set_height(box.bottom, heights.bottom)
+  draw_frame(box.frame, host)
   if content > heights.prompt then
     return
   end
