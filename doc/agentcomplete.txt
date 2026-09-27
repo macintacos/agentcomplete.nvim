@@ -26,8 +26,9 @@ CONTENTS
     9. Commands ..................................... |agentcomplete-commands|
    10. Completion sources ............................ |agentcomplete-sources|
    11. Highlighting ............................. |agentcomplete-highlighting|
-   12. Context pane .................................. |agentcomplete-context|
-   13. Diagnostics ............................... |agentcomplete-diagnostics|
+   12. Composer ..................................... |agentcomplete-composer|
+   13. Context pane .................................. |agentcomplete-context|
+   14. Diagnostics ............................... |agentcomplete-diagnostics|
 
 ==============================================================================
 1. Introduction
@@ -40,6 +41,10 @@ useful while writing a prompt:
 
 	`/`	skills and commands available to the agent in this project
 	`@`	files and folders under the project root
+
+It also lays the prompt out for writing rather than coding: a centered page
+at a readable width (|agentcomplete-composer|), beside the agent's last
+message (|agentcomplete-context|).
 
 It does nothing in any other buffer. Outside a detected prompt buffer your
 normal completion stack is untouched.
@@ -155,14 +160,18 @@ The full default configuration, with every option: >lua
 	  },
 	  allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
 	  context = {
-	    enabled = true,      -- read-only split showing the agent's last message
-	    min_width = 160,     -- columns at or above which that split is vertical
-	    stacked = "below",   -- "below" | "above": which side it takes under min_width
+	    enabled = true,      -- read-only pane showing the agent's last message
+	    min_width = 160,     -- columns at or above which it sits left of the prompt
+	    stacked = "above",   -- "above" | "below": which side it takes under min_width
 	    rumdl_config = nil,  -- path to a rumdl config file for the pane's formatting
 	    keys = {
 	      scroll_down = "<S-Down>", -- scroll the pane down a line from the prompt
 	      scroll_up = "<S-Up>",     -- scroll it back up
 	    },
+	  },
+	  composer = {
+	    enabled = true,      -- write the prompt on a centered page, without a gutter
+	    width = 80,          -- columns the prompt and the pane's message wrap at
 	  },
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
@@ -202,15 +211,15 @@ The full default configuration, with every option: >lua
 			|agentcomplete-context|.
 
 'context.min_width'	number (default `160`). Terminal width at or above
-			which the context pane sits to the right of the prompt
-			and takes 40% of it; below that, underneath. Re-checked
-			whenever the terminal is resized.
+			which the context pane sits to the left of the prompt,
+			as wide as 'composer.width'; below that, stacked with
+			it. Re-checked whenever the terminal is resized.
 
-'context.stacked'	`"below"` | `"above"` (default `"below"`). Which side of
+'context.stacked'	`"above"` | `"below"` (default `"above"`). Which side of
 			the prompt the pane takes when the terminal is narrower
 			than 'context.min_width' and the two are stacked rather
 			than side by side. Unrelated to the wide layout, which
-			is always to the right. See |agentcomplete-context|.
+			is always to the left. See |agentcomplete-context|.
 
 'context.rumdl_config'	string (default `nil`). Absolute path to a rumdl config
 			file, used to format the message the pane shows. A
@@ -230,6 +239,15 @@ The full default configuration, with every option: >lua
 'context.keys.scroll_up'
 			string | `false` (default `<S-Up>`). The same,
 			scrolling back up.
+
+'composer.enabled'	boolean (default `true`). When true, the prompt window
+			drops its gutter, wraps prose inside an inset, and is
+			held at 'composer.width' between blank margins. When
+			false, it is left exactly as your configuration draws
+			it. See |agentcomplete-composer|.
+
+'composer.width'	number (default `80`). Columns of text the prompt wraps
+			at, and the context pane's message with it.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -359,15 +377,18 @@ the editor's working directory.
                                                       *agentcomplete-commands*
 
                                                         *:AgentCompleteAttach*
-:AgentCompleteAttach	Force completion and |agentcomplete-highlighting| onto
-			the current buffer, bypassing detection. Use it when a
-			session is not auto-detected (an unusual launch) or
-			when 'enabled' is false.
+:AgentCompleteAttach	Force completion, |agentcomplete-highlighting|, and the
+			|agentcomplete-composer| onto the current buffer,
+			bypassing detection. Use it when a session is not
+			auto-detected (an unusual launch) or when 'enabled' is
+			false.
 
                                                         *:AgentCompleteDetach*
-:AgentCompleteDetach	Detach completion and highlighting from the current
-			buffer, removing the backend, the token highlights,
-			and any buffer-local state they installed.
+:AgentCompleteDetach	Detach completion, highlighting, and the composer from
+			the current buffer, removing the backend, the token
+			highlights, the margins, and any buffer-local state
+			they installed — the prompt window's own options are
+			put back as they were.
 
                                          *:AgentCompleteInstallOpenCodePlugin*
 :AgentCompleteInstallOpenCodePlugin
@@ -459,24 +480,89 @@ colorschemes after startup: >lua
 <
 
 ==============================================================================
-12. Context pane
+12. Composer
+                                                      *agentcomplete-composer*
+
+Attaching turns the prompt window into a page to write on rather than a code
+buffer. The prompt is where you compose a message to the agent, so it is set
+up the way a chat box or a document is: prose wraps at a readable width, and
+nothing around it asks for your attention.
+
+In the prompt window, agentcomplete:
+
+	hides	line numbers, the sign and fold columns, the cursor
+		line, and the winbar
+	wraps	at word boundaries, with a wrapped list item hanging
+		under its text rather than its bullet
+	insets	the text four columns from the window's edge
+	blanks	the window separators and the `~` rows past the last
+		line
+
+A winbar you set globally cannot be switched off for one window, so it is
+blanked there instead, leaving an empty row. Your statusline, colorscheme,
+spelling, 'textwidth', and keymaps are left alone. Every option is set for
+the prompt buffer only (|:setlocal|), so any other buffer opened in that
+window looks as it always does, and each is put back by
+|:AgentCompleteDetach|.
+
+The text wraps at 'composer.width' columns — 80 by default — however wide the
+terminal is. Blank margins either side hold the prompt at that width and keep
+it centered: a wide terminal widens the margins, never the lines. The margins
+hold nothing: moving the cursor into one puts it back in the prompt, closing
+either closes both and lets the prompt take the full width, and quitting the
+prompt closes them first, so `:q` still leaves Neovim in one step.
+
+With the |agentcomplete-context| pane open the page reads as a conversation.
+On a terminal at least 'context.min_width' columns wide the message sits to
+the left of your reply, both at 'composer.width', centered as a pair; when
+there is not room for both at full width, they share it evenly. Narrower than
+'context.min_width', the two share one centered column, the message above
+your reply by default, and the reply's inset lines its text up with the
+message's: your reply starts where the message's text does, and wraps two
+columns past it, at the width of the message's frame. Everything is
+re-placed as the terminal is resized.
+
+Margins open only when the prompt is the only window on the screen, as it is
+when Claude Code or OpenCode opens it. |:AgentCompleteAttach| in a session
+already split into several windows styles the prompt window but leaves your
+layout alone.
+
+Some plugins set a winbar or a 'statuscolumn' on every window they see, and
+dropbar.nvim sets its winbar again each time the buffer is written. The
+composer takes those two back off the prompt window after the events such
+plugins attach on. The other options it only sets once: turn line numbers
+back on with `:setlocal number` and they stay on.
+
+The margins draw their background, separators, and statuslines in the
+`AgentCompleteMargin` highlight group, linked by default to `Normal` so they
+vanish into the rest of the screen. Link it elsewhere to see where they
+are: >lua
+	vim.api.nvim_set_hl(0, "AgentCompleteMargin", { link = "NormalFloat" })
+<
+Set 'composer.enabled' to `false` to leave the prompt window exactly as your
+own configuration draws it. The context pane still sits to its left at
+'composer.width' when there is room, and nothing else is sized.
+
+==============================================================================
+13. Context pane
                                                        *agentcomplete-context*
 
 Attaching to a prompt buffer opens a read-only pane beside it holding the
 agent's last message. Without it a reply is written blind: the buffer the
 agent opens for you carries no conversation at all.
 
-The pane goes to the right of the prompt when the terminal is at least
-'context.min_width' columns wide, taking 40% of it — the reply you are
-composing is the work, and the message is reference for it — and stacks with
-the prompt when the terminal is narrower than that. It re-places itself as you
-resize, so a window dragged narrower restacks rather than leaving both halves
-too cramped to read.
+The pane goes to the left of the prompt when the terminal is at least
+'context.min_width' columns wide — the message, then your reply to it — as
+wide as the 'composer.width' your reply wraps at, and stacks with the prompt
+when the terminal is narrower than that. It re-places itself as you resize, so
+a window dragged narrower restacks rather than leaving both halves too
+cramped to read. |agentcomplete-composer| describes the page the two share.
 
-Stacked, the pane goes beneath the prompt. Set 'context.stacked' to `"above"`
-to read the conversation top-down instead, the message over the reply to it: >lua
+Stacked, the pane goes above the prompt, so the conversation reads top-down:
+the message over the reply to it. Set 'context.stacked' to `"below"` to keep
+the reply on top instead: >lua
 	require("agentcomplete").setup({
-	  context = { stacked = "above" },
+	  context = { stacked = "below" },
 	})
 <
 Either way it is drawn as a rounded-border window titled with the agent that
@@ -580,7 +666,7 @@ the plugin to replace the guess with a certainty, either with
 |:AgentCompleteInstallOpenCodePlugin| or by setting 'opencode.install_plugin'.
 
 ==============================================================================
-13. Diagnostics
+14. Diagnostics
                                                    *agentcomplete-diagnostics*
 
 When completion misbehaves in a prompt buffer ("no completions", "wrong

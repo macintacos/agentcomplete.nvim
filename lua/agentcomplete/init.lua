@@ -4,8 +4,13 @@
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
----@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it opens as a vertical split rather than a horizontal one.
+---@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it sits to the left of the prompt rather than stacked with it.
+---@field composer AgentComplete.Config.Composer The prompt window as a page to write on.
 ---@field opencode AgentComplete.Config.OpenCode OpenCode-specific options.
+
+---@class AgentComplete.Config.Composer
+---@field enabled boolean When true, the prompt window drops its gutter, wraps prose inside an inset, and is held at `width` between blank margins.
+---@field width integer Columns of text the prompt and the context pane's message each wrap at.
 
 ---@class AgentComplete.Config.OpenCode
 ---@field show_all_builtin_commands boolean When true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed.
@@ -19,6 +24,8 @@ local detect = require "agentcomplete.detect"
 local backends = require "agentcomplete.backends"
 local highlight = require "agentcomplete.highlight"
 local context = require "agentcomplete.context"
+local layout = require "agentcomplete.layout"
+local composer = require "agentcomplete.composer"
 local scan = require "agentcomplete.scan"
 
 ---Default configuration.
@@ -32,9 +39,10 @@ local defaults = {
   context = {
     enabled = true,
     min_width = 160,
-    stacked = "below",
+    stacked = "above",
     keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>" },
   },
+  composer = { enabled = true, width = 80 },
   opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false },
 }
 
@@ -154,8 +162,8 @@ local function notify_install(status, target)
   vim.notify("agentcomplete: " .. INSTALL_MESSAGES[status] .. target, level)
 end
 
----Attach completion, token highlighting, and the context pane to a buffer if a session is
----detected (or forced).
+---Attach completion, token highlighting, the composer, and the context pane to a buffer if a
+---session is detected (or forced).
 ---@param bufnr integer|nil 0/nil → current buffer.
 ---@param opts? { force: boolean }
 ---@return boolean attached
@@ -178,12 +186,23 @@ function M.attach(bufnr, opts)
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
     highlight.attach(buf, session)
+    local page = M.config.composer
+    -- Before the pane, which reserves its room in the layout. Margins only with a UI to frame:
+    -- a headless run has no screen for them.
+    layout.attach(buf, {
+      measure = page.width,
+      margins = page.enabled and #vim.api.nvim_list_uis() > 0,
+      inset = page.enabled and composer.INSET or 0,
+    })
+    if page.enabled then
+      composer.attach(buf)
+    end
     context.open(buf, session, M.config.context)
   end
   return session ~= nil
 end
 
----Detach completion, token highlighting, and the context pane from a buffer.
+---Detach completion, token highlighting, the composer, and the context pane from a buffer.
 ---@param bufnr integer|nil 0/nil → current buffer.
 function M.detach(bufnr)
   local buf = bufnr or 0
@@ -193,6 +212,8 @@ function M.detach(bufnr)
   backends.detach(buf)
   highlight.detach(buf)
   context.close(buf)
+  layout.detach(buf)
+  composer.detach(buf)
 end
 
 ---Set up agentcomplete.nvim.

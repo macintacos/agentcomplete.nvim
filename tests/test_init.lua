@@ -198,6 +198,18 @@ T["setup defaults the context pane on, with a split-direction threshold"] = func
   expect.equality(agentcomplete.config.context.min_width, 160)
 end
 
+T["setup stacks the context pane above the prompt by default"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup {}
+  expect.equality(agentcomplete.config.context.stacked, "above")
+end
+
+T["setup defaults the composer on, at an 80-column measure"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup {}
+  expect.equality(agentcomplete.config.composer, { enabled = true, width = 80 })
+end
+
 T["setup merges a context override over the defaults"] = function()
   local agentcomplete = require "agentcomplete"
   agentcomplete.setup { context = { enabled = false } }
@@ -224,6 +236,67 @@ T["setup merges the opencode option over the default"] = function()
   agentcomplete.setup { opencode = { show_all_builtin_commands = true } }
   expect.equality(agentcomplete.config.opencode.show_all_builtin_commands, true)
   expect.equality(agentcomplete.config.enabled, true) -- unrelated default preserved
+end
+
+T["attach"] = new_set {
+  hooks = {
+    pre_case = function()
+      vim.cmd "silent! only"
+      -- An empty root stands in for `~/.claude`, so attaching scans nothing real.
+      local root = tmpdir()
+      vim.env.CLAUDE_CONFIG_DIR = root
+      vim.g.agentcomplete_cwd = root
+    end,
+    post_case = function()
+      require("agentcomplete").detach(0)
+      vim.env.CLAUDE_CONFIG_DIR = nil
+      vim.g.agentcomplete_cwd = nil
+      vim.cmd "silent! only"
+    end,
+  },
+}
+
+---A buffer in a window with a code buffer's gutter, focused.
+local function numbered_buffer()
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf)
+  vim.wo[0][0].number = true
+  return buf
+end
+
+T["attach"]["turns the prompt window into a page, and detach turns it back"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { backend = "native" }
+  local buf = numbered_buffer()
+  expect.equality(agentcomplete.attach(buf, { force = true }), true)
+  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { false, "    " })
+  agentcomplete.detach(buf)
+  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { true, "" })
+end
+
+T["attach"]["frames the prompt with margins when there is a UI to frame"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { backend = "native" }
+  local buf = numbered_buffer()
+  local list_uis = vim.api.nvim_list_uis
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.api.nvim_list_uis = function()
+    return { {} }
+  end
+  local ok = pcall(agentcomplete.attach, buf, { force = true })
+  vim.api.nvim_list_uis = list_uis
+  expect.equality(ok, true)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 3)
+  agentcomplete.detach(buf)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
+end
+
+T["attach"]["leaves the prompt window alone with the composer off"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { backend = "native", composer = { enabled = false } }
+  local buf = numbered_buffer()
+  agentcomplete.attach(buf, { force = true })
+  expect.equality(vim.wo.number, true)
 end
 
 return T

@@ -404,6 +404,10 @@ T["open"] = new_set {
       for buf in pairs(context._state) do
         context.close(buf)
       end
+      local layout = require "agentcomplete.layout"
+      for buf in pairs(layout._layouts) do
+        layout.detach(buf)
+      end
       -- A case that fed keys and failed before its own cleanup would otherwise leave every
       -- case after it running in insert mode.
       vim.cmd "silent! stopinsert"
@@ -413,12 +417,14 @@ T["open"] = new_set {
   },
 }
 
----A prompt buffer holding `lines`, focused.
+---A prompt buffer holding `lines`, focused, with the layout the pane reserves its room in. No
+---margins, so the windows each case counts are the pane's own.
 ---@param lines? string[]
 local function prompt_buffer(lines)
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or { "" })
   vim.api.nvim_set_current_buf(buf)
+  require("agentcomplete.layout").attach(buf, { measure = 80, margins = false, inset = 0 })
   return buf
 end
 
@@ -474,35 +480,40 @@ local function spacer_win(prompt_win)
   end
 end
 
-T["open"]["splits vertically when the terminal is at least min_width wide"] = function()
+-- Left to right is the order the conversation reads in: the message, then the reply to it.
+T["open"]["sits to the left of the prompt when the terminal is at least min_width wide"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  expect.equality(vim.fn.winlayout()[1], "row")
-end
-
-T["open"]["splits horizontally when the terminal is narrower than min_width"] = function()
-  local context = require "agentcomplete.context"
-  vim.o.columns = 80
-  local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
   local layout = vim.fn.winlayout()
-  expect.equality(layout[1], "col")
-  expect.equality(layout[2][1][2], prompt_win)
+  expect.equality(layout[1], "row")
+  expect.equality({ layout[2][1][2], layout[2][2][2] }, { spacer_win(prompt_win), prompt_win })
 end
 
-T["open"]["stacks the pane above the prompt when asked to"] = function()
+-- Stacked, a chat reads top to bottom: the message, then the reply under it.
+T["open"]["stacks above the prompt when the terminal is narrower than min_width"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 80
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  local config = { enabled = true, min_width = 160, stacked = "above" }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "col")
   expect.equality(layout[2][1][2], spacer_win(prompt_win))
+end
+
+T["open"]["stacks the pane below the prompt when asked to"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 80
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  local config = { enabled = true, min_width = 160, stacked = "below" }
+  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  local layout = vim.fn.winlayout()
+  expect.equality(layout[1], "col")
+  expect.equality(layout[2][1][2], prompt_win)
 end
 
 T["open"]["hands the pane's formatter the configured rumdl config path"] = function()
@@ -787,19 +798,20 @@ T["open"]["lets the cursor leave the message through the split"] = function()
   expect.equality(vim.api.nvim_get_current_win(), prompt_win)
 end
 
--- The reply being composed is the work; the message beside it is reference for that work.
-T["open"]["leaves the prompt the greater share of the width"] = function()
+-- The message wraps at the same measure the reply does, and its frame is drawn around that.
+T["open"]["gives the message the layout's measure beside the prompt"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 80)
+  expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 86)
+  expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), 82)
 end
 
 -- The terminal is resized mid-session, and an orientation chosen once at open time leaves the
 -- pane wedged beside a prompt with no room for either.
-T["open"]["moves the pane below the prompt when the terminal narrows"] = function()
+T["open"]["stacks the pane with the prompt when the terminal narrows"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
   local buf = prompt_buffer()
@@ -812,20 +824,33 @@ T["open"]["moves the pane below the prompt when the terminal narrows"] = functio
 end
 
 -- The same narrowing, with the stacked side configured: a re-place that reached for the default
--- would drop the pane below the prompt the first time the terminal narrowed.
-T["open"]["moves the pane above the prompt when the terminal narrows"] = function()
+-- would put the pane above the prompt the first time the terminal narrowed.
+T["open"]["moves the pane below the prompt when the terminal narrows"] = function()
   local context = require "agentcomplete.context"
   vim.o.columns = 200
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  local config = { enabled = true, min_width = 160, stacked = "above" }
+  local config = { enabled = true, min_width = 160, stacked = "below" }
   context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
   vim.o.columns = 80
   vim.api.nvim_exec_autocmds("VimResized", {})
   vim.wait(100)
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "col")
-  expect.equality(layout[2][1][2], spacer_win(prompt_win))
+  expect.equality(layout[2][1][2], prompt_win)
+end
+
+-- The float carries the frame, so it has to follow the split it is drawn over.
+T["open"]["refits the message to its room when the terminal is resized"] = function()
+  local context = require "agentcomplete.context"
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  vim.o.columns = 100
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  local spacer = assert(spacer_win(prompt_win))
+  expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), vim.api.nvim_win_get_width(spacer) - 4)
 end
 
 -- Quitting the prompt is how the agent CLI is answered, so both of the pane's windows have to
@@ -971,6 +996,7 @@ T["open"]["keeps the pane across a reload of the prompt buffer"] = function()
   vim.fn.writefile({ "draft" }, path)
   vim.cmd("silent edit " .. vim.fn.fnameescape(path))
   local buf = vim.api.nvim_get_current_buf()
+  require("agentcomplete.layout").attach(buf, { measure = 80, margins = false, inset = 0 })
   context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
   local win = assert(pane_win())
   vim.cmd "silent edit!"
