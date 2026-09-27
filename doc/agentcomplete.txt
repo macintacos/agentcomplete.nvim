@@ -558,6 +558,18 @@ of their own, such as a transparent one. Link it to `Normal` to draw the box
 without a tint: >lua
 	vim.api.nvim_set_hl(0, "AgentCompletePrompt", { link = "Normal" })
 <
+                                                         *w:agentcomplete_box*
+While the prompt is boxed, its window has `w:agentcomplete_box` set to
+`true`, so a plugin that draws over windows can leave the box alone. For
+incline.nvim's filename label: >lua
+	require("incline").setup {
+	  ignore = {
+	    wintypes = function(winid, wintype)
+	      return vim.w[winid].agentcomplete_box or wintype ~= ""
+	    end,
+	  },
+	}
+<
 Set 'composer.enabled' to `false` to leave the prompt window exactly as your
 own configuration draws it. The context pane still sits to its left at
 'composer.width' when there is room, and nothing else is sized.

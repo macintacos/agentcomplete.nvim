@@ -112,30 +112,38 @@ end
 
 ---@alias AgentComplete.Layout.Edge "top"|"left"|"right"|"bottom"
 
----@class AgentComplete.Layout.EdgePlacement
----@field row integer Relative to the prompt window's top-left.
----@field col integer
+---@class AgentComplete.Layout.Rect
+---@field row integer Screen row of the top-left cell, from 0.
+---@field col integer Screen column of the top-left cell, from 0.
 ---@field width integer
 ---@field height integer
+
+---@class AgentComplete.Layout.EdgePlacement: AgentComplete.Layout.Rect
 ---@field lines string[] What the edge draws.
 
----Each edge of a rounded border around a prompt `width` by `height`. It sits a row out, so the
----rows between the prompt and its top and bottom margins — separators, or statuslines — pad the
----box inside it.
----@param width integer
----@param height integer
+---Each edge of a rounded border around `prompt`, the prompt window's whole rectangle. It sits a
+---row out, so the rows between the prompt and its top and bottom margins — separators, or
+---statuslines — pad the box inside it.
+---@param prompt AgentComplete.Layout.Rect
 ---@return table<AgentComplete.Layout.Edge, AgentComplete.Layout.EdgePlacement>
-function M.frame(width, height)
+function M.frame(prompt)
+  local row, col, width, height = prompt.row, prompt.col, prompt.width, prompt.height
   local rule = string.rep("─", width)
   local side = {}
-  for row = 1, height + 2 do
-    side[row] = "│"
+  for line = 1, height + 2 do
+    side[line] = "│"
   end
   return {
-    top = { row = -2, col = -1, width = width + 2, height = 1, lines = { "╭" .. rule .. "╮" } },
-    left = { row = -1, col = -1, width = 1, height = height + 2, lines = side },
-    right = { row = -1, col = width, width = 1, height = height + 2, lines = side },
-    bottom = { row = height + 1, col = -1, width = width + 2, height = 1, lines = { "╰" .. rule .. "╯" } },
+    top = { row = row - 2, col = col - 1, width = width + 2, height = 1, lines = { "╭" .. rule .. "╮" } },
+    left = { row = row - 1, col = col - 1, width = 1, height = height + 2, lines = side },
+    right = { row = row - 1, col = col + width, width = 1, height = height + 2, lines = side },
+    bottom = {
+      row = row + height + 1,
+      col = col - 1,
+      width = width + 2,
+      height = 1,
+      lines = { "╰" .. rule .. "╯" },
+    },
   }
 end
 
@@ -219,16 +227,14 @@ end
 
 ---A float for each edge of the box's border, placed by `fit_box`. A split has no border of its
 ---own, so the frame is drawn over the blank cells around it.
----@param host integer
 ---@return table<AgentComplete.Layout.Edge, integer>
-local function open_frame(host)
+local function open_frame()
   local frame = {}
   for _, edge in ipairs { "top", "left", "right", "bottom" } do
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].bufhidden = "wipe"
     frame[edge] = vim.api.nvim_open_win(buf, false, {
-      relative = "win",
-      win = host,
+      relative = "editor",
       row = 0,
       col = 0,
       width = 1,
@@ -250,9 +256,10 @@ local function open_box(state)
   state.box = {
     top = blank(state.host, "above"),
     bottom = blank(state.host, "below"),
-    frame = open_frame(state.host),
+    frame = open_frame(),
     winhighlight = winhighlight,
   }
+  vim.w[state.host].agentcomplete_box = true
   local tint = "Normal:AgentCompletePrompt"
   set_winhighlight(state.host, winhighlight == "" and tint or (winhighlight .. "," .. tint))
   -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
@@ -275,20 +282,29 @@ local function close_box(state)
   end
   if valid(state.host) then
     set_winhighlight(state.host, box.winhighlight)
+    vim.w[state.host].agentcomplete_box = nil
   end
 end
 
----Draw the frame around the prompt as it is sized now.
+---Draw the frame around the prompt as it is placed and sized now. Placed on the editor from the
+---prompt window's whole rectangle, rather than anchored to the window: an anchored float sits
+---against the window's text, which a winbar coming or going moves without any resize event to
+---say the frame needs placing again.
 ---@param frame table<AgentComplete.Layout.Edge, integer>
 ---@param host integer
 local function draw_frame(frame, host)
-  local edges = M.frame(vim.api.nvim_win_get_width(host), vim.api.nvim_win_get_height(host))
+  local origin = vim.fn.win_screenpos(host)
+  local edges = M.frame {
+    row = origin[1] - 1,
+    col = origin[2] - 1,
+    width = vim.api.nvim_win_get_width(host),
+    height = vim.api.nvim_win_get_height(host),
+  }
   for edge, win in pairs(frame) do
     local placement = edges[edge]
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, placement.lines)
     vim.api.nvim_win_set_config(win, {
-      relative = "win",
-      win = host,
+      relative = "editor",
       row = placement.row,
       col = placement.col,
       width = placement.width,
