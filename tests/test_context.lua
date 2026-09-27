@@ -483,18 +483,18 @@ local function pane_win()
   end
 end
 
----The text of a float's title, with its highlight groups dropped.
+---The text of a float's title, with its highlight groups and padding dropped.
 local function title_text(win)
-  return table.concat(vim.tbl_map(function(chunk)
+  return vim.trim(table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
-  end, vim.api.nvim_win_get_config(win).title))
+  end, vim.api.nvim_win_get_config(win).title)))
 end
 
----The text of a float's footer, with its highlight groups dropped.
+---The text of a float's footer, with its highlight groups and padding dropped.
 local function footer_text(win)
-  return table.concat(vim.tbl_map(function(chunk)
+  return vim.trim(table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
-  end, vim.api.nvim_win_get_config(win).footer))
+  end, vim.api.nvim_win_get_config(win).footer)))
 end
 
 ---The split the float sits over, i.e. the remaining non-floating window that is not `prompt_win`.
@@ -588,7 +588,7 @@ T["open"]["leaves the pane read-only and the cursor in the prompt"] = function()
   expect.equality(vim.api.nvim_get_current_win(), prompt_win)
 end
 
-T["open"]["frames the message, naming the resolver in the border"] = function()
+T["open"]["sets the message on a blank border naming the resolver"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   context.open(
@@ -598,8 +598,9 @@ T["open"]["frames the message, naming the resolver in the border"] = function()
     with_resolver(ok_result("hello"))
   )
   local win = assert(pane_win())
-  expect.equality(vim.api.nvim_win_get_config(win).border[1], "╭")
-  expect.equality(title_text(win), "─ claude-code · last message ")
+  local border = vim.api.nvim_win_get_config(win).border --[[@as string[] ]]
+  expect.equality(vim.trim(table.concat(border)), "")
+  expect.equality(title_text(win), "claude-code · last message")
   expect.equality(footer_text(win):find("read-only", 1, true) ~= nil, true)
 end
 
@@ -618,7 +619,7 @@ T["open"]["names the resolution rung in the border"] = function()
   )
   expect.equality(
     title_text(assert(pane_win())),
-    "─ opencode · pointer file · last message "
+    "opencode · pointer file · last message"
   )
 end
 
@@ -631,7 +632,7 @@ T["open"]["advertises the scroll keys in the footer"] = function()
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
   context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "─ ^B/^F scroll · read-only ─")
+  expect.equality(footer_text(assert(pane_win())), "^B/^F scroll · read-only")
 end
 
 T["open"]["advertises only the scroll key that is mapped"] = function()
@@ -643,7 +644,7 @@ T["open"]["advertises only the scroll key that is mapped"] = function()
     keys = { scroll_down = "<C-f>", scroll_up = false },
   }
   context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "─ ^F scroll · read-only ─")
+  expect.equality(footer_text(assert(pane_win())), "^F scroll · read-only")
 end
 
 T["open"]["keeps the footer to what the pane still is when no key scrolls it"] = function()
@@ -652,7 +653,7 @@ T["open"]["keeps the footer to what the pane still is when no key scrolls it"] =
   local config =
     { enabled = true, min_width = 160, keys = { scroll_down = false, scroll_up = false } }
   context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "─ read-only ─")
+  expect.equality(footer_text(assert(pane_win())), "read-only")
 end
 
 -- Anything that is not a plain control key is shown as Vim spells it, since there is no
@@ -666,10 +667,7 @@ T["open"]["shows a non-control scroll key by its Vim notation"] = function()
     keys = { scroll_down = "<PageDown>", scroll_up = false },
   }
   context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(
-    footer_text(assert(pane_win())),
-    "─ <PageDown> scroll · read-only ─"
-  )
+  expect.equality(footer_text(assert(pane_win())), "<PageDown> scroll · read-only")
 end
 
 ---A message long enough that the pane has somewhere to scroll to.

@@ -136,7 +136,7 @@ end
 ---@param scrolls AgentComplete.Context.Pane.Scroll[]
 ---@return vim.api.keyset.win_config
 local function chrome(resolver, rung, scrolls)
-  local title = { { "─ ", "FloatBorder" }, { resolver, "Title" } }
+  local title = { { "  ", "FloatBorder" }, { resolver, "Title" } }
   if rung then
     title[#title + 1] = { " · " .. rung, "Comment" }
   end
@@ -148,10 +148,11 @@ local function chrome(resolver, rung, scrolls)
     or "read-only"
   return {
     style = "minimal",
-    border = "rounded",
+    -- Blank rather than none: a title and footer need a border row to sit on.
+    border = "solid",
     title = title,
     title_pos = "left",
-    footer = { { "─ ", "FloatBorder" }, { hint, "Comment" }, { " ─", "FloatBorder" } },
+    footer = { { hint, "Comment" } },
     footer_pos = "right",
   }
 end

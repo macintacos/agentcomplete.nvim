@@ -534,7 +534,7 @@ there is not room for both at full width, they share it evenly. Narrower than
 'context.min_width', the two share one centered column, the message above
 your reply by default, and the reply's inset lines its text up with the
 message's: your reply starts where the message's text does, and wraps two
-columns past it, at the width of the message's frame. Everything is
+columns past it, at the width of the message's padding. Everything is
 re-placed as the terminal is resized.
 
 Margins open only when the prompt is the only window on the screen, as it is
@@ -554,11 +554,11 @@ vanish into the rest of the screen. Link it elsewhere to see where they
 are: >lua
 	vim.api.nvim_set_hl(0, "AgentCompleteMargin", { link = "NormalFloat" })
 <
-The box's border is drawn in `FloatBorder`, as the pane's is. Its background
-is the `AgentCompletePrompt` highlight group, linked by default to
-`NormalFloat` — invisible under a colorscheme whose floats have no background
-of their own, such as a transparent one. Link it to `Normal` to draw the box
-without a tint: >lua
+The box's border is drawn in `FloatBorder`. Its background is the
+`AgentCompletePrompt` highlight group, linked by default to `NormalFloat` —
+invisible under a colorscheme whose floats have no background of their own,
+such as a transparent one. Link it to `Normal` to draw the box without a
+tint: >lua
 	vim.api.nvim_set_hl(0, "AgentCompletePrompt", { link = "Normal" })
 <
                                                          *w:agentcomplete_box*
@@ -599,9 +599,10 @@ the reply on top instead: >lua
 	  context = { stacked = "below" },
 	})
 <
-Either way it is drawn as a rounded-border window titled with the agent that
-spoke, and footed with the keys that scroll it and a reminder that you cannot
-answer here: "<S-Up>/<S-Down> scroll · read-only".
+Either way it is drawn without a border, padded by a blank cell all round:
+titled on the blank row above with the agent that spoke, and footed on the
+one below with the keys that scroll it and a reminder that you cannot answer
+here: "<S-Up>/<S-Down> scroll · read-only".
 
 It reads as a document rather than a buffer you act on: no line numbers, no
 sign or fold column, and markdown markup concealed. That last one is the point
@@ -678,7 +679,7 @@ database at `~/.local/share/opencode/opencode.db` ($XDG_DATA_HOME is
 honored), using `sqlite3` — which must be on $PATH for the pane. Which
 session to read is the hard part: OpenCode's external editor inherits
 $OPENCODE_PID but no session id, and OpenCode records no mapping between the
-two. So the session is resolved down three rungs, and the pane's border names
+two. So the session is resolved down three rungs, and the pane's title names
 the one that answered — a guess is never shown as a certainty:
 
 	`$OPENCODE_SESSION_ID`
@@ -693,7 +694,7 @@ the one that answered — a guess is never shown as a certainty:
 			with `--continue` resolves as readily as a fresh one.
 			Correct in the ordinary case of one OpenCode per
 			project, and wrong when two share a directory — which
-			is why it says so in the border.
+			is why it says so in the title.
 
 A `guessed` header means the pane may be showing another conversation. Install
 the plugin to replace the guess with a certainty, either with
