@@ -5,8 +5,8 @@ set -euo pipefail
 
 blink_dir=".tests/site/pack/deps/start/blink.cmp"
 if [ ! -d "$blink_dir" ]; then
-  echo "blink.cmp not found at $blink_dir — run 'mise run setup' first." >&2
-  exit 1
+	echo "blink.cmp not found at $blink_dir — run 'mise run setup' first." >&2
+	exit 1
 fi
 
 echo "=== Claude Code / blink suppression pass ==="
@@ -15,13 +15,13 @@ echo "=== Claude Code / blink suppression pass ==="
 # is detected. The report should then show `path` removed from the effective
 # sources — i.e. only-source suppression validated end-to-end against real blink.
 nvim --headless --noplugin -u tests/minimal_init.lua \
-  -c "set rtp+=$blink_dir" \
-  -c "lua require('blink.cmp').setup({ fuzzy = { implementation = 'lua' }, sources = { default = { 'agentcomplete', 'path' }, providers = { agentcomplete = { name = 'agentcomplete', module = 'agentcomplete.backends.blink' } } } })" \
-  -c 'lua require("agentcomplete").setup({})' \
-  -c 'file claude-prompt-diag.md' \
-  -c 'AgentCompleteAttach' \
-  -c 'luafile scripts/diagnostics.lua' \
-  -c 'qa!'
+	-c "set rtp+=$blink_dir" \
+	-c "lua require('blink.cmp').setup({ fuzzy = { implementation = 'lua' }, sources = { default = { 'agentcomplete', 'path' }, providers = { agentcomplete = { name = 'agentcomplete', module = 'agentcomplete.backends.blink' } } } })" \
+	-c 'lua require("agentcomplete").setup({})' \
+	-c 'file claude-prompt-diag.md' \
+	-c 'AgentCompleteAttach' \
+	-c 'luafile scripts/diagnostics.lua' \
+	-c 'qa!'
 
 echo
 echo "=== OpenCode detection pass ==="
@@ -31,7 +31,7 @@ echo "=== OpenCode detection pass ==="
 # show `session.tool: opencode` and the resolved OpenCode skill/command search dirs —
 # the same `:luafile scripts/diagnostics.lua` flow a human runs from an OpenCode buffer.
 OPENCODE=1 OPENCODE_PID=99999 nvim --headless --noplugin -u tests/minimal_init.lua \
-  -c 'lua require("agentcomplete").setup({})' \
-  -c 'file 1700000000000.md' \
-  -c 'luafile scripts/diagnostics.lua' \
-  -c 'qa!'
+	-c 'lua require("agentcomplete").setup({})' \
+	-c 'file 1700000000000.md' \
+	-c 'luafile scripts/diagnostics.lua' \
+	-c 'qa!'

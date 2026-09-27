@@ -18,9 +18,9 @@ unset GIT_DIR GIT_WORK_TREE
 # headless test runtime can find it (see tests/minimal_init.lua).
 mini_dir=".tests/site/pack/deps/start/mini.nvim"
 if [ -d "$mini_dir/.git" ]; then
-  git -C "$mini_dir" pull --ff-only
+	git -C "$mini_dir" pull --ff-only
 else
-  git clone --filter=blob:none https://github.com/echasnovski/mini.nvim "$mini_dir"
+	git clone --filter=blob:none https://github.com/echasnovski/mini.nvim "$mini_dir"
 fi
 
 # blink.cmp powers the `mise run diag` headless blink setup. Pinned to a v1 tag on
@@ -32,7 +32,7 @@ fi
 blink_dir=".tests/site/pack/deps/start/blink.cmp"
 blink_tag="v1.10.0"
 if [ ! -d "$blink_dir/.git" ]; then
-  git clone --filter=blob:none https://github.com/Saghen/blink.cmp "$blink_dir"
+	git clone --filter=blob:none https://github.com/Saghen/blink.cmp "$blink_dir"
 fi
 git -C "$blink_dir" fetch --tags --quiet origin
 git -C "$blink_dir" checkout --quiet "$blink_tag"

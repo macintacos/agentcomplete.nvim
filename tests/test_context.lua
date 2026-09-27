@@ -192,11 +192,9 @@ T["claude_code.resolve"]["skips sidechain entries"] = function()
 end
 
 T["claude_code.resolve"]["concatenates every text block in the entry"] = function()
-  local result = resolve(
-    fixture({
-      assistant({ text_block("first"), tool_block("Bash"), text_block("second") }),
-    })
-  )
+  local result = resolve(fixture({
+    assistant({ text_block("first"), tool_block("Bash"), text_block("second") }),
+  }))
   expect.equality(result.text, "first\n\nsecond")
 end
 

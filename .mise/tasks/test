@@ -6,9 +6,9 @@
 set -euo pipefail
 
 if [ -n "${usage_file:-}" ]; then
-  nvim --headless --noplugin -u tests/minimal_init.lua \
-    -c "lua MiniTest.run_file('${usage_file}')"
+	nvim --headless --noplugin -u tests/minimal_init.lua \
+		-c "lua MiniTest.run_file('${usage_file}')"
 else
-  nvim --headless --noplugin -u tests/minimal_init.lua \
-    -c "lua MiniTest.run()"
+	nvim --headless --noplugin -u tests/minimal_init.lua \
+		-c "lua MiniTest.run()"
 fi
