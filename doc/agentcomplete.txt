@@ -315,9 +315,9 @@ except a detected prompt buffer, so listing it in `default` is harmless
 elsewhere.
 
                                                     *agentcomplete-load-order*
-Note: call `require("agentcomplete").setup()` AFTER `blink.cmp` is set up.
-With lazy.nvim, make agentcomplete depend on blink (or order the specs) so
-blink is configured first.
+Note: agentcomplete touches blink's config only when a prompt buffer opens,
+so blink just has to be configured by then. Load order doesn't matter, and
+blink can be lazy-loaded.
 
 Prefer zero configuration? Set `backend = "native"` and skip provider
 registration entirely (see |agentcomplete-native|).
