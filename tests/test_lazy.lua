@@ -7,7 +7,7 @@ local new_set, expect = MiniTest.new_set, MiniTest.expect
 
 local child = MiniTest.new_child_neovim()
 
-local STARTUP = {
+local STARTUP_MODULES = {
   "agentcomplete",
   "agentcomplete.detect",
   "agentcomplete.detect.claude_code",
@@ -16,7 +16,7 @@ local STARTUP = {
 
 ---The `agentcomplete*` modules the child has loaded, sorted.
 ---@return string[]
-local function loaded()
+local function loaded_modules()
   return child.lua([[
     local names = {}
     for name in pairs(package.loaded) do
@@ -75,13 +75,13 @@ local T = new_set({
 
 T["setup loads only what detection needs"] = function()
   child.lua([[require("agentcomplete").setup({})]])
-  expect.equality(loaded(), STARTUP)
+  expect.equality(loaded_modules(), STARTUP_MODULES)
 end
 
 T["reading a file that is not a prompt loads nothing more"] = function()
   child.lua([[require("agentcomplete").setup({})]])
   child.cmd("edit README.md")
-  expect.equality(loaded(), STARTUP)
+  expect.equality(loaded_modules(), STARTUP_MODULES)
 end
 
 T["blink is left alone until a prompt buffer attaches"] = function()
