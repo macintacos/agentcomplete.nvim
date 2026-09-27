@@ -191,6 +191,46 @@ T["windows"]["closes the margins before the prompt's quit resolves"] = function(
   expect.equality(vim.api.nvim_tabpage_list_wins(0), { host })
 end
 
+-- `:close`, `<C-w>c`, `:bdelete` close the window without the quit `QuitPre` announces. Left
+-- behind, the margins would be the only windows, each locked to its blank buffer.
+T["windows"]["leaves no margins behind when the prompt window is closed"] = function()
+  vim.o.columns = 200
+  local _, host = attached()
+  pcall(vim.api.nvim_command, "close")
+  expect.equality(vim.api.nvim_tabpage_list_wins(0), { host })
+end
+
+T["windows"]["leaves no margins behind when the prompt buffer is deleted"] = function()
+  vim.o.columns = 200
+  local buf = attached()
+  pcall(vim.api.nvim_command, "bwipeout! " .. buf)
+  vim.wait(100)
+  local wins = vim.api.nvim_tabpage_list_wins(0)
+  expect.equality(#wins, 1)
+  expect.equality(vim.wo[wins[1]].winfixbuf, false)
+end
+
+-- A split copies the window options of the one it splits from.
+T["windows"]["draws nothing of the prompt's own on the margins' empty lines"] = function()
+  vim.o.columns = 200
+  vim.wo.list = true
+  vim.wo.colorcolumn = "10"
+  attached()
+  local margin = vim.fn.win_getid(1)
+  expect.equality({ vim.wo[margin].list, vim.wo[margin].colorcolumn }, { false, "" })
+end
+
+-- An empty local winbar falls back to a global one, which would draw its row in each margin.
+T["windows"]["blanks a global winbar in the margins"] = function()
+  vim.o.columns = 200
+  vim.go.winbar = "%f"
+  attached()
+  local margin = vim.fn.win_getid(1)
+  vim.go.winbar = ""
+  expect.equality(vim.api.nvim_get_option_value("winbar", { win = margin, scope = "local" }), " ")
+  expect.equality(vim.wo[margin].winhighlight:find("WinBar:AgentCompleteMargin", 1, true) ~= nil, true)
+end
+
 T["windows"]["closes everything it opened on detach"] = function()
   vim.o.columns = 200
   local buf, host = attached()
@@ -205,11 +245,12 @@ T["windows"]["closes its windows when the prompt buffer is wiped"] = function()
   local buf = attached()
   vim.cmd "botright new"
   vim.api.nvim_buf_delete(buf, { force = true })
+  local layout = require "agentcomplete.layout"
   vim.wait(500, function()
-    return #vim.api.nvim_tabpage_list_wins(0) == 1
+    return layout._layouts[buf] == nil
   end)
   expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
-  expect.equality(require("agentcomplete.layout")._layouts[buf], nil)
+  expect.equality(layout._layouts[buf], nil)
 end
 
 T["windows"]["hides the margins' separators, statuslines and end-of-buffer rows"] = function()

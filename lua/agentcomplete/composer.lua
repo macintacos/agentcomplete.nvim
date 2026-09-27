@@ -20,7 +20,6 @@ local OPTIONS = {
   signcolumn = "no",
   foldcolumn = "0",
   cursorline = false,
-  winbar = "",
   statuscolumn = string.rep(" ", M.INSET),
   wrap = true,
   linebreak = true,
@@ -78,6 +77,8 @@ function M.attach(buf)
   end
   local wanted = vim.tbl_extend("error", OPTIONS, {
     fillchars = M.fillchars(vim.api.nvim_get_option_value("fillchars", { win = win })),
+    -- An empty local winbar falls back to a global one, so that is blanked rather than emptied.
+    winbar = vim.go.winbar == "" and "" or " ",
   })
   local saved = {}
   for option, value in pairs(wanted) do
@@ -94,8 +95,8 @@ function M.attach(buf)
       return
     end
     for _, option in ipairs(HELD) do
-      if vim.wo[win][option] ~= OPTIONS[option] then
-        set_local(win, option, OPTIONS[option])
+      if vim.wo[win][option] ~= wanted[option] then
+        set_local(win, option, wanted[option])
       end
     end
   end
@@ -108,13 +109,13 @@ function M.attach(buf)
       vim.schedule(hold)
     end,
   })
-  -- For a set made outside any autocmd. Setting an option from inside `OptionSet` does not fire
-  -- it again, so this cannot loop.
+  -- For a set made outside any autocmd; a `:setglobal` leaves the prompt's own value alone.
+  -- Setting an option from inside `OptionSet` does not fire it again, so this cannot loop.
   vim.api.nvim_create_autocmd("OptionSet", {
     group = group,
     pattern = HELD,
     callback = function()
-      if vim.api.nvim_get_current_win() == win and vim.v.option_type ~= "global" then
+      if vim.api.nvim_get_current_win() == win and vim.v.option_command ~= "setglobal" then
         hold()
       end
     end,

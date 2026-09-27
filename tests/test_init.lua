@@ -274,6 +274,23 @@ T["attach"]["turns the prompt window into a page, and detach turns it back"] = f
   expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { true, "" })
 end
 
+T["attach"]["frames the prompt with margins when there is a UI to frame"] = function()
+  local agentcomplete = require "agentcomplete"
+  agentcomplete.setup { backend = "native" }
+  local buf = numbered_buffer()
+  local list_uis = vim.api.nvim_list_uis
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.api.nvim_list_uis = function()
+    return { {} }
+  end
+  local ok = pcall(agentcomplete.attach, buf, { force = true })
+  vim.api.nvim_list_uis = list_uis
+  expect.equality(ok, true)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 3)
+  agentcomplete.detach(buf)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
+end
+
 T["attach"]["leaves the prompt window alone with the composer off"] = function()
   local agentcomplete = require "agentcomplete"
   agentcomplete.setup { backend = "native", composer = { enabled = false } }

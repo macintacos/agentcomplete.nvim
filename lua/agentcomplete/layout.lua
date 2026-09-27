@@ -14,16 +14,21 @@ local M = {}
 ---pane's own two-column inset.
 local PANE_FRAME = 6
 
----What every blank split turns off. The highlight links make its separator, statusline and
----end-of-buffer rows read as the margin they are, rather than as an empty window. Not
----'winfixwidth' here: a margin wants it, the spacer does not (see `M.reserve`).
+---What every blank split turns off — a split copies the window options of the one it splits
+---from, so anything the prompt draws on an empty line would be drawn here too. The highlight
+---links make its separator, winbar, statusline and end-of-buffer rows read as the margin they
+---are, rather than as an empty window. Not 'winfixwidth' here: a margin wants it, the spacer
+---does not (see `M.reserve`).
 local BLANK_OPTIONS = {
   number = false,
   relativenumber = false,
   signcolumn = "no",
   foldcolumn = "0",
   cursorline = false,
-  winbar = "",
+  cursorcolumn = false,
+  colorcolumn = "",
+  list = false,
+  spell = false,
   statuscolumn = "",
   statusline = " ",
   fillchars = "eob: ,vert: ,horiz: ,horizup: ,horizdown: ,vertleft: ,vertright: ,verthoriz: ",
@@ -31,6 +36,8 @@ local BLANK_OPTIONS = {
     "Normal:AgentCompleteMargin",
     "EndOfBuffer:AgentCompleteMargin",
     "WinSeparator:AgentCompleteMargin",
+    "WinBar:AgentCompleteMargin",
+    "WinBarNC:AgentCompleteMargin",
     "StatusLine:AgentCompleteMargin",
     "StatusLineNC:AgentCompleteMargin",
   }, ","),
@@ -122,6 +129,8 @@ local function blank(host, split)
   for option, value in pairs(BLANK_OPTIONS) do
     vim.wo[win][option] = value
   end
+  -- An empty local winbar falls back to a global one, so that is blanked rather than emptied.
+  vim.wo[win].winbar = vim.go.winbar == "" and "" or " "
   return win
 end
 
@@ -192,7 +201,6 @@ local function dismiss_margins(buf)
     return
   end
   local left, right = state.left, state.right
-  -- Cleared first: closing either window fires `WinClosed`, which routes back here.
   state.left, state.right = nil, nil
   for _, win in ipairs { left, right } do
     pcall(vim.api.nvim_win_close, win, true)
@@ -209,9 +217,11 @@ local function open_margins(buf, state)
   -- The prompt is the one window a resize should grow or shrink; the margins are set by `arrange`.
   vim.wo[state.left].winfixwidth = true
   vim.wo[state.right].winfixwidth = true
+  -- The prompt's own window too, synchronously: closed without a quit (`:close`, `:bdelete`) it
+  -- would otherwise leave the margins as the only windows, each locked to its blank buffer.
   vim.api.nvim_create_autocmd("WinClosed", {
     group = state.group,
-    pattern = { tostring(state.left), tostring(state.right) },
+    pattern = { tostring(state.left), tostring(state.right), tostring(state.host) },
     callback = function()
       dismiss_margins(buf)
     end,

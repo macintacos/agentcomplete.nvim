@@ -498,10 +498,12 @@ In the prompt window, agentcomplete:
 	blanks	the window separators and the `~` rows past the last
 		line
 
-Your statusline, colorscheme, spelling, 'textwidth', and keymaps are left
-alone. Every option is set for the prompt buffer only (|:setlocal|), so any
-other buffer opened in that window looks as it always does, and each is put
-back by |:AgentCompleteDetach|.
+A winbar you set globally cannot be switched off for one window, so it is
+blanked there instead, leaving an empty row. Your statusline, colorscheme,
+spelling, 'textwidth', and keymaps are left alone. Every option is set for
+the prompt buffer only (|:setlocal|), so any other buffer opened in that
+window looks as it always does, and each is put back by
+|:AgentCompleteDetach|.
 
 The text wraps at 'composer.width' columns — 80 by default — however wide the
 terminal is. Blank margins either side hold the prompt at that width and keep
@@ -516,7 +518,9 @@ the left of your reply, both at 'composer.width', centered as a pair; when
 there is not room for both at full width, they share it evenly. Narrower than
 'context.min_width', the two share one centered column, the message above
 your reply by default, and the reply's inset lines its text up with the
-message's. Everything is re-placed as the terminal is resized.
+message's: your reply starts where the message's text does, and wraps two
+columns past it, at the width of the message's frame. Everything is
+re-placed as the terminal is resized.
 
 Margins open only when the prompt is the only window on the screen, as it is
 when Claude Code or OpenCode opens it. |:AgentCompleteAttach| in a session

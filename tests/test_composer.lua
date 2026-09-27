@@ -102,6 +102,26 @@ T["attach"]["takes the winbar back off when a plugin sets it from its own autocm
   expect.equality(vim.wo[win].winbar, "")
 end
 
+-- A `:set` in the prompt sets its local value as much as a `:setlocal` does.
+T["attach"]["takes the statuscolumn back from a plain :set in the prompt"] = function()
+  local buf, win = prompt()
+  require("agentcomplete.composer").attach(buf)
+  vim.cmd "set statuscolumn=%l"
+  local held = vim.wo[win].statuscolumn
+  vim.go.statuscolumn = ""
+  expect.equality(held, "    ")
+end
+
+-- An empty local winbar falls back to a global one, so emptying it would hide nothing.
+T["attach"]["blanks a global winbar rather than falling back to it"] = function()
+  vim.go.winbar = "%f"
+  local buf, win = prompt()
+  require("agentcomplete.composer").attach(buf)
+  local winbar = vim.api.nvim_get_option_value("winbar", { win = win, scope = "local" })
+  vim.go.winbar = ""
+  expect.equality(winbar, " ")
+end
+
 -- A user who sets the number column in the prompt meant to.
 T["attach"]["lets the number column be turned back on"] = function()
   local buf, win = prompt()
