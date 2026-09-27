@@ -196,8 +196,13 @@ T["setup registers the Claude Code detector"] = function()
   expect.equality(vim.tbl_contains(names, "claude-code"), true)
 end
 
-T["setup registers the built-in context resolvers"] = function()
-  require("agentcomplete").setup()
+T["attaching registers the built-in context resolvers"] = function()
+  local context = require("agentcomplete.context")
+  context.clear()
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native" })
+  expect.equality(#context.resolvers, 0)
+  agentcomplete.attach(vim.api.nvim_create_buf(false, true), { force = true })
   local names = vim.tbl_map(function(r)
     return r.name
   end, require("agentcomplete.context").resolvers)

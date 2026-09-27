@@ -24,7 +24,6 @@
 ---@class AgentComplete.Backend.Blink
 local M = {}
 
-local sources = require("agentcomplete.sources")
 local CIK = vim.lsp.protocol.CompletionItemKind
 
 local KIND =
@@ -63,6 +62,7 @@ end
 ---@param col integer 0-based byte cursor column
 ---@return { items: table[] }
 function M.build(session, line, row, col)
+  local sources = require("agentcomplete.sources")
   local ctx = sources.context(line, col)
   if not ctx then
     return { items = {} }
@@ -166,8 +166,8 @@ M._installed = nil
 ---buffers resolve to agentcomplete only (plus registered `allowed_sources`),
 ---while every other buffer keeps the user's original lists. This mutates blink's
 ---global config by design (blink.cmp has no per-buffer source config); the wrap is
----behaviour-preserving for non-detected buffers and requires `setup()` to run
----after `blink.cmp.setup()`. Idempotent: a prior wrap is restored first so a
+---behaviour-preserving for non-detected buffers and runs when a prompt buffer
+---attaches, so blink must be configured by then. Idempotent: a prior wrap is restored first so a
 ---re-run re-captures pristine originals. Returns false (no-op) when blink is
 ---absent or `agentcomplete` is not a registered provider.
 ---@param config { allowed_sources?: string[] }

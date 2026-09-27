@@ -10,8 +10,6 @@
 ---`$AGENTCOMPLETE_CWD` (per-launch) or `vim.g.agentcomplete_cwd` (static config).
 local M = { name = "opencode" }
 
-local scan = require("agentcomplete.scan")
-
 ---Whether the buffer is OpenCode's external-editor prompt: OpenCode launched this Neovim
 ---(`$OPENCODE`) and the buffer is its `<epoch-millis>.md` temp file.
 ---@param bufnr integer
@@ -44,6 +42,7 @@ function M.detect(bufnr)
     return nil
   end
   local cwd = resolve_cwd()
+  local scan = require("agentcomplete.scan")
   local skill_dirs, command_dirs = scan.opencode_dirs(cwd)
   -- Config-map commands first so a user's own command wins the name-dedup in `sources.items`
   -- over a built-in of the same name; OpenCode's built-in TUI commands fill in the rest.
