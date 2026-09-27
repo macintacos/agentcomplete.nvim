@@ -2,9 +2,9 @@
 ---
 ---The prompt stays a real window, so quitting it quits Neovim exactly as it always has. Around
 ---it sit blank splits: a margin on either side that holds the prompt at a readable measure, one
----above and one below that box it in the middle of the screen while there is no pane, and the
----spacer the context pane draws its message over. This module owns all of them, and is the one
----place that resizes any of them — two modules each answering the same resize would race.
+---above and one below that box it in the middle of its column, and the spacer the context pane
+---draws its message over. This module owns all of them, and is the one place that resizes any of
+---them — two modules each answering the same resize would race.
 ---
 ---`M.plan` is the editor-state-free core the tests drive directly; the rest is the glue that
 ---applies a plan to windows.
@@ -189,7 +189,7 @@ end
 ---@field group integer Augroup the layout's autocmds live in.
 ---@field left? integer Left margin.
 ---@field right? integer Right margin.
----@field box? AgentComplete.Layout.Box While the prompt is boxed: between margins, with no pane.
+---@field box? AgentComplete.Layout.Box While the prompt is boxed: whenever it is between margins.
 ---@field spacer? integer Split the pane draws over.
 ---@field placement? AgentComplete.Layout.Placement How the spacer is placed, while there is one.
 ---@field beside? boolean Where the spacer sits now.
@@ -272,7 +272,7 @@ local function open_frame()
   return frame
 end
 
----Box the prompt in the middle of its column, framed and tinted like the context pane.
+---Box the prompt in the middle of its column, framed and tinted.
 ---@param state AgentComplete.Layout.State
 local function open_box(state)
   local winhighlight =
@@ -348,8 +348,8 @@ local function draw_frame(frame, host)
   end
 end
 
----Size the box to the prompt's text at the width it has just been given. Only the margins are
----set: the prompt is the one window between them, so it takes the rows they leave.
+---Size the box to the prompt's text at the width it has just been given. The bottom margin takes
+---the rows the other two leave: set directly, it would trade rows with a pane stacked below it.
 ---@param box AgentComplete.Layout.Box
 ---@param host integer
 local function fit_box(box, host)
@@ -358,7 +358,7 @@ local function fit_box(box, host)
   local content = vim.api.nvim_win_text_height(host, {}).all
   local heights = M.box(rows, content, BOX_HEIGHT)
   vim.api.nvim_win_set_height(box.top, heights.top)
-  vim.api.nvim_win_set_height(box.bottom, heights.bottom)
+  vim.api.nvim_win_set_height(host, heights.prompt)
   draw_frame(box.frame, host)
   if content > heights.prompt then
     return
@@ -371,6 +371,25 @@ local function fit_box(box, host)
       vim.fn.winrestview({ topline = 1, skipcol = 0 })
     end
   end)
+end
+
+---Put the pane's spacer on `split` edge of the prompt, split from it unboxed so that beside it the
+---spacer runs the full height, and stacked it takes half the column rather than half a margin.
+---@param state AgentComplete.Layout.State
+---@param split "left"|"above"|"below"
+local function place_spacer(state, split)
+  close_box(state)
+  if valid(state.spacer) then
+    vim.api.nvim_win_set_config(state.spacer, { split = split, win = state.host })
+  else
+    state.spacer = blank(state.host, split)
+  end
+  -- Boxing splits the column again, and 'equalalways' evens out every window in it.
+  local height = vim.api.nvim_win_get_height(state.spacer)
+  if valid(state.left) then
+    open_box(state)
+  end
+  vim.api.nvim_win_set_height(state.spacer, height)
 end
 
 ---Resize every window around the prompt for the terminal as it is now. The margins and the
@@ -395,8 +414,7 @@ function M.arrange(buf)
     })
     if valid(state.spacer) and plan.beside ~= state.beside then
       state.beside = plan.beside
-      local split = plan.beside and "left" or state.placement.stacked
-      vim.api.nvim_win_set_config(state.spacer, { split = split, win = state.host })
+      place_spacer(state, plan.beside and "left" or state.placement.stacked)
     end
     if plan.left then
       vim.api.nvim_win_set_width(state.left, plan.left)
@@ -544,14 +562,13 @@ function M.reserve(buf, placement)
     margins = valid(state.left),
     inset = state.opts.inset,
   })
-  close_box(state)
-  state.spacer = blank(state.host, plan.beside and "left" or placement.stacked)
+  place_spacer(state, plan.beside and "left" or placement.stacked)
   state.placement, state.beside = placement, plan.beside
   M.arrange(buf)
   return state.spacer
 end
 
----Close the pane's spacer and give its room back, boxing the prompt again between its margins.
+---Close the pane's spacer and give its room back.
 ---@param buf integer
 function M.release(buf)
   local state = M._layouts[buf]
@@ -561,9 +578,6 @@ function M.release(buf)
   local spacer = state.spacer
   state.spacer, state.placement, state.beside = nil, nil, nil
   pcall(vim.api.nvim_win_close, spacer, true)
-  if valid(state.left) and valid(state.host) then
-    open_box(state)
-  end
   M.arrange(buf)
 end
 

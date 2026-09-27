@@ -156,11 +156,18 @@ local function row_widths()
   return widths
 end
 
----The windows in the prompt's column, top to bottom.
+---The windows in the prompt's column, top to bottom: the first column in the top-level row.
 local function prompt_column()
-  return vim.tbl_map(function(node)
-    return node[2]
-  end, vim.fn.winlayout()[2][2][2] --[[@as table]])
+  for _, node in
+    ipairs(vim.fn.winlayout()[2] --[[@as table]])
+  do
+    if node[1] == "col" then
+      return vim.tbl_map(function(leaf)
+        return leaf[2]
+      end, node[2])
+    end
+  end
+  return {}
 end
 
 ---The heights of the windows in the prompt's column, top to bottom.
@@ -228,10 +235,8 @@ end
 -- So a plugin drawing over windows, such as a filename label, can leave the box alone.
 T["windows"]["marks the prompt's window while it is boxed"] = function()
   vim.o.columns = 200
-  local buf, host = attached()
+  local _, host = attached()
   expect.equality(vim.w[host].agentcomplete_box, true)
-  require("agentcomplete.layout").reserve(buf, PLACEMENT)
-  expect.equality(vim.w[host].agentcomplete_box, nil)
 end
 
 T["windows"]["tints the box against the margins"] = function()
@@ -250,12 +255,13 @@ T["windows"]["tints the box against the margins"] = function()
   )
 end
 
-T["windows"]["gives the box's rows and tint up to the pane"] = function()
-  vim.o.columns = 200
+T["windows"]["boxes the prompt beside a pane that runs the full height"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
   local buf, host = attached()
-  require("agentcomplete.layout").reserve(buf, PLACEMENT)
-  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 4)
-  expect.equality(vim.wo[host].winhighlight, "")
+  local spacer = assert(require("agentcomplete.layout").reserve(buf, PLACEMENT))
+  expect.equality(column_heights(), { 13, 10, 13 })
+  expect.equality(vim.api.nvim_win_get_height(spacer), 38)
+  expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt")
 end
 
 T["windows"]["opens no margins around a prompt sharing the screen"] = function()
@@ -276,18 +282,30 @@ T["windows"]["reserves the pane's room to the left of the prompt when wide"] = f
   local buf, host = attached()
   local spacer = require("agentcomplete.layout").reserve(buf, PLACEMENT)
   expect.equality(row_widths(), { 13, 86, 84, 14 })
-  local row = vim.fn.winlayout()[2]
-  expect.equality({ row[2][2], row[3][2] }, { spacer, host })
+  expect.equality({ vim.fn.winlayout()[2][2][2], prompt_column()[2] }, { spacer, host })
 end
 
 T["windows"]["stacks the pane's room in the prompt's column when narrow"] = function()
   vim.o.columns = 120
   local buf, host = attached()
   local spacer = require("agentcomplete.layout").reserve(buf, PLACEMENT)
-  local column = vim.fn.winlayout()[2][2]
-  expect.equality(column[1], "col")
-  expect.equality({ column[2][1][2], column[2][2][2] }, { spacer, host })
+  local column = prompt_column()
+  expect.equality({ #column, column[1], column[3] }, { 4, spacer, host })
   expect.equality(row_widths(), { 16, 86, 16 })
+  expect.equality(column_heights(), { 11, 1, 6, 1 })
+end
+
+-- Stacked below, the pane's split is the next window down from the box's bottom margin.
+T["windows"]["grows the box without taking rows from a pane stacked below it"] = function()
+  vim.o.columns, vim.o.lines = 120, 60
+  local buf = attached()
+  local placement = { min_width = 160, stacked = "below" }
+  local spacer = assert(require("agentcomplete.layout").reserve(buf, placement))
+  local height = vim.api.nvim_win_get_height(spacer)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  expect.equality(prompt_column()[4], spacer)
+  expect.equality(vim.api.nvim_win_get_height(spacer), height)
 end
 
 T["windows"]["re-places the pane and the margins when the terminal is resized"] = function()
@@ -300,6 +318,20 @@ T["windows"]["re-places the pane and the margins when the terminal is resized"] 
   vim.o.columns = 200
   vim.api.nvim_exec_autocmds("VimResized", {})
   expect.equality(row_widths(), { 13, 86, 84, 14 })
+end
+
+T["windows"]["keeps the prompt boxed as the pane restacks"] = function()
+  vim.o.columns = 200
+  local buf, host = attached()
+  local spacer = require("agentcomplete.layout").reserve(buf, PLACEMENT)
+  vim.o.columns = 120
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  local column = prompt_column()
+  expect.equality({ #column, column[1], column[3] }, { 4, spacer, host })
+  vim.o.columns = 200
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  expect.equality(vim.fn.winlayout()[2][2], { "leaf", spacer })
+  expect.equality(prompt_column()[2], host)
 end
 
 T["windows"]["gives the pane's room back when it is released"] = function()

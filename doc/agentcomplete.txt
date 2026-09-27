@@ -518,15 +518,14 @@ hold nothing: moving the cursor into one puts it back in the prompt, closing
 either closes both and lets the prompt take the full width, and quitting the
 prompt closes them first, so `:q` still leaves Neovim in one step.
 
-With no last message to show — the |agentcomplete-context| pane is off, found
-nothing to read, or has been closed — the prompt is boxed in the middle of the
-screen instead of running its full height. The box starts ten rows tall and
-grows with your text, staying centered, until it is a few rows short of the
-top and bottom edges; past that the prompt scrolls. It has a rounded border
-like the pane's, with a blank row inside it above your text and another
-below — where the prompt's own statusline sits, when each window has one
-('laststatus' other than 3). When the pane opens, the prompt takes the full
-height again.
+The prompt is boxed in the middle of its column instead of running its full
+height. The box starts ten rows tall and grows with your text, staying
+centered, until it is a few rows short of the top and bottom edges; past that
+the prompt scrolls. It has a rounded border, with a blank row inside it above
+your text and another below — where the prompt's own statusline sits, when
+each window has one ('laststatus' other than 3). Beside the
+|agentcomplete-context| pane the box is centered on the screen's full height;
+stacked with it, in the half of the column the pane leaves.
 
 With the |agentcomplete-context| pane open the page reads as a conversation.
 On a terminal at least 'context.min_width' columns wide the message sits to
