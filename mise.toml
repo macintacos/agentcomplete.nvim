@@ -37,6 +37,10 @@ bun         = "latest" # package manager for opencode/ (bun install)
 oxlint      = "latest" # TypeScript lint
 "npm:oxfmt" = "latest" # TypeScript format
 
+# README demo (assets/demo.tape, `mise run demo`). vhs also needs ttyd and ffmpeg on
+# $PATH, which mise can't install on macOS — take them from your OS package manager.
+"aqua:charmbracelet/vhs" = "latest" # terminal recorder
+
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]
 postinstall = "hk install --mise"

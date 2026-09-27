@@ -35,6 +35,7 @@ hooks.
 | `mise run test`      | Run the test suite (headless Neovim + mini.test)        |
 | `mise run preflight` | `lint` + `test` — run before pushing                    |
 | `mise run diag`      | Print a diagnostics report (headless: blink + OpenCode) |
+| `mise run demo`      | Re-record the README demo GIF (see below)               |
 | `mise run setup`     | One-time bootstrap (see above)                          |
 
 Run a single test file with `mise run test -f <file>`, e.g.
@@ -110,6 +111,24 @@ suppression removes `path` (it uses a pinned blink v1; v2 needs the compiled `bl
 which can't build in CI, but the suppression wrap reads the same config on both) — and an
 OpenCode pass that sets `OPENCODE=1` on a `<digits>.md` buffer and confirms detection
 reports `session.tool: opencode` with the resolved OpenCode search dirs.
+
+## Recording the README demo
+
+The README's `assets/demo.gif` is rendered by [vhs](https://github.com/charmbracelet/vhs)
+from [`assets/demo.tape`](assets/demo.tape). Edit the tape to change what the demo types,
+and [`assets/demo-transcript.jsonl`](assets/demo-transcript.jsonl) to change the agent's
+last message beside it, then:
+
+```sh
+mise run demo
+```
+
+mise installs vhs; its `ttyd` and `ffmpeg` dependencies come from your OS package manager
+(`brew install ttyd ffmpeg`). The recording runs **your own** Neovim config and the
+agentcomplete it installs, not this checkout, so update the plugin there first. There is
+no real agent session: [`assets/demo.sh`](assets/demo.sh) opens a
+`claude-prompt-<uuid>.md` and briefly registers the fixture transcript under `~/.claude/`,
+removing it when Neovim quits.
 
 ## Working with an agent in this repo
 

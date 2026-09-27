@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Record the README demo GIF (assets/demo.tape -> assets/demo.gif)"
+
+set -euo pipefail
+
+vhs assets/demo.tape

@@ -52,6 +52,77 @@ checksum = "sha256:c5d5d087daa8e38bd71680b2202a407e5d4bc00fd584a648dec17ef9b29a2
 url = "https://github.com/Kampfkarren/selene/releases/download/0.31.0/selene-0.31.0-windows.zip"
 url_api = "https://api.github.com/repos/Kampfkarren/selene/releases/assets/425780002"
 
+[[tools."aqua:charmbracelet/vhs"]]
+version = "0.12.1"
+backend = "aqua:charmbracelet/vhs"
+specifiers = ["latest"]
+
+[tools."aqua:charmbracelet/vhs"."platforms.linux-arm64"]
+checksum = "sha256:0b27029809fcc2ca2c381cceb854cbe03479a0f229b963e9bc3a2f2c36ffd3e7"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610198"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.linux-arm64-musl"]
+checksum = "sha256:0b27029809fcc2ca2c381cceb854cbe03479a0f229b963e9bc3a2f2c36ffd3e7"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610198"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.linux-x64"]
+checksum = "sha256:eb33787a5b1cebf91fe0b18bd231e2d71d36c1ff4babd99ddac1a6ab411efd10"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610189"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.linux-x64-baseline"]
+checksum = "sha256:eb33787a5b1cebf91fe0b18bd231e2d71d36c1ff4babd99ddac1a6ab411efd10"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610189"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.linux-x64-musl"]
+checksum = "sha256:eb33787a5b1cebf91fe0b18bd231e2d71d36c1ff4babd99ddac1a6ab411efd10"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610189"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:eb33787a5b1cebf91fe0b18bd231e2d71d36c1ff4babd99ddac1a6ab411efd10"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610189"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.macos-arm64"]
+checksum = "sha256:b5b524ed60c949eb80dfb685a18eeb135eb863c97f7279689b4e153363cd27c5"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610194"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.macos-x64"]
+checksum = "sha256:24596d14673251496e37f5cd984ad0a1d864f3d1c4ec1f2eca251f6b9fe6367d"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Darwin_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610187"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.macos-x64-baseline"]
+checksum = "sha256:24596d14673251496e37f5cd984ad0a1d864f3d1c4ec1f2eca251f6b9fe6367d"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Darwin_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610187"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.windows-x64"]
+checksum = "sha256:acaefb840663123fb9cf4a211b5ca8d14bf248e30780a0a436fab7a675615f26"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Windows_x86_64.zip"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610191"
+provenance = "cosign"
+
+[tools."aqua:charmbracelet/vhs"."platforms.windows-x64-baseline"]
+checksum = "sha256:acaefb840663123fb9cf4a211b5ca8d14bf248e30780a0a436fab7a675615f26"
+url = "https://github.com/charmbracelet/vhs/releases/download/v0.12.1/vhs_0.12.1_Windows_x86_64.zip"
+url_api = "https://api.github.com/repos/charmbracelet/vhs/releases/assets/585610191"
+provenance = "cosign"
+
 [[tools."aqua:google/yamlfmt"]]
 version = "0.21.0"
 backend = "aqua:google/yamlfmt"
