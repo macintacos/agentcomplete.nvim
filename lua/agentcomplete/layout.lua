@@ -130,32 +130,32 @@ end
 ---@class AgentComplete.Layout.EdgePlacement: AgentComplete.Layout.Rect
 ---@field lines string[] What the edge draws.
 
----Each edge of a rounded border around `prompt`, the prompt window's whole rectangle. It sits a
----row out, so the rows between the prompt and its top and bottom margins — separators, or
----statuslines — pad the box inside it.
+---Each edge of a rounded border around `prompt`, the prompt window's whole rectangle. The top
+---edge covers the row above the prompt; the bottom sits a row out, so the prompt's own
+---statusline stays inside the box.
 ---@param prompt AgentComplete.Layout.Rect
 ---@return table<AgentComplete.Layout.Edge, AgentComplete.Layout.EdgePlacement>
 function M.frame(prompt)
   local row, col, width, height = prompt.row, prompt.col, prompt.width, prompt.height
   local rule = string.rep("─", width)
   local side = {}
-  for line = 1, height + 2 do
+  for line = 1, height + 1 do
     side[line] = "│"
   end
   return {
     top = {
-      row = row - 2,
+      row = row - 1,
       col = col - 1,
       width = width + 2,
       height = 1,
       lines = { "╭" .. rule .. "╮" },
     },
-    left = { row = row - 1, col = col - 1, width = 1, height = height + 2, lines = side },
+    left = { row = row, col = col - 1, width = 1, height = height + 1, lines = side },
     right = {
-      row = row - 1,
+      row = row,
       col = col + width,
       width = 1,
-      height = height + 2,
+      height = height + 1,
       lines = side,
     },
     bottom = {
@@ -289,11 +289,6 @@ local function open_box(state)
     state.host,
     winhighlight == "" and tint or (winhighlight .. "," .. tint)
   )
-  -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
-  -- A later entry overrides an earlier one for the same group.
-  local top = state.box.top
-  vim.wo[top].winhighlight = vim.wo[top].winhighlight
-    .. ",StatusLine:AgentCompletePrompt,StatusLineNC:AgentCompletePrompt"
 end
 
 ---Give the box's rows back to the prompt's column, and the prompt its own highlights.

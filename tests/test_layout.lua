@@ -95,18 +95,21 @@ end
 
 T["frame"] = new_set()
 
--- A row out, so the rows between the prompt and its top and bottom margins — separators, or
--- statuslines — pad the box inside the frame.
-T["frame"]["draws a rounded border a row out from the prompt"] = function()
+-- The top edge covers the row above the prompt; the bottom sits a row out, so the prompt's own
+-- statusline stays inside the frame.
+T["frame"]["draws a rounded border right above the prompt"] = function()
   local frame =
     require("agentcomplete.layout").frame({ row = 10, col = 20, width = 4, height = 2 })
-  local side = { "│", "│", "│", "│" }
+  local side = { "│", "│", "│" }
   expect.equality(
     frame.top,
-    { row = 8, col = 19, width = 6, height = 1, lines = { "╭────╮" } }
+    { row = 9, col = 19, width = 6, height = 1, lines = { "╭────╮" } }
   )
-  expect.equality(frame.left, { row = 9, col = 19, width = 1, height = 4, lines = side })
-  expect.equality(frame.right, { row = 9, col = 24, width = 1, height = 4, lines = side })
+  expect.equality(frame.left, { row = 10, col = 19, width = 1, height = 3, lines = side })
+  expect.equality(
+    frame.right,
+    { row = 10, col = 24, width = 1, height = 3, lines = side }
+  )
   expect.equality(
     frame.bottom,
     { row = 13, col = 19, width = 6, height = 1, lines = { "╰────╯" } }
@@ -225,7 +228,7 @@ T["windows"]["frames the box, and follows it as it grows"] = function()
   local frame = floats()
   local heights = vim.tbl_map(vim.api.nvim_win_get_height, frame)
   table.sort(heights)
-  expect.equality(heights, { 1, 1, 17, 17 })
+  expect.equality(heights, { 1, 1, 16, 16 })
   for _, win in ipairs(frame) do
     expect.equality(vim.api.nvim_win_get_config(win).focusable, false)
     expect.equality(vim.wo[win].winhighlight, "Normal:FloatBorder")
@@ -246,12 +249,6 @@ T["windows"]["tints the box against the margins"] = function()
   expect.equality(
     vim.api.nvim_get_hl(0, { name = "AgentCompletePrompt" }).link,
     "NormalFloat"
-  )
-  -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
-  local top = vim.wo[prompt_column()[1]].winhighlight
-  expect.equality(
-    vim.endswith(top, "StatusLine:AgentCompletePrompt,StatusLineNC:AgentCompletePrompt"),
-    true
   )
 end
 

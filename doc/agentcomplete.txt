@@ -521,9 +521,9 @@ prompt closes them first, so `:q` still leaves Neovim in one step.
 The prompt is boxed in the middle of its column instead of running its full
 height. The box starts ten rows tall and grows with your text, staying
 centered, until it is a few rows short of the top and bottom edges; past that
-the prompt scrolls. It has a rounded border, with a blank row inside it above
-your text and another below — where the prompt's own statusline sits, when
-each window has one ('laststatus' other than 3). Beside the
+the prompt scrolls. Its rounded border sits right above your text, with a row
+inside it below the text — where the prompt's own statusline sits, when each
+window has one ('laststatus' other than 3). Beside the
 |agentcomplete-context| pane the box is centered on the screen's full height;
 stacked with it, in the half of the column the pane leaves.
 
