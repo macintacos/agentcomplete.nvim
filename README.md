@@ -65,8 +65,9 @@ require("blink.cmp").setup({
 })
 ```
 
-agentcomplete touches blink's config only when a prompt buffer opens, so blink just has to
-be configured by then: load order doesn't matter, and blink can be lazy-loaded.
+agentcomplete reads blink's config when a prompt buffer opens, so blink just has to be
+loadable by then (lazy.nvim's load-on-`require` is fine; a blink added on an event is
+not).
 
 Once registered, the source self-gates — it stays dormant everywhere except a detected
 prompt buffer, so listing it above is harmless.

@@ -196,20 +196,6 @@ T["setup registers the Claude Code detector"] = function()
   expect.equality(vim.tbl_contains(names, "claude-code"), true)
 end
 
-T["attaching registers the built-in context resolvers"] = function()
-  local context = require("agentcomplete.context")
-  context.clear()
-  local agentcomplete = require("agentcomplete")
-  agentcomplete.setup({ backend = "native" })
-  expect.equality(#context.resolvers, 0)
-  agentcomplete.attach(vim.api.nvim_create_buf(false, true), { force = true })
-  local names = vim.tbl_map(function(r)
-    return r.name
-  end, require("agentcomplete.context").resolvers)
-  expect.equality(vim.tbl_contains(names, "claude-code"), true)
-  expect.equality(vim.tbl_contains(names, "opencode"), true)
-end
-
 T["setup defaults the context pane on, with a split-direction threshold"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({})
@@ -281,6 +267,20 @@ local function numbered_buffer()
   vim.api.nvim_set_current_buf(buf)
   vim.wo[0][0].number = true
   return buf
+end
+
+T["attach"]["registers the built-in context resolvers"] = function()
+  local context = require("agentcomplete.context")
+  context.clear()
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native" })
+  expect.equality(#context.resolvers, 0)
+  agentcomplete.attach(numbered_buffer(), { force = true })
+  local names = vim.tbl_map(function(r)
+    return r.name
+  end, context.resolvers)
+  expect.equality(vim.tbl_contains(names, "claude-code"), true)
+  expect.equality(vim.tbl_contains(names, "opencode"), true)
 end
 
 T["attach"]["turns the prompt window into a page, and detach turns it back"] = function()

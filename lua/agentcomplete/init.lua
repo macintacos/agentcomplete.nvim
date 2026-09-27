@@ -62,7 +62,7 @@ local function fallback_session()
 end
 
 ---Add each of `builtins` to a registry it is not already in, by name. Idempotent, so repeated
----setup calls are safe.
+---setup and attach calls are safe.
 ---@param registry { name: string }[]
 ---@param register fun(item: any)
 ---@param builtins { name: string }[]
@@ -81,7 +81,8 @@ local function ensure_registered(registry, register, builtins)
   end
 end
 
----Register the built-in detectors.
+---Register the built-in detectors. Eager, unlike the resolvers: blink's provider gates on
+---this registry itself, before any attach.
 local function ensure_detectors()
   local detect = require("agentcomplete.detect")
   -- Detector order is significant (first match wins); Claude Code before OpenCode. The two are
@@ -188,6 +189,8 @@ function M.attach(bufnr, opts)
     session = fallback_session()
   end
   if session then
+    -- Here, not in setup(): these load the pane modules and blink.cmp, which startup must not.
+    -- Both are idempotent.
     ensure_resolvers()
     local backends = require("agentcomplete.backends")
     backends.install_suppression(M.config)

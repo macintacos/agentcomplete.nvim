@@ -54,12 +54,12 @@ T["diagnose_suppression"]["agentcomplete not a registered provider"] = function(
   expect.equality(has(r.cause, "not a registered blink provider"), true)
 end
 
-T["diagnose_suppression"]["registered but wrap not installed (load order)"] = function()
+T["diagnose_suppression"]["registered but wrap not installed (not attached yet)"] = function()
   local diag = require("agentcomplete.diagnostics")
   local r = diag.diagnose_suppression(state({ wrap_installed = false }))
   expect.equality(r.agentcomplete_registered, true)
   expect.equality(r.wrap_installed, false)
-  expect.equality(has(r.cause, "load order"), true)
+  expect.equality(has(r.cause, "installs when a prompt buffer attaches"), true)
 end
 
 T["diagnose_suppression"]["wrap installed but current buffer not detected"] = function()

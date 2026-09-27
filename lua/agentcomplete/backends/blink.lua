@@ -166,9 +166,9 @@ M._installed = nil
 ---buffers resolve to agentcomplete only (plus registered `allowed_sources`),
 ---while every other buffer keeps the user's original lists. This mutates blink's
 ---global config by design (blink.cmp has no per-buffer source config); the wrap is
----behaviour-preserving for non-detected buffers and runs when a prompt buffer
----attaches, so blink must be configured by then. Idempotent: a prior wrap is restored first so a
----re-run re-captures pristine originals. Returns false (no-op) when blink is
+---behaviour-preserving for non-detected buffers. Call it after blink.cmp.setup(): a
+---later setup() replaces the wrapped lists. Idempotent: a prior wrap is restored first
+---so a re-run re-captures pristine originals. Returns false (no-op) when blink is
 ---absent or `agentcomplete` is not a registered provider.
 ---@param config { allowed_sources?: string[] }
 ---@param bcfg? table Injected blink config (tests); defaults to require "blink.cmp.config".
@@ -184,7 +184,7 @@ function M.install_suppression(config, bcfg, detected_fn)
 
   local registered = bcfg.sources.providers or {}
   if registered["agentcomplete"] == nil then
-    vim.notify(
+    vim.notify_once(
       "agentcomplete: blink source 'agentcomplete' is not registered; cannot suppress other sources (see README)",
       vim.log.levels.WARN
     )
@@ -193,7 +193,7 @@ function M.install_suppression(config, bcfg, detected_fn)
 
   local effective, dropped = M.constrain(config.allowed_sources or {}, registered)
   if #dropped > 0 then
-    vim.notify(
+    vim.notify_once(
       "agentcomplete: ignoring unregistered allowed_sources: "
         .. table.concat(dropped, ", "),
       vim.log.levels.WARN

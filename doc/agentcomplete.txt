@@ -182,7 +182,9 @@ The full default configuration, with every option: >lua
 <
 'enabled'		boolean (default `true`). When true, attach
 			automatically to detected prompt buffers. When false,
-			nothing attaches until you run |:AgentCompleteAttach|.
+			nothing attaches until you run |:AgentCompleteAttach|,
+			and blink's other sources are not suppressed either
+			until then.
 
 'backend'		`"auto"` | `"blink"` | `"native"` (default `"auto"`).
 			`"auto"` routes through blink.cmp if installed,
@@ -315,9 +317,11 @@ except a detected prompt buffer, so listing it in `default` is harmless
 elsewhere.
 
                                                     *agentcomplete-load-order*
-Note: agentcomplete touches blink's config only when a prompt buffer opens,
-so blink just has to be configured by then. Load order doesn't matter, and
-blink can be lazy-loaded.
+Note: agentcomplete reads blink's config when a prompt buffer opens, not in
+setup(), so the two can be set up in either order. blink must be loadable by
+then: lazy.nvim loads a lazy blink on the `require`, but a blink added to
+the 'runtimepath' on an event (e.g. |InsertEnter|) is not there yet, and
+with 'backend' `"auto"` the prompt buffer falls back to native completion.
 
 Prefer zero configuration? Set `backend = "native"` and skip provider
 registration entirely (see |agentcomplete-native|).

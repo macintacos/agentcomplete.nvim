@@ -63,7 +63,7 @@ function M.diagnose_suppression(state)
       "'agentcomplete' is not a registered blink provider, so install_suppression() no-ops (it emits a WARN when a prompt buffer attaches). Register it under blink sources.providers (see README)."
   elseif not state.wrap_installed then
     cause =
-      "The suppression wrap is NOT installed even though 'agentcomplete' is registered. The usual cause is load order: no prompt buffer has attached yet (':AgentCompleteAttach' installs it), or blink.cmp.setup() ran after one did, so the wrap was skipped or captured a config blink later overwrote."
+      "The suppression wrap is NOT installed even though 'agentcomplete' is registered. It installs when a prompt buffer attaches, so either none has attached in this Neovim (':AgentCompleteAttach' installs it; 'enabled = false' never auto-attaches), or blink was not configured yet when one did — blink.cmp.setup() must run before a prompt buffer opens."
   elseif not state.detected then
     cause =
       "The suppression wrap IS installed, but the current buffer is not detected as an agent prompt buffer (a Claude Code 'claude-prompt-<uuid>.md' or an OpenCode '<digits>.md' under $OPENCODE), so blink uses your original (unsuppressed) source list here. Run this from the real prompt buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."

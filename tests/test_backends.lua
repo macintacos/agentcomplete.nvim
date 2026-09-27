@@ -383,7 +383,7 @@ T["suppress"]["install is idempotent: re-install re-captures pristine originals"
     return detected
   end
   blink.install_suppression({ allowed_sources = { "path" } }, fake, pred)
-  blink.install_suppression({ allowed_sources = { "lsp" } }, fake, pred) -- second setup, different allowed
+  blink.install_suppression({ allowed_sources = { "lsp" } }, fake, pred) -- second attach, different allowed
   detected = true
   expect.equality(fake.sources.default(), { "agentcomplete", "lsp" })
   detected = false

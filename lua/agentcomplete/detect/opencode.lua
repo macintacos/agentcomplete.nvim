@@ -50,7 +50,7 @@ function M.detect(bufnr)
   vim.list_extend(extra_commands, scan.opencode_builtin_commands())
   -- OpenCode's authoritative skill and command sets, resolved asynchronously via
   -- `opencode debug skill` / `opencode debug config` (config is read at call-time, mirroring
-  -- backends/blink.lua, to avoid an init<->detect require cycle). Opt-out via
+  -- backends/blink.lua, because setup() replaces the config wholesale). Opt-out via
   -- `opencode.resolve_via_cli = false`. The first detect kicks off the background jobs and
   -- returns the empty cache; later detects read the result. The lists are handed over by
   -- reference, not copied, because the jobs fill them in place after this returns.
