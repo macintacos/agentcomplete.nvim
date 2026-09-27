@@ -2,7 +2,7 @@
 ---@class AgentComplete.Backends
 local M = {}
 
-local native = require "agentcomplete.backends.native"
+local native = require("agentcomplete.backends.native")
 
 ---Whether blink.cmp is installed in this Neovim.
 ---@return boolean

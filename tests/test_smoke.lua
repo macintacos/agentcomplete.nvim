@@ -1,6 +1,6 @@
 -- Smoke test: proves the toolchain (mini.test under headless Neovim) works and
 -- the plugin module loads. Replace with real tests as features land.
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
@@ -13,7 +13,7 @@ T["module loads"] = function()
 end
 
 T["setup returns the module"] = function()
-  local agentcomplete = require "agentcomplete"
+  local agentcomplete = require("agentcomplete")
   expect.equality(agentcomplete.setup(), agentcomplete)
 end
 

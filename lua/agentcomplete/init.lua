@@ -20,13 +20,13 @@
 ---@class AgentComplete
 local M = {}
 
-local detect = require "agentcomplete.detect"
-local backends = require "agentcomplete.backends"
-local highlight = require "agentcomplete.highlight"
-local context = require "agentcomplete.context"
-local layout = require "agentcomplete.layout"
-local composer = require "agentcomplete.composer"
-local scan = require "agentcomplete.scan"
+local detect = require("agentcomplete.detect")
+local backends = require("agentcomplete.backends")
+local highlight = require("agentcomplete.highlight")
+local context = require("agentcomplete.context")
+local layout = require("agentcomplete.layout")
+local composer = require("agentcomplete.composer")
+local scan = require("agentcomplete.scan")
 
 ---Default configuration.
 ---@type AgentComplete.Config
@@ -43,7 +43,11 @@ local defaults = {
     keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>" },
   },
   composer = { enabled = true, width = 80 },
-  opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false },
+  opencode = {
+    show_all_builtin_commands = false,
+    resolve_via_cli = true,
+    install_plugin = false,
+  },
 }
 
 ---@type AgentComplete.Config
@@ -89,12 +93,12 @@ local function ensure_builtins()
   -- Detector order is significant (first match wins); Claude Code before OpenCode. The two are
   -- mutually exclusive in practice, so the order is harmless either way.
   ensure_registered(detect.detectors, detect.register, {
-    require "agentcomplete.detect.claude_code",
-    require "agentcomplete.detect.opencode",
+    require("agentcomplete.detect.claude_code"),
+    require("agentcomplete.detect.opencode"),
   })
   ensure_registered(context.resolvers, context.register, {
-    require "agentcomplete.context.claude_code",
-    require "agentcomplete.context.opencode",
+    require("agentcomplete.context.claude_code"),
+    require("agentcomplete.context.opencode"),
   })
 end
 
@@ -150,7 +154,10 @@ local function install_opencode_plugin_from_rtp()
     return "missing", ""
   end
   -- A runtimepath entry may be relative; the symlink is resolved from another directory.
-  return M.install_opencode_plugin(vim.fn.fnamemodify(source, ":p"), scan.opencode_config_home())
+  return M.install_opencode_plugin(
+    vim.fn.fnamemodify(source, ":p"),
+    scan.opencode_config_home()
+  )
 end
 
 ---Report an install outcome, at ERROR unless the plugin ended up in place.
@@ -237,7 +244,7 @@ function M.setup(opts)
   -- Opt-in: writing into another tool's config directory unasked is a surprise. And opting in
   -- travels with a synced config, so the machine has to have OpenCode before this writes to it
   -- — typing the command is the explicit request that installs anywhere.
-  if M.config.opencode.install_plugin and vim.fn.executable "opencode" == 1 then
+  if M.config.opencode.install_plugin and vim.fn.executable("opencode") == 1 then
     local status, target = install_opencode_plugin_from_rtp()
     -- `current` is every launch after the first; report only what changed or broke.
     if status ~= "current" then

@@ -1,6 +1,6 @@
 -- Tests for agentcomplete.layout: the widths `plan` computes, and the margins and spacer it
 -- opens, sizes, and closes around a prompt window.
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
@@ -20,12 +20,15 @@ end
 T["plan"] = new_set()
 
 T["plan"]["centers the message and the reply side by side at full measure"] = function()
-  expect.equality(plan { columns = 200 }, { beside = true, left = 13, right = 14, pane = 86, prompt = 84 })
+  expect.equality(
+    plan({ columns = 200 }),
+    { beside = true, left = 13, right = 14, pane = 86, prompt = 84 }
+  )
 end
 
 -- Between min_width and room for both at full measure, neither column is starved for the other.
 T["plan"]["shares a width too narrow for both measures evenly"] = function()
-  local p = plan { columns = 160 }
+  local p = plan({ columns = 160 })
   expect.equality(p, { beside = true, left = 1, right = 1, pane = 78, prompt = 77 })
   -- Text either side of the pane's frame and the prompt's inset.
   expect.equality({ p.pane - 6, p.prompt - 4 }, { 72, 73 })
@@ -34,39 +37,60 @@ end
 -- Stacked, the prompt shares the pane's column, so the column is the pane's frame wide and the
 -- prompt's inset lines its text up with the message's.
 T["plan"]["centers one column for the thread below min_width"] = function()
-  expect.equality(plan { columns = 120 }, { beside = false, left = 16, right = 16, prompt = 86 })
+  expect.equality(
+    plan({ columns = 120 }),
+    { beside = false, left = 16, right = 16, prompt = 86 }
+  )
 end
 
 T["plan"]["centers the prompt alone when there is no pane"] = function()
-  expect.equality(plan { columns = 200, pane = false }, { beside = false, left = 57, right = 57, prompt = 84 })
+  expect.equality(
+    plan({ columns = 200, pane = false }),
+    { beside = false, left = 57, right = 57, prompt = 84 }
+  )
 end
 
 T["plan"]["narrows the column to the terminal, keeping a column of margin either side"] = function()
-  expect.equality(plan { columns = 80 }, { beside = false, left = 1, right = 1, prompt = 76 })
+  expect.equality(
+    plan({ columns = 80 }),
+    { beside = false, left = 1, right = 1, prompt = 76 }
+  )
 end
 
 -- Without margins the prompt is not the layout's to size: only the pane gets a width.
 T["plan"]["sizes only the pane when there are no margins"] = function()
-  expect.equality(plan { columns = 200, margins = false }, { beside = true, pane = 86 })
-  expect.equality(plan { columns = 120, margins = false }, { beside = false })
+  expect.equality(plan({ columns = 200, margins = false }), { beside = true, pane = 86 })
+  expect.equality(plan({ columns = 120, margins = false }), { beside = false })
 end
 
 T["plan"]["never gives the pane more than half the terminal without margins"] = function()
-  expect.equality(plan { columns = 160, measure = 100, margins = false }, { beside = true, pane = 79 })
+  expect.equality(
+    plan({ columns = 160, measure = 100, margins = false }),
+    { beside = true, pane = 79 }
+  )
 end
 
 T["box"] = new_set()
 
 T["box"]["centers a prompt of the minimum height"] = function()
-  expect.equality(require("agentcomplete.layout").box(36, 1, 10), { top = 13, prompt = 10, bottom = 13 })
+  expect.equality(
+    require("agentcomplete.layout").box(36, 1, 10),
+    { top = 13, prompt = 10, bottom = 13 }
+  )
 end
 
 T["box"]["grows with the prompt's text, staying centered"] = function()
-  expect.equality(require("agentcomplete.layout").box(36, 15, 10), { top = 10, prompt = 15, bottom = 11 })
+  expect.equality(
+    require("agentcomplete.layout").box(36, 15, 10),
+    { top = 10, prompt = 15, bottom = 11 }
+  )
 end
 
 T["box"]["stops growing a row short of either edge"] = function()
-  expect.equality(require("agentcomplete.layout").box(36, 50, 10), { top = 1, prompt = 34, bottom = 1 })
+  expect.equality(
+    require("agentcomplete.layout").box(36, 50, 10),
+    { top = 1, prompt = 34, bottom = 1 }
+  )
 end
 
 T["frame"] = new_set()
@@ -74,30 +98,37 @@ T["frame"] = new_set()
 -- A row out, so the rows between the prompt and its top and bottom margins — separators, or
 -- statuslines — pad the box inside the frame.
 T["frame"]["draws a rounded border a row out from the prompt"] = function()
-  local frame = require("agentcomplete.layout").frame { row = 10, col = 20, width = 4, height = 2 }
+  local frame =
+    require("agentcomplete.layout").frame({ row = 10, col = 20, width = 4, height = 2 })
   local side = { "│", "│", "│", "│" }
-  expect.equality(frame.top, { row = 8, col = 19, width = 6, height = 1, lines = { "╭────╮" } })
+  expect.equality(
+    frame.top,
+    { row = 8, col = 19, width = 6, height = 1, lines = { "╭────╮" } }
+  )
   expect.equality(frame.left, { row = 9, col = 19, width = 1, height = 4, lines = side })
   expect.equality(frame.right, { row = 9, col = 24, width = 1, height = 4, lines = side })
-  expect.equality(frame.bottom, { row = 13, col = 19, width = 6, height = 1, lines = { "╰────╯" } })
+  expect.equality(
+    frame.bottom,
+    { row = 13, col = 19, width = 6, height = 1, lines = { "╰────╯" } }
+  )
 end
 
-T["windows"] = new_set {
+T["windows"] = new_set({
   hooks = {
     pre_case = function()
-      vim.cmd "silent! only"
+      vim.cmd("silent! only")
     end,
     post_case = function()
-      local layout = require "agentcomplete.layout"
+      local layout = require("agentcomplete.layout")
       for buf in pairs(layout._layouts) do
         layout.detach(buf)
       end
-      vim.cmd "silent! only"
+      vim.cmd("silent! only")
       vim.o.columns = 80
       vim.o.lines = 24
     end,
   },
-}
+})
 
 ---A prompt buffer, focused, with a layout attached. `opts` overrides the default options.
 local function attached(opts)
@@ -166,7 +197,7 @@ T["windows"]["shows the prompt from its first line whenever it all fits"] = func
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
   vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
   vim.api.nvim_win_set_cursor(host, { 15, 0 })
-  vim.fn.winrestview { topline = 8 }
+  vim.fn.winrestview({ topline = 8 })
   vim.api.nvim_exec_autocmds("VimResized", {})
   expect.equality(vim.fn.line("w0", host), 1)
 end
@@ -207,10 +238,16 @@ T["windows"]["tints the box against the margins"] = function()
   vim.o.columns = 200
   local _, host = attached()
   expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt")
-  expect.equality(vim.api.nvim_get_hl(0, { name = "AgentCompletePrompt" }).link, "NormalFloat")
+  expect.equality(
+    vim.api.nvim_get_hl(0, { name = "AgentCompletePrompt" }).link,
+    "NormalFloat"
+  )
   -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
   local top = vim.wo[prompt_column()[1]].winhighlight
-  expect.equality(vim.endswith(top, "StatusLine:AgentCompletePrompt,StatusLineNC:AgentCompletePrompt"), true)
+  expect.equality(
+    vim.endswith(top, "StatusLine:AgentCompletePrompt,StatusLineNC:AgentCompletePrompt"),
+    true
+  )
 end
 
 T["windows"]["gives the box's rows and tint up to the pane"] = function()
@@ -223,14 +260,14 @@ end
 
 T["windows"]["opens no margins around a prompt sharing the screen"] = function()
   vim.o.columns = 200
-  vim.cmd "vsplit"
+  vim.cmd("vsplit")
   attached()
   expect.equality(#vim.api.nvim_tabpage_list_wins(0), 2)
 end
 
 T["windows"]["opens no margins when not asked to"] = function()
   vim.o.columns = 200
-  attached { margins = false }
+  attached({ margins = false })
   expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
 end
 
@@ -268,7 +305,7 @@ end
 T["windows"]["gives the pane's room back when it is released"] = function()
   vim.o.columns = 200
   local buf, host = attached()
-  local layout = require "agentcomplete.layout"
+  local layout = require("agentcomplete.layout")
   local spacer = assert(layout.reserve(buf, PLACEMENT), "no spacer reserved")
   layout.release(buf)
   expect.equality(vim.api.nvim_win_is_valid(spacer), false)
@@ -278,7 +315,7 @@ end
 
 T["windows"]["sizes the pane beside a prompt with no margins"] = function()
   vim.o.columns = 200
-  local buf = attached { margins = false }
+  local buf = attached({ margins = false })
   require("agentcomplete.layout").reserve(buf, PLACEMENT)
   expect.equality(row_widths(), { 86, 113 })
 end
@@ -286,13 +323,13 @@ end
 T["windows"]["hands the cursor back to the prompt from a margin"] = function()
   vim.o.columns = 200
   local _, host = attached()
-  vim.cmd "wincmd l"
+  vim.cmd("wincmd l")
   expect.equality(vim.api.nvim_get_current_win(), host)
-  vim.cmd "wincmd h"
+  vim.cmd("wincmd h")
   expect.equality(vim.api.nvim_get_current_win(), host)
-  vim.cmd "wincmd k"
+  vim.cmd("wincmd k")
   expect.equality(vim.api.nvim_get_current_win(), host)
-  vim.cmd "wincmd j"
+  vim.cmd("wincmd j")
   expect.equality(vim.api.nvim_get_current_win(), host)
 end
 
@@ -349,14 +386,20 @@ T["windows"]["blanks a global winbar in the margins"] = function()
   attached()
   local margin = vim.fn.win_getid(1)
   vim.go.winbar = ""
-  expect.equality(vim.api.nvim_get_option_value("winbar", { win = margin, scope = "local" }), " ")
-  expect.equality(vim.wo[margin].winhighlight:find("WinBar:AgentCompleteMargin", 1, true) ~= nil, true)
+  expect.equality(
+    vim.api.nvim_get_option_value("winbar", { win = margin, scope = "local" }),
+    " "
+  )
+  expect.equality(
+    vim.wo[margin].winhighlight:find("WinBar:AgentCompleteMargin", 1, true) ~= nil,
+    true
+  )
 end
 
 T["windows"]["closes everything it opened on detach"] = function()
   vim.o.columns = 200
   local buf, host = attached()
-  local layout = require "agentcomplete.layout"
+  local layout = require("agentcomplete.layout")
   layout.reserve(buf, PLACEMENT)
   layout.detach(buf)
   expect.equality(vim.api.nvim_tabpage_list_wins(0), { host })
@@ -365,9 +408,9 @@ end
 T["windows"]["closes its windows when the prompt buffer is wiped"] = function()
   vim.o.columns = 200
   local buf = attached()
-  vim.cmd "botright new"
+  vim.cmd("botright new")
   vim.api.nvim_buf_delete(buf, { force = true })
-  local layout = require "agentcomplete.layout"
+  local layout = require("agentcomplete.layout")
   vim.wait(500, function()
     return layout._layouts[buf] == nil
   end)
@@ -379,7 +422,10 @@ T["windows"]["hides the margins' separators, statuslines and end-of-buffer rows"
   vim.o.columns = 200
   attached()
   local margin = vim.fn.win_getid(1)
-  expect.equality(vim.wo[margin].winhighlight:find("WinSeparator:AgentCompleteMargin", 1, true) ~= nil, true)
+  expect.equality(
+    vim.wo[margin].winhighlight:find("WinSeparator:AgentCompleteMargin", 1, true) ~= nil,
+    true
+  )
   expect.equality(vim.wo[margin].statusline, " ")
   expect.equality(vim.wo[margin].fillchars:find("eob: ", 1, true) ~= nil, true)
   expect.equality(vim.api.nvim_get_hl(0, { name = "AgentCompleteMargin" }).link, "Normal")

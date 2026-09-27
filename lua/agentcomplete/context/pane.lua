@@ -9,7 +9,7 @@
 ---@class AgentComplete.Context.Pane
 local M = {}
 
-local layout = require "agentcomplete.layout"
+local layout = require("agentcomplete.layout")
 
 ---What the pane left behind, per prompt buffer: `win` is the float holding the message, and
 ---`keys` what `open` mapped on the prompt, so `close` removes exactly that without needing the
@@ -62,8 +62,16 @@ end
 ---The two ways to scroll the pane. Up before down, so the footer reads in the direction the
 ---message does.
 local SCROLL = {
-  { option = "scroll_up", keycode = vim.keycode "<C-y>", desc = "agentcomplete: scroll the last-message pane up" },
-  { option = "scroll_down", keycode = vim.keycode "<C-e>", desc = "agentcomplete: scroll the last-message pane down" },
+  {
+    option = "scroll_up",
+    keycode = vim.keycode("<C-y>"),
+    desc = "agentcomplete: scroll the last-message pane up",
+  },
+  {
+    option = "scroll_down",
+    keycode = vim.keycode("<C-e>"),
+    desc = "agentcomplete: scroll the last-message pane down",
+  },
 }
 
 ---@class AgentComplete.Context.Pane.Scroll
@@ -94,7 +102,7 @@ end
 ---@param lhs string
 local function unmap(buf, lhs)
   local wanted = vim.api.nvim_replace_termcodes(lhs, true, true, true)
-  for _, mode in ipairs { "n", "i" } do
+  for _, mode in ipairs({ "n", "i" }) do
     for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
       local same = vim.api.nvim_replace_termcodes(map.lhs, true, true, true) == wanted
       if same and vim.startswith(map.desc or "", "agentcomplete:") then
@@ -136,7 +144,8 @@ local function chrome(resolver, rung, scrolls)
   local labels = vim.tbl_map(function(scroll)
     return label(scroll.lhs)
   end, scrolls)
-  local hint = #labels > 0 and (table.concat(labels, "/") .. " scroll · read-only") or "read-only"
+  local hint = #labels > 0 and (table.concat(labels, "/") .. " scroll · read-only")
+    or "read-only"
   return {
     style = "minimal",
     border = "rounded",
@@ -179,7 +188,7 @@ local function follow(pane)
     if not valid() or vim.api.nvim_get_current_win() ~= spacer then
       return
     end
-    local onward = vim.fn.win_getid(vim.fn.winnr "#") == win and host or win
+    local onward = vim.fn.win_getid(vim.fn.winnr("#")) == win and host or win
     if vim.api.nvim_win_is_valid(onward) then
       vim.api.nvim_set_current_win(onward)
     end
@@ -191,13 +200,25 @@ local function follow(pane)
     end
   end
 
-  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, { group = group, callback = fit })
-  vim.api.nvim_create_autocmd("WinEnter", { group = group, callback = pass_through_spacer })
-  vim.api.nvim_create_autocmd({ "WinEnter", "WinLeave" }, { group = group, callback = mark_focus })
+  vim.api.nvim_create_autocmd(
+    { "VimResized", "WinResized" },
+    { group = group, callback = fit }
+  )
+  vim.api.nvim_create_autocmd(
+    "WinEnter",
+    { group = group, callback = pass_through_spacer }
+  )
+  vim.api.nvim_create_autocmd(
+    { "WinEnter", "WinLeave" },
+    { group = group, callback = mark_focus }
+  )
   -- The pane is chrome the prompt owns, so it goes when the prompt does — and on `QuitPre`,
   -- before the quit resolves, so the prompt window is the last one standing and `:q` returns
   -- the reader to the agent instead of stranding them in a message they cannot reply to.
-  vim.api.nvim_create_autocmd("QuitPre", { group = group, buffer = pane.buf, callback = pane.on_close })
+  vim.api.nvim_create_autocmd(
+    "QuitPre",
+    { group = group, buffer = pane.buf, callback = pane.on_close }
+  )
   -- Every window the pane is built from is a way out of it.
   vim.api.nvim_create_autocmd("WinClosed", {
     group = group,
@@ -225,7 +246,8 @@ function M.open(buf, opts)
   -- a raise once the split exists strands it — nothing owns it yet to close it.
   local scrolls = configured(opts.keys)
   local frame = chrome(opts.resolver, opts.rung, scrolls)
-  local spacer = layout.reserve(buf, { min_width = opts.min_width, stacked = opts.stacked or "above" })
+  local spacer =
+    layout.reserve(buf, { min_width = opts.min_width, stacked = opts.stacked or "above" })
   if not spacer then
     return nil
   end
@@ -256,14 +278,14 @@ function M.open(buf, opts)
   end, scrolls)
 
   M._panes[buf] = { win = win, keys = mapped }
-  follow {
+  follow({
     buf = buf,
     group = opts.group,
     host = host,
     win = win,
     spacer = spacer,
     on_close = opts.on_close,
-  }
+  })
   return win
 end
 

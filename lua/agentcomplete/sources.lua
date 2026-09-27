@@ -6,7 +6,7 @@
 ---@class AgentComplete.Sources
 local M = {}
 
-local scan = require "agentcomplete.scan"
+local scan = require("agentcomplete.scan")
 
 ---@class AgentComplete.Context
 ---@field trigger '"/"'|'"@"' The trigger character that opened completion.
@@ -28,7 +28,7 @@ local scan = require "agentcomplete.scan"
 function M.context(line, col)
   local before = line:sub(1, col)
   local i = #before
-  while i > 0 and not before:sub(i, i):match "%s" do
+  while i > 0 and not before:sub(i, i):match("%s") do
     i = i - 1
   end
   local run_start = i + 1 -- 1-based index of the run's first char == 0-based col of the query start
@@ -61,14 +61,15 @@ end
 ---@return AgentComplete.Token[]
 function M.tokens(line)
   local out = {}
-  for s, e in line:gmatch "()%S+()" do
+  for s, e in line:gmatch("()%S+()") do
     local last = e - 1 -- doubles as a 1-based index into `line` and a 0-based end column
     while last > s and line:find("^[%.,;:!?)%]}]", last) do
       last = last - 1
     end
     local ctx = M.context(line, last)
     if ctx then
-      out[#out + 1] = { trigger = ctx.trigger, name = ctx.query, col = s - 1, end_col = last }
+      out[#out + 1] =
+        { trigger = ctx.trigger, name = ctx.query, col = s - 1, end_col = last }
     end
   end
   return out
@@ -107,7 +108,12 @@ function M.items(session, ctx)
       end
       seen[s.name] = true
       if matches(s.name, ctx.query) then
-        table.insert(out, { label = "/" .. s.name, insert_text = s.name, kind = "skill", detail = s.description })
+        table.insert(out, {
+          label = "/" .. s.name,
+          insert_text = s.name,
+          kind = "skill",
+          detail = s.description,
+        })
       end
     end
     for _, s in ipairs(scan.skills(session.skill_dirs, session.skill_namespaces)) do
@@ -130,14 +136,19 @@ function M.items(session, ctx)
         return
       end
       if matches(c.name, ctx.query) then
-        table.insert(out, { label = "/" .. c.name, insert_text = c.name, kind = "command", detail = c.description })
+        table.insert(out, {
+          label = "/" .. c.name,
+          insert_text = c.name,
+          kind = "command",
+          detail = c.description,
+        })
       end
     end
-    for _, list in ipairs {
+    for _, list in ipairs({
       scan.commands(session.command_dirs),
       session.cli_commands or {},
       session.extra_commands or {},
-    } do
+    }) do
       for _, c in ipairs(list) do
         add_command(c)
       end

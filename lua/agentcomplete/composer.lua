@@ -38,11 +38,13 @@ local HELD = { "winbar", "statuscolumn" }
 ---When plugins set those. They do it from inside their own autocmds, which never fire
 ---`OptionSet` — autocmds do not nest — so the hold re-runs after these instead. They are
 ---dropbar's attach events, the one winbar plugin known to re-attach mid-session.
-local REATTACH_EVENTS = { "BufEnter", "BufWinEnter", "BufWritePost", "FileType", "LspAttach" }
+local REATTACH_EVENTS =
+  { "BufEnter", "BufWinEnter", "BufWritePost", "FileType", "LspAttach" }
 
 ---The separators and end-of-buffer rows, blanked. Appended to the window's own 'fillchars',
 ---where a repeated item overrides the earlier one, so the user's other fill characters stay.
-local BLANK_FILLCHARS = "eob: ,vert: ,horiz: ,horizup: ,horizdown: ,vertleft: ,vertright: ,verthoriz: "
+local BLANK_FILLCHARS =
+  "eob: ,vert: ,horiz: ,horizup: ,horizdown: ,vertleft: ,vertright: ,verthoriz: "
 
 ---`current` with the separators and end-of-buffer rows blanked.
 ---@param current string The window's effective 'fillchars'.
@@ -86,7 +88,8 @@ function M.attach(buf)
     set_local(win, option, value)
   end
 
-  local group = vim.api.nvim_create_augroup("AgentCompleteComposer_" .. buf, { clear = true })
+  local group =
+    vim.api.nvim_create_augroup("AgentCompleteComposer_" .. buf, { clear = true })
   M._composers[buf] = { win = win, saved = saved, group = group }
 
   ---Set each held option back to the page's value where something else has changed it.
@@ -115,7 +118,9 @@ function M.attach(buf)
     group = group,
     pattern = HELD,
     callback = function()
-      if vim.api.nvim_get_current_win() == win and vim.v.option_command ~= "setglobal" then
+      if
+        vim.api.nvim_get_current_win() == win and vim.v.option_command ~= "setglobal"
+      then
         hold()
       end
     end,
@@ -141,7 +146,9 @@ function M.detach(buf)
   end
   M._composers[buf] = nil
   pcall(vim.api.nvim_del_augroup_by_id, state.group)
-  if vim.api.nvim_win_is_valid(state.win) and vim.api.nvim_win_get_buf(state.win) == buf then
+  if
+    vim.api.nvim_win_is_valid(state.win) and vim.api.nvim_win_get_buf(state.win) == buf
+  then
     for option, value in pairs(state.saved) do
       set_local(state.win, option, value)
     end

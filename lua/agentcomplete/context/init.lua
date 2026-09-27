@@ -12,7 +12,7 @@
 ---@class AgentComplete.Context
 local M = {}
 
-local pane = require "agentcomplete.context.pane"
+local pane = require("agentcomplete.context.pane")
 
 ---@class AgentComplete.Context.Result
 ---@field ok boolean Whether the message was resolved.
@@ -118,12 +118,19 @@ function M.format(text, config_path, system)
   -- `vim.system` spawns without a shell, so a `~` reaches rumdl literally and it exits
   -- "config file not found". Same normalization `highlight.file_exists` gives a user's path.
   local path = config_path and vim.fs.normalize(config_path)
-  local cmd = path and { "rumdl", "fmt", "-c", path, "-" } or { "rumdl", "fmt", "--no-config", "-" }
+  local cmd = path and { "rumdl", "fmt", "-c", path, "-" }
+    or { "rumdl", "fmt", "--no-config", "-" }
   local ok, proc = pcall(function()
     return system(cmd, { stdin = text, text = true }):wait(FORMAT_TIMEOUT_MS)
   end)
   -- `wait(timeout)` returns nil rather than a result table when the timeout fires.
-  if not ok or type(proc) ~= "table" or proc.code ~= 0 or type(proc.stdout) ~= "string" or proc.stdout == "" then
+  if
+    not ok
+    or type(proc) ~= "table"
+    or proc.code ~= 0
+    or type(proc.stdout) ~= "string"
+    or proc.stdout == ""
+  then
     return text, "rumdl formatting failed" .. (path and (" with config " .. path) or "")
   end
   return proc.stdout
@@ -139,7 +146,7 @@ function M.log(path, message, now)
   pcall(function()
     vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
     local file = assert(io.open(path, "a"))
-    file:write("[" .. (now or os.date "%Y-%m-%d %H:%M:%S") .. "] " .. message .. "\n")
+    file:write("[" .. (now or os.date("%Y-%m-%d %H:%M:%S")) .. "] " .. message .. "\n")
     file:close()
   end)
 end
@@ -202,7 +209,8 @@ local function show(buf, result, config, log_path, format)
     end,
   })
   if not win then
-    M._state[buf] = { resolver = result.resolver, err = "prompt buffer is on no screen to split from" }
+    M._state[buf] =
+      { resolver = result.resolver, err = "prompt buffer is on no screen to split from" }
     M.log(log_path, M._state[buf].err)
     return
   end
@@ -249,7 +257,8 @@ function M.open(buf, session, config, opts)
 
   -- `BufDelete`, not `BufUnload`: the latter also fires on `:edit!`, which would tear the pane
   -- down on a reload the buffer survives. Same pair `highlight.attach` listens on.
-  local grp = vim.api.nvim_create_augroup("AgentCompleteContext_" .. buf, { clear = true })
+  local grp =
+    vim.api.nvim_create_augroup("AgentCompleteContext_" .. buf, { clear = true })
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
     group = grp,
     buffer = buf,
@@ -265,7 +274,8 @@ function M.open(buf, session, config, opts)
 
   -- Beside the project rather than under `stdpath("log")`: the agent whose message failed to
   -- load has to find this without being told where to look.
-  local log_path = opts.log_path or ((vim.loop.cwd() or vim.fn.getcwd()) .. "/.tmp/agentcomplete-context.log")
+  local log_path = opts.log_path
+    or ((vim.loop.cwd() or vim.fn.getcwd()) .. "/.tmp/agentcomplete-context.log")
   local format = opts.format or M.format
 
   local reported = false
@@ -281,7 +291,8 @@ function M.open(buf, session, config, opts)
     -- read there as "the resolver declined", and be logged as the wrong failure.
     local ok, failure = pcall(show, buf, result, config, log_path, format)
     if not ok then
-      M._state[buf] = { resolver = result.resolver, err = "context pane failed: " .. tostring(failure) }
+      M._state[buf] =
+        { resolver = result.resolver, err = "context pane failed: " .. tostring(failure) }
       M.log(log_path, M._state[buf].err)
     end
   end, opts.resolver)

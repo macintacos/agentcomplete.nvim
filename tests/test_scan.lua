@@ -1,5 +1,5 @@
 -- Tests for agentcomplete.scan: filesystem discovery of skills, commands, files.
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
@@ -17,13 +17,20 @@ end
 -- Isolate each case from ambient git env (e.g. GIT_DIR set inside a pre-push
 -- hook), which would otherwise redirect the fixture's `git init` and
 -- scan.files' git calls at the surrounding repository.
-local GIT_ENV = { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY" }
+local GIT_ENV = {
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_PREFIX",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+}
 local saved_git = {}
 local saved_claude_config
 local saved_opencode_config
 local saved_opencode_config_file
 local saved_xdg_config
-local T = new_set {
+local T = new_set({
   hooks = {
     pre_case = function()
       for _, k in ipairs(GIT_ENV) do
@@ -45,42 +52,48 @@ local T = new_set {
       vim.env.XDG_CONFIG_HOME = saved_xdg_config
     end,
   },
-}
+})
 
 T["skills"] = new_set()
 
 T["skills"]["discovers skills, reading name + description from frontmatter"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
-  write(root .. "/skills/foo/SKILL.md", { "---", "name: foo", "description: Does foo things", "---", "# Foo" })
-  local skills = scan.skills { root .. "/skills" }
+  write(
+    root .. "/skills/foo/SKILL.md",
+    { "---", "name: foo", "description: Does foo things", "---", "# Foo" }
+  )
+  local skills = scan.skills({ root .. "/skills" })
   expect.equality(#skills, 1)
   expect.equality(skills[1].name, "foo")
   expect.equality(skills[1].description, "Does foo things")
 end
 
 T["skills"]["falls back to directory name when frontmatter lacks name"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/skills/bar-baz/SKILL.md", { "---", "description: No name here", "---" })
-  local skills = scan.skills { root .. "/skills" }
+  local skills = scan.skills({ root .. "/skills" })
   expect.equality(#skills, 1)
   expect.equality(skills[1].name, "bar-baz")
 end
 
 T["skills"]["returns empty for a missing directory"] = function()
-  local scan = require "agentcomplete.scan"
-  expect.equality(scan.skills { "/nope/does/not/exist" }, {})
+  local scan = require("agentcomplete.scan")
+  expect.equality(scan.skills({ "/nope/does/not/exist" }), {})
 end
 
 T["skills"]["qualifies a name with the plugin namespace from the dir → namespace map"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/plug/skills/foo/SKILL.md", { "---", "name: foo", "---" })
   write(root .. "/user/skills/foo/SKILL.md", { "---", "name: foo", "---" })
   local plugin_skills = root .. "/plug/skills"
   local user_skills = root .. "/user/skills"
-  local skills = scan.skills({ plugin_skills, user_skills }, { [plugin_skills] = "myplugin" })
+  local skills = scan.skills(
+    { plugin_skills, user_skills },
+    { [plugin_skills] = "myplugin" }
+  )
   local names = {}
   for _, s in ipairs(skills) do
     names[#names + 1] = s.name
@@ -93,11 +106,11 @@ end
 T["commands"] = new_set()
 
 T["commands"]["discovers flat and nested commands (nested joined with ':')"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/commands/deploy.md", { "---", "description: Deploy it", "---" })
   write(root .. "/commands/git/commit.md", { "# commit" })
-  local cmds = scan.commands { root .. "/commands" }
+  local cmds = scan.commands({ root .. "/commands" })
   table.sort(cmds, function(a, b)
     return a.name < b.name
   end)
@@ -110,7 +123,7 @@ end
 T["files"] = new_set()
 
 T["files"]["lists files recursively (non-git dir → scandir fallback)"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/src/init.lua", { "" })
   write(root .. "/src/util/helpers.lua", { "" })
@@ -121,12 +134,12 @@ T["files"]["lists files recursively (non-git dir → scandir fallback)"] = funct
 end
 
 T["files"]["respects .gitignore inside a git work-tree"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/keep.lua", { "" })
   write(root .. "/ignored.log", { "" })
   write(root .. "/.gitignore", { "*.log" })
-  vim.fn.system { "git", "-C", root, "init", "-q" }
+  vim.fn.system({ "git", "-C", root, "init", "-q" })
   local files = scan.files(root)
   table.sort(files)
   -- .gitignore is itself tracked-able but uninteresting; assert the ignored file is excluded and the kept one present.
@@ -137,7 +150,7 @@ end
 T["folders"] = new_set()
 
 T["folders"]["in a work-tree, lists each folder holding a non-ignored file, plus empty ones"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/src/init.lua", { "" })
   write(root .. "/src/util/helpers.lua", { "" })
@@ -148,13 +161,16 @@ T["folders"]["in a work-tree, lists each folder holding a non-ignored file, plus
   write(root .. "/.cache/.gitignore", { "*" })
   write(root .. "/.gitignore", { "node_modules", "*.log" })
   vim.fn.mkdir(root .. "/src/empty", "p")
-  vim.fn.system { "git", "-C", root, "init", "-q" }
-  vim.fn.system { "git", "-C", root, "add", "src" }
-  expect.equality(scan.folders(root, scan.files(root)), { "lib/", "lib/deep/", "src/", "src/empty/", "src/util/" })
+  vim.fn.system({ "git", "-C", root, "init", "-q" })
+  vim.fn.system({ "git", "-C", root, "add", "src" })
+  expect.equality(
+    scan.folders(root, scan.files(root)),
+    { "lib/", "lib/deep/", "src/", "src/empty/", "src/util/" }
+  )
 end
 
 T["folders"]["outside a work-tree, lists every folder by scandir, skipping dot-directories"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   write(root .. "/src/util/helpers.lua", { "" })
   write(root .. "/.hidden/x.lua", { "" })
@@ -165,10 +181,10 @@ end
 T["claude_dirs"] = new_set()
 
 T["claude_dirs"]["always includes global (CLAUDE_CONFIG_DIR) and project-local dirs"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local home = tmpdir()
   vim.env.CLAUDE_CONFIG_DIR = home
-  local skill_dirs, command_dirs = scan.claude_dirs "/tmp/projY"
+  local skill_dirs, command_dirs = scan.claude_dirs("/tmp/projY")
   expect.equality(vim.tbl_contains(skill_dirs, home .. "/skills"), true)
   expect.equality(vim.tbl_contains(command_dirs, home .. "/commands"), true)
   expect.equality(vim.tbl_contains(skill_dirs, "/tmp/projY/.claude/skills"), true)
@@ -176,34 +192,37 @@ T["claude_dirs"]["always includes global (CLAUDE_CONFIG_DIR) and project-local d
 end
 
 T["claude_dirs"]["includes enabled plugin dirs from installed_plugins.json"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local home = tmpdir()
   vim.env.CLAUDE_CONFIG_DIR = home
   local install_path = home .. "/plugins/cache/mp/plug/1.0"
   write(home .. "/plugins/installed_plugins.json", {
-    vim.json.encode {
+    vim.json.encode({
       version = 2,
       plugins = { ["plug@mp"] = { { installPath = install_path, scope = "user" } } },
-    },
+    }),
   })
-  local skill_dirs, command_dirs = scan.claude_dirs "/tmp/projY"
+  local skill_dirs, command_dirs = scan.claude_dirs("/tmp/projY")
   expect.equality(vim.tbl_contains(skill_dirs, install_path .. "/skills"), true)
   expect.equality(vim.tbl_contains(command_dirs, install_path .. "/commands"), true)
 end
 
 T["claude_dirs"]["returns a dir → namespace map for plugin skill dirs (plugin.json name is authoritative)"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local home = tmpdir()
   vim.env.CLAUDE_CONFIG_DIR = home
   local install_path = home .. "/plugins/cache/mp/plug/1.0"
   write(home .. "/plugins/installed_plugins.json", {
-    vim.json.encode {
+    vim.json.encode({
       version = 2,
       plugins = { ["plug@mp"] = { { installPath = install_path, scope = "user" } } },
-    },
+    }),
   })
-  write(install_path .. "/.claude-plugin/plugin.json", { vim.json.encode { name = "superplug" } })
-  local skill_dirs, _command_dirs, namespaces = scan.claude_dirs "/tmp/projY"
+  write(
+    install_path .. "/.claude-plugin/plugin.json",
+    { vim.json.encode({ name = "superplug" }) }
+  )
+  local skill_dirs, _command_dirs, namespaces = scan.claude_dirs("/tmp/projY")
   expect.equality(type(namespaces), "table")
   expect.equality(namespaces[install_path .. "/skills"], "superplug") -- plugin.json name wins
   expect.equality(namespaces[home .. "/skills"], nil) -- global/user dir stays unqualified
@@ -212,32 +231,32 @@ T["claude_dirs"]["returns a dir → namespace map for plugin skill dirs (plugin.
 end
 
 T["claude_dirs"]["falls back to the installed_plugins key prefix when plugin.json is absent"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local home = tmpdir()
   vim.env.CLAUDE_CONFIG_DIR = home
   local install_path = home .. "/plugins/cache/mp/plug/1.0"
   write(home .. "/plugins/installed_plugins.json", {
-    vim.json.encode {
+    vim.json.encode({
       version = 2,
       plugins = { ["plug@mp"] = { { installPath = install_path, scope = "user" } } },
-    },
+    }),
   })
   -- no .claude-plugin/plugin.json on disk
-  local _skill_dirs, _command_dirs, namespaces = scan.claude_dirs "/tmp/projY"
+  local _skill_dirs, _command_dirs, namespaces = scan.claude_dirs("/tmp/projY")
   expect.equality(type(namespaces), "table")
   expect.equality(namespaces[install_path .. "/skills"], "plug") -- key substring before "@"
 end
 
 T["claude_dirs"]["tolerates a missing installed_plugins.json"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local home = tmpdir() -- no plugins/ subtree
   vim.env.CLAUDE_CONFIG_DIR = home
-  local skill_dirs = scan.claude_dirs "/tmp/projY"
+  local skill_dirs = scan.claude_dirs("/tmp/projY")
   expect.equality(vim.tbl_contains(skill_dirs, home .. "/skills"), true)
 end
 
 T["claude_dirs"]["de-duplicates when project-local equals global (claude launched from a config parent)"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   vim.env.CLAUDE_CONFIG_DIR = root .. "/.claude"
   -- cwd == root ⇒ project-local `<root>/.claude/skills` is the same path as global.
@@ -258,11 +277,11 @@ end
 T["opencode_dirs"] = new_set()
 
 T["opencode_dirs"]["includes global (XDG) and project-local skill/command dirs"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local xdg = tmpdir()
   vim.env.XDG_CONFIG_HOME = xdg
   vim.env.OPENCODE_CONFIG_DIR = nil
-  local skill_dirs, command_dirs = scan.opencode_dirs "/tmp/projO"
+  local skill_dirs, command_dirs = scan.opencode_dirs("/tmp/projO")
   -- OpenCode discovers skills as {skill,skills}/**/SKILL.md, so both subdir names are searched.
   expect.equality(vim.tbl_contains(skill_dirs, xdg .. "/opencode/skill"), true)
   expect.equality(vim.tbl_contains(skill_dirs, xdg .. "/opencode/skills"), true)
@@ -275,25 +294,25 @@ T["opencode_dirs"]["includes global (XDG) and project-local skill/command dirs"]
 end
 
 T["opencode_dirs"]["falls back to ~/.config/opencode when XDG_CONFIG_HOME is unset"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   vim.env.XDG_CONFIG_HOME = nil
   vim.env.OPENCODE_CONFIG_DIR = nil
-  local skill_dirs = scan.opencode_dirs "/tmp/projO"
-  local home = vim.fn.expand "~/.config/opencode"
+  local skill_dirs = scan.opencode_dirs("/tmp/projO")
+  local home = vim.fn.expand("~/.config/opencode")
   expect.equality(vim.tbl_contains(skill_dirs, home .. "/skill"), true)
 end
 
 T["opencode_dirs"]["honors OPENCODE_CONFIG_DIR as an extra base"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local extra = tmpdir()
   vim.env.OPENCODE_CONFIG_DIR = extra
-  local skill_dirs, command_dirs = scan.opencode_dirs "/tmp/projO"
+  local skill_dirs, command_dirs = scan.opencode_dirs("/tmp/projO")
   expect.equality(vim.tbl_contains(skill_dirs, extra .. "/skill"), true)
   expect.equality(vim.tbl_contains(command_dirs, extra .. "/command"), true)
 end
 
 T["opencode_dirs"]["de-duplicates when project-local equals OPENCODE_CONFIG_DIR"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local root = tmpdir()
   vim.env.XDG_CONFIG_HOME = nil
   -- cwd's project-local `<root>/.opencode` is the same base as OPENCODE_CONFIG_DIR.
@@ -323,7 +342,7 @@ local function isolate_opencode_config()
 end
 
 T["opencode_commands"]["reads the command map from opencode.json at the project root"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   isolate_opencode_config()
   local root = tmpdir()
   write(root .. "/opencode.json", {
@@ -344,7 +363,7 @@ T["opencode_commands"]["reads the command map from opencode.json at the project 
 end
 
 T["opencode_commands"]["tolerates JSONC comments and trailing commas"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   isolate_opencode_config()
   local root = tmpdir()
   write(root .. "/opencode.jsonc", {
@@ -362,17 +381,20 @@ T["opencode_commands"]["tolerates JSONC comments and trailing commas"] = functio
 end
 
 T["opencode_commands"]["preserves commas/brackets inside string values"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   isolate_opencode_config()
   local root = tmpdir()
   -- The description contains `,]` — trailing-comma stripping must not touch it.
-  write(root .. "/opencode.json", { '{ "command": { "x": { "description": "tuple [a,] ok" } } }' })
+  write(
+    root .. "/opencode.json",
+    { '{ "command": { "x": { "description": "tuple [a,] ok" } } }' }
+  )
   local cmds = scan.opencode_commands(root)
   expect.equality(cmds[1].description, "tuple [a,] ok")
 end
 
 T["opencode_commands"]["empty when there is no config or no command map"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   isolate_opencode_config()
   local root = tmpdir()
   expect.equality(scan.opencode_commands(root), {})
@@ -381,7 +403,7 @@ T["opencode_commands"]["empty when there is no config or no command map"] = func
 end
 
 T["opencode_commands"]["malformed config yields empty, not an error"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   isolate_opencode_config()
   local root = tmpdir()
   write(root .. "/opencode.json", { "{ this is not json" })
@@ -389,13 +411,19 @@ T["opencode_commands"]["malformed config yields empty, not an error"] = function
 end
 
 T["opencode_commands"]["de-duplicates a command defined in both global and project config"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   isolate_opencode_config()
   local xdg = tmpdir()
   vim.env.XDG_CONFIG_HOME = xdg
   local root = tmpdir()
-  write(xdg .. "/opencode/opencode.json", { '{ "command": { "deploy": { "description": "global" } } }' })
-  write(root .. "/opencode.json", { '{ "command": { "deploy": { "description": "project" } } }' })
+  write(
+    xdg .. "/opencode/opencode.json",
+    { '{ "command": { "deploy": { "description": "global" } } }' }
+  )
+  write(
+    root .. "/opencode.json",
+    { '{ "command": { "deploy": { "description": "project" } } }' }
+  )
   local n = 0
   for _, c in ipairs(scan.opencode_commands(root)) do
     if c.name == "deploy" then
@@ -408,7 +436,7 @@ end
 T["opencode_builtin_commands"] = new_set()
 
 T["opencode_builtin_commands"]["includes built-in TUI commands (shown and hidden alike)"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local by = {}
   for _, c in ipairs(scan.opencode_builtin_commands()) do
     by[c.name] = c
@@ -420,7 +448,7 @@ T["opencode_builtin_commands"]["includes built-in TUI commands (shown and hidden
 end
 
 T["opencode_builtin_commands"]["hides interactive commands and shows conversation actions"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local by = {}
   for _, c in ipairs(scan.opencode_builtin_commands()) do
     by[c.name] = c
@@ -435,7 +463,7 @@ T["opencode_builtin_commands"]["hides interactive commands and shows conversatio
 end
 
 T["opencode_builtin_commands"]["every entry has a non-empty name and description"] = function()
-  local scan = require "agentcomplete.scan"
+  local scan = require("agentcomplete.scan")
   local cmds = scan.opencode_builtin_commands()
   expect.equality(#cmds > 0, true)
   for _, c in ipairs(cmds) do

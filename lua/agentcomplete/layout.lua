@@ -74,7 +74,10 @@ function M.plan(input)
   local beside = input.pane and columns >= input.min_width
   local frame = measure + PANE_FRAME
   if not input.margins then
-    return { beside = beside, pane = beside and math.min(frame, math.floor((columns - 1) / 2)) or nil }
+    return {
+      beside = beside,
+      pane = beside and math.min(frame, math.floor((columns - 1) / 2)) or nil,
+    }
   end
   -- A margin is at least a column wide and draws a separator: four columns content never gets.
   local room = columns - 4
@@ -90,7 +93,13 @@ function M.plan(input)
   end
   local free = columns - 2 - prompt - (pane and pane + 1 or 0)
   local left = math.max(1, math.floor(free / 2))
-  return { beside = beside, left = left, right = math.max(1, free - left), pane = pane, prompt = math.max(1, prompt) }
+  return {
+    beside = beside,
+    left = left,
+    right = math.max(1, free - left),
+    pane = pane,
+    prompt = math.max(1, prompt),
+  }
 end
 
 ---@class AgentComplete.Layout.Heights
@@ -134,9 +143,21 @@ function M.frame(prompt)
     side[line] = "│"
   end
   return {
-    top = { row = row - 2, col = col - 1, width = width + 2, height = 1, lines = { "╭" .. rule .. "╮" } },
+    top = {
+      row = row - 2,
+      col = col - 1,
+      width = width + 2,
+      height = 1,
+      lines = { "╭" .. rule .. "╮" },
+    },
     left = { row = row - 1, col = col - 1, width = 1, height = height + 2, lines = side },
-    right = { row = row - 1, col = col + width, width = 1, height = height + 2, lines = side },
+    right = {
+      row = row - 1,
+      col = col + width,
+      width = 1,
+      height = height + 2,
+      lines = side,
+    },
     bottom = {
       row = row + height + 1,
       col = col - 1,
@@ -211,7 +232,9 @@ end
 ---@param win integer
 ---@return boolean
 local function alone(win)
-  for _, other in ipairs(vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win))) do
+  for _, other in
+    ipairs(vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win)))
+  do
     if other ~= win and vim.api.nvim_win_get_config(other).relative == "" then
       return false
     end
@@ -230,7 +253,7 @@ end
 ---@return table<AgentComplete.Layout.Edge, integer>
 local function open_frame()
   local frame = {}
-  for _, edge in ipairs { "top", "left", "right", "bottom" } do
+  for _, edge in ipairs({ "top", "left", "right", "bottom" }) do
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].bufhidden = "wipe"
     frame[edge] = vim.api.nvim_open_win(buf, false, {
@@ -252,7 +275,8 @@ end
 ---Box the prompt in the middle of its column, framed and tinted like the context pane.
 ---@param state AgentComplete.Layout.State
 local function open_box(state)
-  local winhighlight = vim.api.nvim_get_option_value("winhighlight", { win = state.host, scope = "local" })
+  local winhighlight =
+    vim.api.nvim_get_option_value("winhighlight", { win = state.host, scope = "local" })
   state.box = {
     top = blank(state.host, "above"),
     bottom = blank(state.host, "below"),
@@ -261,7 +285,10 @@ local function open_box(state)
   }
   vim.w[state.host].agentcomplete_box = true
   local tint = "Normal:AgentCompletePrompt"
-  set_winhighlight(state.host, winhighlight == "" and tint or (winhighlight .. "," .. tint))
+  set_winhighlight(
+    state.host,
+    winhighlight == "" and tint or (winhighlight .. "," .. tint)
+  )
   -- The top margin's statusline is the row above the prompt: tinted, it pads the box's top edge.
   -- A later entry overrides an earlier one for the same group.
   local top = state.box.top
@@ -277,7 +304,9 @@ local function close_box(state)
     return
   end
   state.box = nil
-  for _, win in ipairs(vim.list_extend({ box.top, box.bottom }, vim.tbl_values(box.frame))) do
+  for _, win in
+    ipairs(vim.list_extend({ box.top, box.bottom }, vim.tbl_values(box.frame)))
+  do
     pcall(vim.api.nvim_win_close, win, true)
   end
   if valid(state.host) then
@@ -294,15 +323,21 @@ end
 ---@param host integer
 local function draw_frame(frame, host)
   local origin = vim.fn.win_screenpos(host)
-  local edges = M.frame {
+  local edges = M.frame({
     row = origin[1] - 1,
     col = origin[2] - 1,
     width = vim.api.nvim_win_get_width(host),
     height = vim.api.nvim_win_get_height(host),
-  }
+  })
   for edge, win in pairs(frame) do
     local placement = edges[edge]
-    vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, placement.lines)
+    vim.api.nvim_buf_set_lines(
+      vim.api.nvim_win_get_buf(win),
+      0,
+      -1,
+      false,
+      placement.lines
+    )
     vim.api.nvim_win_set_config(win, {
       relative = "editor",
       row = placement.row,
@@ -333,7 +368,7 @@ local function fit_box(box, host)
   vim.api.nvim_win_call(host, function()
     local view = vim.fn.winsaveview()
     if view.topline > 1 or view.skipcol > 0 then
-      vim.fn.winrestview { topline = 1, skipcol = 0 }
+      vim.fn.winrestview({ topline = 1, skipcol = 0 })
     end
   end)
 end
@@ -350,14 +385,14 @@ function M.arrange(buf)
   state.arranging = true
   -- Guarded so a raise mid-resize cannot leave the flag set and the layout frozen where it is.
   pcall(function()
-    local plan = M.plan {
+    local plan = M.plan({
       columns = vim.o.columns,
       measure = state.opts.measure,
       min_width = state.placement and state.placement.min_width or 0,
       pane = valid(state.spacer),
       margins = valid(state.left),
       inset = state.opts.inset,
-    }
+    })
     if valid(state.spacer) and plan.beside ~= state.beside then
       state.beside = plan.beside
       local split = plan.beside and "left" or state.placement.stacked
@@ -391,7 +426,7 @@ local function dismiss_margins(buf)
   close_box(state)
   local left, right = state.left, state.right
   state.left, state.right = nil, nil
-  for _, win in ipairs { left, right } do
+  for _, win in ipairs({ left, right }) do
     pcall(vim.api.nvim_win_close, win, true)
   end
   M.arrange(buf)
@@ -459,7 +494,8 @@ function M.attach(buf, opts)
     return
   end
   ensure_groups()
-  local group = vim.api.nvim_create_augroup("AgentCompleteLayout_" .. buf, { clear = true })
+  local group =
+    vim.api.nvim_create_augroup("AgentCompleteLayout_" .. buf, { clear = true })
   local state = { host = host, opts = opts, group = group }
   M._layouts[buf] = state
   if opts.margins and alone(host) then
@@ -493,17 +529,21 @@ end
 ---@return integer|nil spacer nil when `buf` has no layout, or its window no longer shows it.
 function M.reserve(buf, placement)
   local state = M._layouts[buf]
-  if not state or not valid(state.host) or vim.api.nvim_win_get_buf(state.host) ~= buf then
+  if
+    not state
+    or not valid(state.host)
+    or vim.api.nvim_win_get_buf(state.host) ~= buf
+  then
     return nil
   end
-  local plan = M.plan {
+  local plan = M.plan({
     columns = vim.o.columns,
     measure = state.opts.measure,
     min_width = placement.min_width,
     pane = true,
     margins = valid(state.left),
     inset = state.opts.inset,
-  }
+  })
   close_box(state)
   state.spacer = blank(state.host, plan.beside and "left" or placement.stacked)
   state.placement, state.beside = placement, plan.beside
@@ -538,7 +578,7 @@ function M.detach(buf)
   pcall(vim.api.nvim_del_augroup_by_id, state.group)
   close_box(state)
   -- Keyed, because any of the three may be nil and `ipairs` would stop there.
-  for _, win in pairs { spacer = state.spacer, left = state.left, right = state.right } do
+  for _, win in pairs({ spacer = state.spacer, left = state.left, right = state.right }) do
     pcall(vim.api.nvim_win_close, win, true)
   end
 end

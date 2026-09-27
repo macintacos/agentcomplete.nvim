@@ -1,13 +1,13 @@
 -- Tests for agentcomplete top-level: config merge, public commands.
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
 local T = new_set()
 
 T["setup merges user config over defaults and returns the module"] = function()
-  local agentcomplete = require "agentcomplete"
-  local m = agentcomplete.setup { backend = "native" }
+  local agentcomplete = require("agentcomplete")
+  local m = agentcomplete.setup({ backend = "native" })
   expect.equality(m, agentcomplete)
   expect.equality(agentcomplete.config.backend, "native")
   expect.equality(agentcomplete.config.enabled, true) -- default preserved
@@ -16,9 +16,9 @@ end
 
 T["setup registers the manual attach/detach commands"] = function()
   require("agentcomplete").setup()
-  expect.equality(vim.fn.exists ":AgentCompleteAttach", 2)
-  expect.equality(vim.fn.exists ":AgentCompleteDetach", 2)
-  expect.equality(vim.fn.exists ":AgentCompleteInstallOpenCodePlugin", 2)
+  expect.equality(vim.fn.exists(":AgentCompleteAttach"), 2)
+  expect.equality(vim.fn.exists(":AgentCompleteDetach"), 2)
+  expect.equality(vim.fn.exists(":AgentCompleteInstallOpenCodePlugin"), 2)
 end
 
 local function tmpdir()
@@ -53,14 +53,18 @@ T["install_opencode_plugin"]["refuses when something else already occupies the t
   vim.fn.writefile({ "" }, source)
   vim.fn.mkdir(home .. "/plugin", "p")
   vim.fn.writefile({ "mine" }, home .. "/plugin/agentcomplete.ts")
-  expect.equality(require("agentcomplete").install_opencode_plugin(source, home), "conflict")
+  expect.equality(
+    require("agentcomplete").install_opencode_plugin(source, home),
+    "conflict"
+  )
   expect.equality(vim.fn.readfile(home .. "/plugin/agentcomplete.ts"), { "mine" })
 end
 
 -- A link we wrote for a checkout that has since moved is indistinguishable from a stale one
 -- the user wrote; re-pointing it is what keeps a moved checkout from erroring on every launch.
 T["install_opencode_plugin"]["re-points a link left by another checkout"] = function()
-  local stale, source, home = tmpdir() .. "/opencode/agentcomplete.ts", tmpdir() .. "/agentcomplete.ts", tmpdir()
+  local stale, source, home =
+    tmpdir() .. "/opencode/agentcomplete.ts", tmpdir() .. "/agentcomplete.ts", tmpdir()
   vim.fn.writefile({ "" }, source)
   vim.fn.mkdir(home .. "/plugin", "p")
   vim.loop.fs_symlink(stale, home .. "/plugin/agentcomplete.ts")
@@ -74,7 +78,10 @@ T["install_opencode_plugin"]["refuses a symlink that is not one of ours"] = func
   vim.fn.writefile({ "" }, source)
   vim.fn.mkdir(home .. "/plugin", "p")
   vim.loop.fs_symlink(tmpdir() .. "/notes.md", home .. "/plugin/agentcomplete.ts")
-  expect.equality(require("agentcomplete").install_opencode_plugin(source, home), "conflict")
+  expect.equality(
+    require("agentcomplete").install_opencode_plugin(source, home),
+    "conflict"
+  )
 end
 
 ---Put a stub `opencode` on PATH, so what `setup()` does is decided by the test rather than by
@@ -87,7 +94,7 @@ local function stub_opencode_on_path()
 end
 
 local saved_xdg, saved_path, saved_notify, notes
-T["install_plugin"] = new_set {
+T["install_plugin"] = new_set({
   hooks = {
     pre_case = function()
       saved_xdg, saved_path = vim.env.XDG_CONFIG_HOME, vim.env.PATH
@@ -105,17 +112,20 @@ T["install_plugin"] = new_set {
       vim.notify = saved_notify
     end,
   },
-}
+})
 
 T["install_plugin"]["defaults off, and installs nothing"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup {}
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({})
   expect.equality(agentcomplete.config.opencode.install_plugin, false)
-  expect.equality(vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"), nil)
+  expect.equality(
+    vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"),
+    nil
+  )
 end
 
 T["install_plugin"]["symlinks the shipped plugin when opted in"] = function()
-  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  require("agentcomplete").setup({ opencode = { install_plugin = true } })
   local target = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"
   local linked = vim.loop.fs_readlink(target)
   expect.equality(type(linked), "string")
@@ -129,7 +139,7 @@ T["install_plugin"]["reports a conflict rather than overwriting what is already 
   local plugin_dir = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin"
   vim.fn.mkdir(plugin_dir, "p")
   vim.fn.writefile({ "mine" }, plugin_dir .. "/agentcomplete.ts")
-  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  require("agentcomplete").setup({ opencode = { install_plugin = true } })
   expect.equality(#notes, 1)
   expect.equality(notes[1].level, vim.log.levels.ERROR)
   expect.equality(vim.fn.readfile(plugin_dir .. "/agentcomplete.ts"), { "mine" })
@@ -139,14 +149,14 @@ end
 -- installing there would plant an OpenCode config directory on a machine that has never had one.
 T["install_plugin"]["installs nothing on a machine without OpenCode"] = function()
   vim.env.PATH = tmpdir()
-  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  require("agentcomplete").setup({ opencode = { install_plugin = true } })
   expect.equality(vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode"), nil)
   expect.equality(#notes, 0)
 end
 
 T["install_plugin"]["reports the install once, then stays quiet on later setups"] = function()
-  require("agentcomplete").setup { opencode = { install_plugin = true } }
-  require("agentcomplete").setup { opencode = { install_plugin = true } }
+  require("agentcomplete").setup({ opencode = { install_plugin = true } })
+  require("agentcomplete").setup({ opencode = { install_plugin = true } })
   expect.equality(#notes, 1)
   expect.equality(notes[1].level, vim.log.levels.INFO)
 end
@@ -155,9 +165,13 @@ end
 -- including a machine whose OpenCode is not on Neovim's PATH.
 T["install_plugin"]["the command installs and reports even without OpenCode on PATH"] = function()
   vim.env.PATH = tmpdir()
-  require("agentcomplete").setup {}
-  vim.cmd "AgentCompleteInstallOpenCodePlugin"
-  expect.equality(vim.loop.fs_stat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts") ~= nil, true)
+  require("agentcomplete").setup({})
+  vim.cmd("AgentCompleteInstallOpenCodePlugin")
+  expect.equality(
+    vim.loop.fs_stat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts")
+      ~= nil,
+    true
+  )
   expect.equality(#notes, 1)
   expect.equality(notes[1].level, vim.log.levels.INFO)
 end
@@ -165,8 +179,8 @@ end
 T["install_plugin"]["the command reports when the shipped plugin is off the runtimepath"] = function()
   local saved_rtp = vim.o.runtimepath
   vim.o.runtimepath = tmpdir()
-  require("agentcomplete").setup {}
-  vim.cmd "AgentCompleteInstallOpenCodePlugin"
+  require("agentcomplete").setup({})
+  vim.cmd("AgentCompleteInstallOpenCodePlugin")
   vim.o.runtimepath = saved_rtp
   expect.equality(vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode"), nil)
   expect.equality(#notes, 1)
@@ -175,7 +189,7 @@ end
 
 T["setup registers the Claude Code detector"] = function()
   require("agentcomplete").setup()
-  local detect = require "agentcomplete.detect"
+  local detect = require("agentcomplete.detect")
   local names = vim.tbl_map(function(d)
     return d.name
   end, detect.detectors)
@@ -192,27 +206,27 @@ T["setup registers the built-in context resolvers"] = function()
 end
 
 T["setup defaults the context pane on, with a split-direction threshold"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup {}
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({})
   expect.equality(agentcomplete.config.context.enabled, true)
   expect.equality(agentcomplete.config.context.min_width, 160)
 end
 
 T["setup stacks the context pane above the prompt by default"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup {}
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({})
   expect.equality(agentcomplete.config.context.stacked, "above")
 end
 
 T["setup defaults the composer on, at an 80-column measure"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup {}
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({})
   expect.equality(agentcomplete.config.composer, { enabled = true, width = 80 })
 end
 
 T["setup merges a context override over the defaults"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup { context = { enabled = false } }
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ context = { enabled = false } })
   expect.equality(agentcomplete.config.context.enabled, false)
   expect.equality(agentcomplete.config.context.min_width, 160) -- sibling default preserved
 end
@@ -220,28 +234,28 @@ end
 -- `rumdl_config` has no `defaults` entry — its default is "unset" — so the merge passing a
 -- user value through is the whole mechanism, and the only option here relying on it.
 T["setup carries a context.rumdl_config with no default behind it"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup { context = { rumdl_config = "/p.toml" } }
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ context = { rumdl_config = "/p.toml" } })
   expect.equality(agentcomplete.config.context.rumdl_config, "/p.toml")
 end
 
 T["setup preserves the opencode.show_all_builtin_commands default"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup {}
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({})
   expect.equality(agentcomplete.config.opencode.show_all_builtin_commands, false)
 end
 
 T["setup merges the opencode option over the default"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup { opencode = { show_all_builtin_commands = true } }
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ opencode = { show_all_builtin_commands = true } })
   expect.equality(agentcomplete.config.opencode.show_all_builtin_commands, true)
   expect.equality(agentcomplete.config.enabled, true) -- unrelated default preserved
 end
 
-T["attach"] = new_set {
+T["attach"] = new_set({
   hooks = {
     pre_case = function()
-      vim.cmd "silent! only"
+      vim.cmd("silent! only")
       -- An empty root stands in for `~/.claude`, so attaching scans nothing real.
       local root = tmpdir()
       vim.env.CLAUDE_CONFIG_DIR = root
@@ -251,10 +265,10 @@ T["attach"] = new_set {
       require("agentcomplete").detach(0)
       vim.env.CLAUDE_CONFIG_DIR = nil
       vim.g.agentcomplete_cwd = nil
-      vim.cmd "silent! only"
+      vim.cmd("silent! only")
     end,
   },
-}
+})
 
 ---A buffer in a window with a code buffer's gutter, focused.
 local function numbered_buffer()
@@ -265,8 +279,8 @@ local function numbered_buffer()
 end
 
 T["attach"]["turns the prompt window into a page, and detach turns it back"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup { backend = "native" }
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native" })
   local buf = numbered_buffer()
   expect.equality(agentcomplete.attach(buf, { force = true }), true)
   expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { false, "    " })
@@ -275,8 +289,8 @@ T["attach"]["turns the prompt window into a page, and detach turns it back"] = f
 end
 
 T["attach"]["frames the prompt with margins when there is a UI to frame"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup { backend = "native" }
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native" })
   local buf = numbered_buffer()
   local list_uis = vim.api.nvim_list_uis
   ---@diagnostic disable-next-line: duplicate-set-field
@@ -292,8 +306,8 @@ T["attach"]["frames the prompt with margins when there is a UI to frame"] = func
 end
 
 T["attach"]["leaves the prompt window alone with the composer off"] = function()
-  local agentcomplete = require "agentcomplete"
-  agentcomplete.setup { backend = "native", composer = { enabled = false } }
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native", composer = { enabled = false } })
   local buf = numbered_buffer()
   agentcomplete.attach(buf, { force = true })
   expect.equality(vim.wo.number, true)

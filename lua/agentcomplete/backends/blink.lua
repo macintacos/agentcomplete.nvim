@@ -24,10 +24,11 @@
 ---@class AgentComplete.Backend.Blink
 local M = {}
 
-local sources = require "agentcomplete.sources"
+local sources = require("agentcomplete.sources")
 local CIK = vim.lsp.protocol.CompletionItemKind
 
-local KIND = { skill = CIK.Module, command = CIK.Keyword, file = CIK.File, folder = CIK.Folder }
+local KIND =
+  { skill = CIK.Module, command = CIK.Keyword, file = CIK.File, folder = CIK.Folder }
 
 ---blink ranks on fuzzy score + `score_offset`, and a fuzzy score is a u16, so this offset
 ---puts every folder above every file.
@@ -67,7 +68,10 @@ function M.build(session, line, row, col)
     return { items = {} }
   end
   -- query="" → the trigger's full set; blink filters "/" via filterText, "@" narrows below.
-  local all = sources.items(session, { trigger = ctx.trigger, query = "", start_col = ctx.start_col })
+  local all = sources.items(
+    session,
+    { trigger = ctx.trigger, query = "", start_col = ctx.start_col }
+  )
   if ctx.trigger == "@" then
     all = narrow(all, ctx.query)
   end
@@ -136,7 +140,7 @@ end
 ---Glue: is the current buffer a detected prompt buffer? Stubbed in tests.
 ---@return boolean
 function M._detected()
-  local detect = require "agentcomplete.detect"
+  local detect = require("agentcomplete.detect")
   return detect.detect(vim.api.nvim_get_current_buf()) ~= nil
 end
 
@@ -190,7 +194,8 @@ function M.install_suppression(config, bcfg, detected_fn)
   local effective, dropped = M.constrain(config.allowed_sources or {}, registered)
   if #dropped > 0 then
     vim.notify(
-      "agentcomplete: ignoring unregistered allowed_sources: " .. table.concat(dropped, ", "),
+      "agentcomplete: ignoring unregistered allowed_sources: "
+        .. table.concat(dropped, ", "),
       vim.log.levels.WARN
     )
   end
@@ -249,11 +254,11 @@ function M:get_trigger_characters()
 end
 
 function M:get_completions(ctx, callback)
-  local detect = require "agentcomplete.detect"
+  local detect = require("agentcomplete.detect")
   local buf = (ctx and ctx.bufnr) or vim.api.nvim_get_current_buf()
   local session = detect.detect(buf)
   if not session then
-    callback { items = {}, is_incomplete_backward = false, is_incomplete_forward = false }
+    callback({ items = {}, is_incomplete_backward = false, is_incomplete_forward = false })
     return
   end
   session.sources = require("agentcomplete").config.sources
@@ -265,7 +270,11 @@ function M:get_completions(ctx, callback)
   -- Both `is_incomplete_*` must stay true: they are what make blink re-request per
   -- keystroke. Flip either and it re-filters its cached list with the collapsed
   -- needle instead, undoing the `@` narrowing above.
-  callback { items = res.items, is_incomplete_backward = true, is_incomplete_forward = true }
+  callback({
+    items = res.items,
+    is_incomplete_backward = true,
+    is_incomplete_forward = true,
+  })
 end
 
 return M

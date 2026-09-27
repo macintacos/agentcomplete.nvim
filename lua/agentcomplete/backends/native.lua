@@ -7,7 +7,7 @@
 ---@class AgentComplete.Backend.Native
 local M = {}
 
-local sources = require "agentcomplete.sources"
+local sources = require("agentcomplete.sources")
 
 ---@type table<integer, AgentComplete.Session>
 M._sessions = {}

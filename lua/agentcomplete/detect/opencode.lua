@@ -10,7 +10,7 @@
 ---`$AGENTCOMPLETE_CWD` (per-launch) or `vim.g.agentcomplete_cwd` (static config).
 local M = { name = "opencode" }
 
-local scan = require "agentcomplete.scan"
+local scan = require("agentcomplete.scan")
 
 ---Whether the buffer is OpenCode's external-editor prompt: OpenCode launched this Neovim
 ---(`$OPENCODE`) and the buffer is its `<epoch-millis>.md` temp file.
@@ -20,8 +20,8 @@ local function is_opencode_prompt(bufnr)
   if vim.env.OPENCODE ~= "1" then
     return false
   end
-  local base = vim.api.nvim_buf_get_name(bufnr):match "[^/]+$" or ""
-  return base:match "^%d+%.md$" ~= nil
+  local base = vim.api.nvim_buf_get_name(bufnr):match("[^/]+$") or ""
+  return base:match("^%d+%.md$") ~= nil
 end
 
 ---Resolve the project cwd: explicit override (env, then `vim.g`) else the editor cwd.

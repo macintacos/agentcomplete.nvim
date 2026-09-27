@@ -11,12 +11,12 @@
 ---@class AgentComplete.Highlight
 local M = {}
 
-local sources = require "agentcomplete.sources"
+local sources = require("agentcomplete.sources")
 
 ---Extmark namespace for every token highlight this module applies. Namespaced to the
 ---module, not the plugin: `M.detach` clears it wholesale, so a namespace shared with a
 ---future feature would have that feature's marks deleted along with these.
-M.ns = vim.api.nvim_create_namespace "agentcomplete.highlight"
+M.ns = vim.api.nvim_create_namespace("agentcomplete.highlight")
 
 ---@type table<integer, AgentComplete.Session>
 M._sessions = {}
@@ -48,7 +48,9 @@ end
 ---@return table<string, true>
 function M.slash_names(session)
   local set = {}
-  for _, it in ipairs(sources.items(session, { trigger = "/", query = "", start_col = 1 })) do
+  for _, it in
+    ipairs(sources.items(session, { trigger = "/", query = "", start_col = 1 }))
+  do
     set[it.insert_text] = true
   end
   return set
@@ -62,7 +64,7 @@ end
 ---@param name string
 ---@return boolean
 local function file_exists(cwd, name)
-  local path = name:match "^[/~]" and vim.fs.normalize(name) or (cwd .. "/" .. name)
+  local path = name:match("^[/~]") and vim.fs.normalize(name) or (cwd .. "/" .. name)
   return vim.loop.fs_stat(path) ~= nil
 end
 
@@ -98,7 +100,8 @@ function M.marks(session, lines)
         end
       end
       if group then
-        out[#out + 1] = { row = row - 1, col = tok.col, end_col = tok.end_col, hl_group = group }
+        out[#out + 1] =
+          { row = row - 1, col = tok.col, end_col = tok.end_col, hl_group = group }
       end
     end
   end
@@ -117,7 +120,13 @@ function M.repaint(buf)
     -- `spell = false` is constant across marks, so it stays here rather than in `Mark`, which
     -- carries only what resolution decides. A token is an identifier, not prose, and the mark
     -- spans exactly the token — so the prose around it keeps its squiggles.
-    vim.api.nvim_buf_set_extmark(buf, M.ns, m.row, m.col, { end_col = m.end_col, hl_group = m.hl_group, spell = false })
+    vim.api.nvim_buf_set_extmark(
+      buf,
+      M.ns,
+      m.row,
+      m.col,
+      { end_col = m.end_col, hl_group = m.hl_group, spell = false }
+    )
   end
 end
 
@@ -150,18 +159,22 @@ end
 function M.attach(buf, session)
   M._sessions[buf] = session
   M.ensure_groups()
-  local grp = vim.api.nvim_create_augroup("AgentCompleteHighlight_" .. buf, { clear = true })
+  local grp =
+    vim.api.nvim_create_augroup("AgentCompleteHighlight_" .. buf, { clear = true })
   M._augroups[buf] = grp
   -- `InsertLeave` is not redundant with the two `TextChanged` events: edits made while the
   -- completion popup is open fire `TextChangedP`, so accepting a completion — the single
   -- most likely way a token appears — is caught on the way out of insert mode or not at all.
-  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave", "BufEnter" }, {
-    group = grp,
-    buffer = buf,
-    callback = function()
-      schedule(buf)
-    end,
-  })
+  vim.api.nvim_create_autocmd(
+    { "TextChanged", "TextChangedI", "InsertLeave", "BufEnter" },
+    {
+      group = grp,
+      buffer = buf,
+      callback = function()
+        schedule(buf)
+      end,
+    }
+  )
   -- Release per-buffer state when the buffer goes away (avoids stale sessions on bufnr reuse).
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
     group = grp,

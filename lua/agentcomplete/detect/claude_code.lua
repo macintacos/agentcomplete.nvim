@@ -9,14 +9,14 @@
 ---non-standard launches.
 local M = { name = "claude-code" }
 
-local scan = require "agentcomplete.scan"
+local scan = require("agentcomplete.scan")
 
 ---Whether the buffer is Claude Code's external-editor prompt, judged by name.
 ---@param bufnr integer
 ---@return boolean
 local function is_claude_prompt(bufnr)
-  local base = vim.api.nvim_buf_get_name(bufnr):match "[^/]+$" or ""
-  return base:match "^claude%-prompt%-.+%.md$" ~= nil
+  local base = vim.api.nvim_buf_get_name(bufnr):match("[^/]+$") or ""
+  return base:match("^claude%-prompt%-.+%.md$") ~= nil
 end
 
 ---Resolve the project cwd: explicit override (env, then `vim.g`) else the editor cwd.

@@ -12,7 +12,7 @@
 ---@class AgentComplete.Diagnostics
 local M = {}
 
-local blink = require "agentcomplete.backends.blink"
+local blink = require("agentcomplete.backends.blink")
 
 ---@class AgentComplete.Diagnostics.SuppressState
 ---@field resolved_backend "blink"|"native" The backend `backends.select` resolved to.
@@ -106,7 +106,8 @@ end
 ---yes/no because a link left by a moved checkout reads as installed and resolves nothing.
 ---@return string|nil
 local function installed_plugin()
-  local path = require("agentcomplete.scan").opencode_config_home() .. "/plugin/agentcomplete.ts"
+  local path = require("agentcomplete.scan").opencode_config_home()
+    .. "/plugin/agentcomplete.ts"
   if not vim.loop.fs_lstat(path) then
     return nil
   end
@@ -149,14 +150,14 @@ function M.render(report)
     lines[#lines + 1] = s
   end
 
-  add "# agentcomplete.nvim diagnostics"
-  add ""
+  add("# agentcomplete.nvim diagnostics")
+  add("")
   add("Neovim: " .. val(report.nvim_version))
   local bufname = (buf.name ~= nil and buf.name ~= "") and buf.name or "(no name)"
   add("Buffer: " .. val(buf.nr) .. " (" .. bufname .. ")")
-  add ""
+  add("")
 
-  add "## Config"
+  add("## Config")
   add("- backend (configured): " .. val(cfg.backend))
   add("- backend (resolved):   " .. val(cfg.resolved_backend))
   add("- detect:               " .. val(cfg.detect))
@@ -164,12 +165,21 @@ function M.render(report)
   add("- sources.slash:        " .. yn(cfg.sources and cfg.sources.slash))
   add("- sources.file:         " .. yn(cfg.sources and cfg.sources.file))
   add("- allowed_sources:      " .. list(cfg.allowed_sources))
-  add("- opencode.show_all_builtin_commands: " .. yn(cfg.opencode and cfg.opencode.show_all_builtin_commands))
-  add("- opencode.resolve_via_cli:           " .. yn(cfg.opencode and cfg.opencode.resolve_via_cli))
-  add("- opencode.install_plugin:            " .. yn(cfg.opencode and cfg.opencode.install_plugin))
-  add ""
+  add(
+    "- opencode.show_all_builtin_commands: "
+      .. yn(cfg.opencode and cfg.opencode.show_all_builtin_commands)
+  )
+  add(
+    "- opencode.resolve_via_cli:           "
+      .. yn(cfg.opencode and cfg.opencode.resolve_via_cli)
+  )
+  add(
+    "- opencode.install_plugin:            "
+      .. yn(cfg.opencode and cfg.opencode.install_plugin)
+  )
+  add("")
 
-  add "## Detection"
+  add("## Detection")
   add("- current buffer detected:  " .. yn(buf.detected))
   add("- native session attached:  " .. yn(buf.native_attached))
   add("- session source:           " .. val(buf.session_source))
@@ -181,11 +191,11 @@ function M.render(report)
     add("- session.skill_dirs:       " .. list(s.skill_dirs))
     add("- session.command_dirs:     " .. list(s.command_dirs))
   else
-    add "- session:                  (none)"
+    add("- session:                  (none)")
   end
-  add ""
+  add("")
 
-  add "## Discovery"
+  add("## Discovery")
   local d = report.discovery
   if d then
     -- Counted per source rather than summed: a healthy-looking total is how a discovery path
@@ -198,21 +208,24 @@ function M.render(report)
     add("- commands (config map + built-in): " .. val(d.extra_commands))
     add("- files:                            " .. val(d.files))
   else
-    add "- (no active session to scan)"
+    add("- (no active session to scan)")
   end
-  add ""
+  add("")
 
-  add "## Highlighting"
+  add("## Highlighting")
   local h = report.highlighting or {}
   local groups = h.groups or {}
   add("- attached to this buffer:  " .. yn(h.attached))
   add("- tokens currently painted: " .. val(h.painted))
   add("- AgentCompleteSkill:       " .. val(groups.AgentCompleteSkill))
   add("- AgentCompleteFile:        " .. val(groups.AgentCompleteFile))
-  add("- resolved / set size:      " .. (h.slash_set and tostring(h.slash_set) or "(no active session)"))
-  add ""
+  add(
+    "- resolved / set size:      "
+      .. (h.slash_set and tostring(h.slash_set) or "(no active session)")
+  )
+  add("")
 
-  add "## Context"
+  add("## Context")
   local c = report.context
   if c then
     add("- resolver:                 " .. val(c.resolver))
@@ -222,13 +235,13 @@ function M.render(report)
     add("- message bytes:            " .. val(c.bytes))
     add("- last error:               " .. (c.err or "(none)"))
   else
-    add "- (no context resolved)"
+    add("- (no context resolved)")
   end
   add("- pointer dir:              " .. val(report.pointer_dir))
   add("- opencode plugin:          " .. val(report.opencode_plugin))
-  add ""
+  add("")
 
-  add "## blink suppression"
+  add("## blink suppression")
   add("- active backend is blink:    " .. yn(b.active))
   add("- blink config reachable:     " .. yn(b.config_reachable))
   add("- agentcomplete registered:   " .. yn(b.agentcomplete_registered))
@@ -237,12 +250,12 @@ function M.render(report)
   add("- buffer detected:            " .. yn(b.detected))
   add("- effective sources (detected buffer): " .. list(b.effective))
   add("- dropped (unregistered) allowed:      " .. list(b.dropped))
-  add ""
-  add "### Likely cause"
+  add("")
+  add("### Likely cause")
   add(val(b.cause))
-  add ""
+  add("")
 
-  add "## Environment"
+  add("## Environment")
   add("- AGENTCOMPLETE_CWD:       " .. val(env.AGENTCOMPLETE_CWD))
   add("- vim.g.agentcomplete_cwd: " .. val(env.agentcomplete_cwd_g))
   add("- CLAUDE_CONFIG_DIR:       " .. val(env.CLAUDE_CONFIG_DIR))
@@ -271,11 +284,11 @@ function M.collect(opts)
   opts = opts or {}
   local buf = opts.bufnr or vim.api.nvim_get_current_buf()
 
-  local ac = require "agentcomplete"
-  local backends = require "agentcomplete.backends"
-  local detect = require "agentcomplete.detect"
-  local native = require "agentcomplete.backends.native"
-  local scan = require "agentcomplete.scan"
+  local ac = require("agentcomplete")
+  local backends = require("agentcomplete.backends")
+  local detect = require("agentcomplete.detect")
+  local native = require("agentcomplete.backends.native")
+  local scan = require("agentcomplete.scan")
 
   local config = ac.config or {}
   local resolved_backend = backends.select(config)
@@ -283,7 +296,8 @@ function M.collect(opts)
   local detected_session = detect.detect(buf)
   local attached_native = native._sessions and native._sessions[buf] or nil
   local session = detected_session or attached_native
-  local session_source = detected_session and "detected" or (attached_native and "attached" or "none")
+  local session_source = detected_session and "detected"
+    or (attached_native and "attached" or "none")
 
   local discovery
   if session then
@@ -313,30 +327,30 @@ function M.collect(opts)
     return what
   end
 
-  local highlight = require "agentcomplete.highlight"
+  local highlight = require("agentcomplete.highlight")
   local highlighting = {
     attached = highlight._sessions[buf] ~= nil,
     painted = #vim.api.nvim_buf_get_extmarks(buf, highlight.ns, 0, -1, {}),
     groups = {
-      AgentCompleteSkill = resolution "AgentCompleteSkill",
-      AgentCompleteFile = resolution "AgentCompleteFile",
+      AgentCompleteSkill = resolution("AgentCompleteSkill"),
+      AgentCompleteFile = resolution("AgentCompleteFile"),
     },
     slash_set = session and vim.tbl_count(highlight.slash_names(session)) or nil,
   }
 
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
 
   local ok, bcfg = pcall(require, "blink.cmp.config")
   bcfg = ok and bcfg or nil
   local registered = bcfg and bcfg.sources and bcfg.sources.providers or nil
-  local suppression = M.diagnose_suppression {
+  local suppression = M.diagnose_suppression({
     resolved_backend = resolved_backend,
     config_reachable = bcfg ~= nil,
     registered = registered,
     wrap_installed = blink._installed ~= nil,
     detected = detected_session ~= nil,
     allowed_sources = config.allowed_sources or {},
-  }
+  })
 
   local v = vim.version()
   return {
@@ -402,11 +416,13 @@ function M.run(opts)
 
   local path
   if opts.write ~= false then
-    path = opts.path or ((vim.loop.cwd() or vim.fn.getcwd()) .. "/.tmp/agentcomplete-diagnostics.md")
+    path = opts.path
+      or ((vim.loop.cwd() or vim.fn.getcwd()) .. "/.tmp/agentcomplete-diagnostics.md")
     vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
     -- render() ends in a trailing newline; trimempty drops the resulting empty
     -- final element so the file gets a single trailing newline, not a blank line.
-    local ok, err = pcall(vim.fn.writefile, vim.split(text, "\n", { trimempty = true }), path)
+    local ok, err =
+      pcall(vim.fn.writefile, vim.split(text, "\n", { trimempty = true }), path)
     if ok then
       text = text .. "\nWrote diagnostics to: " .. path .. "\n"
     else

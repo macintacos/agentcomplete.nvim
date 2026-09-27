@@ -12,7 +12,7 @@
 local M = { name = "opencode" }
 
 local uv = vim.loop
-local proc = require "agentcomplete.context.proc"
+local proc = require("agentcomplete.context.proc")
 
 local MAX_PID_HOPS = 5
 
@@ -25,14 +25,14 @@ local SQLITE_TIMEOUT_MS = 5000
 ---@param s string
 ---@return integer|nil
 function M.parse_etime(s)
-  local days, clock = vim.trim(s):match "^(%d+)%-(.+)$"
+  local days, clock = vim.trim(s):match("^(%d+)%-(.+)$")
   local fields = vim.split(clock or vim.trim(s), ":", { plain = true })
   if #fields < 2 or #fields > 3 then
     return nil
   end
   local seconds = 0
   for _, field in ipairs(fields) do
-    local value = field:match "^%d+$" and tonumber(field)
+    local value = field:match("^%d+$") and tonumber(field)
     if not value then
       return nil
     end
@@ -125,10 +125,15 @@ function M.join_rows(json)
   end
   local parts, session_id
   for _, row in ipairs(rows) do
-    if type(row) == "table" and type(row.text) == "string" and vim.trim(row.text) ~= "" then
+    if
+      type(row) == "table"
+      and type(row.text) == "string"
+      and vim.trim(row.text) ~= ""
+    then
       parts = parts or {}
       parts[#parts + 1] = row.text
-      session_id = session_id or (type(row.session_id) == "string" and row.session_id or nil)
+      session_id = session_id
+        or (type(row.session_id) == "string" and row.session_id or nil)
     end
   end
   return parts and table.concat(parts, "\n\n") or nil, session_id
@@ -139,7 +144,8 @@ end
 ---@return string
 function M.pointer_dir(state_root)
   local xdg = vim.env.XDG_STATE_HOME
-  local state = state_root or ((xdg and xdg ~= "") and xdg or vim.fs.normalize "~/.local/state")
+  local state = state_root
+    or ((xdg and xdg ~= "") and xdg or vim.fs.normalize("~/.local/state"))
   return state .. "/opencode/agentcomplete"
 end
 
@@ -148,7 +154,8 @@ end
 ---@return string
 function M.db_path(data_root)
   local xdg = vim.env.XDG_DATA_HOME
-  local data = data_root or ((xdg and xdg ~= "") and xdg or vim.fs.normalize "~/.local/share")
+  local data = data_root
+    or ((xdg and xdg ~= "") and xdg or vim.fs.normalize("~/.local/share"))
   return data .. "/opencode/opencode.db"
 end
 
@@ -213,7 +220,8 @@ local function session_expr(env, cwd, opts)
   local records = pointer_records(M.pointer_dir(opts.state_root))
   -- The pid climb forks `ps` up to `MAX_PID_HOPS` times at prompt-open, so it waits on there
   -- being anything for it to match against — which there is not until the plugin is installed.
-  local pointer = #records > 0 and M.pick_pointer(records, pid_chain(env.tui_pid, system), cwd, start_ms)
+  local pointer = #records > 0
+    and M.pick_pointer(records, pid_chain(env.tui_pid, system), cwd, start_ms)
   if pointer then
     return quote(pointer.sessionID), "pointer file"
   end
@@ -238,7 +246,7 @@ end
 ---@param rung? string
 ---@return true
 local function fail(cb, err, rung)
-  cb { ok = false, resolver = M.name, rung = rung, err = err }
+  cb({ ok = false, resolver = M.name, rung = rung, err = err })
   return true
 end
 
@@ -264,14 +272,19 @@ function M.resolve(session, cb, opts)
   end
 
   -- Read here and nowhere below, so the rungs take what they need as arguments.
-  local env = { session_id = vim.env.OPENCODE_SESSION_ID, tui_pid = tonumber(vim.env.OPENCODE_PID) }
+  local env =
+    { session_id = vim.env.OPENCODE_SESSION_ID, tui_pid = tonumber(vim.env.OPENCODE_PID) }
   -- Normalized because it may have been typed by the user via `$AGENTCOMPLETE_CWD`, while every
   -- path it is compared against was written by OpenCode.
   local cwd = vim.fs.normalize(session.cwd)
 
   local expr, rung = session_expr(env, cwd, opts)
   if not expr then
-    return fail(cb, "no session id, no pointer file, and no $OPENCODE_PID to date a guess from", rung)
+    return fail(
+      cb,
+      "no session id, no pointer file, and no $OPENCODE_PID to date a guess from",
+      rung
+    )
   end
 
   -- No temp-file redirect, unlike `opencode_cli`'s probes: that exists because `opencode`'s Bun
@@ -283,16 +296,31 @@ function M.resolve(session, cb, opts)
     { text = true, timeout = SQLITE_TIMEOUT_MS },
     vim.schedule_wrap(function(obj)
       if obj.code ~= 0 then
-        return fail(cb, "sqlite3 exited " .. tostring(obj.code) .. ": " .. vim.trim(obj.stderr or ""), rung)
+        return fail(
+          cb,
+          "sqlite3 exited " .. tostring(obj.code) .. ": " .. vim.trim(obj.stderr or ""),
+          rung
+        )
       end
       local text, session_id = M.join_rows(obj.stdout or "")
       if not text then
         -- Named by rung, because on a guess the sub-select may have matched no session at all —
         -- without it, that reads as a missing message rather than a missing session.
-        return fail(cb, "no assistant message for the " .. rung .. " session in " .. db, rung)
+        return fail(
+          cb,
+          "no assistant message for the " .. rung .. " session in " .. db,
+          rung
+        )
       end
       session.session_id = session_id or session.session_id
-      cb { ok = true, resolver = M.name, rung = rung, text = text, session_id = session_id, transcript = db }
+      cb({
+        ok = true,
+        resolver = M.name,
+        rung = rung,
+        text = text,
+        session_id = session_id,
+        transcript = db,
+      })
     end)
   )
   if not started then

@@ -2,7 +2,7 @@
 -- the OpenCode database resolver, and the pane built around them. Roots, subprocesses and the
 -- clock are injected, so no real `$HOME`, `ps`, formatter or OpenCode database is touched --
 -- except the fixture database the OpenCode query is deliberately run against.
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
@@ -38,11 +38,15 @@ local function fixture(lines, pid)
   vim.fn.mkdir(root .. "/sessions", "p")
   vim.fn.mkdir(root .. "/projects/proj", "p")
   vim.fn.writefile(
-    { vim.json.encode { pid = pid, sessionId = SID, cwd = "/proj" } },
+    { vim.json.encode({ pid = pid, sessionId = SID, cwd = "/proj" }) },
     root .. "/sessions/" .. pid .. ".json"
   )
   vim.fn.writefile(lines, transcript)
-  return { sessions_root = root .. "/sessions", projects_root = root .. "/projects", transcript = transcript }
+  return {
+    sessions_root = root .. "/sessions",
+    projects_root = root .. "/projects",
+    transcript = transcript,
+  }
 end
 
 ---A session shaped like the registry's contract, for cases where the tool is all that matters.
@@ -53,19 +57,23 @@ end
 ---Run the resolver against `opts` and return the result it reported plus whether it claimed.
 local function resolve(opts, session)
   local result
-  local claimed = require("agentcomplete.context.claude_code").resolve(session or session_for "claude-code", function(r)
-    result = r
-  end, opts)
+  local claimed = require("agentcomplete.context.claude_code").resolve(
+    session or session_for("claude-code"),
+    function(r)
+      result = r
+    end,
+    opts
+  )
   return result, claimed
 end
 
-local T = new_set {
+local T = new_set({
   hooks = {
     pre_case = function()
       require("agentcomplete.context").clear()
     end,
   },
-}
+})
 
 T["registry"] = new_set()
 
@@ -81,11 +89,11 @@ local function stub(name, result)
 end
 
 T["registry"]["the first resolver to claim wins"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   context.register(stub("first", { ok = true, resolver = "first", text = "a" }))
   context.register(stub("second", { ok = true, resolver = "second", text = "b" }))
   local seen
-  local claimed = context.resolve(session_for "any", function(r)
+  local claimed = context.resolve(session_for("any"), function(r)
     seen = r
   end)
   expect.equality(claimed, "first")
@@ -93,12 +101,12 @@ T["registry"]["the first resolver to claim wins"] = function()
 end
 
 T["registry"]["a resolver that declines hands the session to the next"] = function()
-  local context = require "agentcomplete.context"
-  context.register { name = "declines", resolve = function() end }
+  local context = require("agentcomplete.context")
+  context.register({ name = "declines", resolve = function() end })
   context.register(stub("claims", { ok = true, resolver = "claims", text = "b" }))
   local seen
   expect.equality(
-    context.resolve(session_for "any", function(r)
+    context.resolve(session_for("any"), function(r)
       seen = r
     end),
     "claims"
@@ -107,28 +115,28 @@ T["registry"]["a resolver that declines hands the session to the next"] = functi
 end
 
 T["registry"]["a resolver that throws is skipped rather than aborting the walk"] = function()
-  local context = require "agentcomplete.context"
-  context.register {
+  local context = require("agentcomplete.context")
+  context.register({
     name = "raises",
     resolve = function()
-      error "boom"
+      error("boom")
     end,
-  }
+  })
   context.register(stub("claims", { ok = true, resolver = "claims", text = "b" }))
-  expect.equality(context.resolve(session_for "any", function() end), "claims")
+  expect.equality(context.resolve(session_for("any"), function() end), "claims")
 end
 
 -- "no resolver is registered" and "the registered one crashed" are opposite problems, and the
 -- failure log is where a maintainer tells them apart.
 T["registry"]["carries out the error when a raising resolver is the only candidate"] = function()
-  local context = require "agentcomplete.context"
-  context.register {
+  local context = require("agentcomplete.context")
+  context.register({
     name = "raises",
     resolve = function()
-      error "transcript decode blew up"
+      error("transcript decode blew up")
     end,
-  }
-  local claimed, err = context.resolve(session_for "any", function() end)
+  })
+  local claimed, err = context.resolve(session_for("any"), function() end)
   expect.equality(claimed, nil)
   err = assert(err, "no error carried out")
   expect.equality(err:find("raises", 1, true) ~= nil, true)
@@ -136,25 +144,25 @@ T["registry"]["carries out the error when a raising resolver is the only candida
 end
 
 T["registry"]["passes resolver seams through to the resolver"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local seen
-  context.register {
+  context.register({
     name = "records",
     resolve = function(_, _, opts)
       seen = opts
       return true
     end,
-  }
-  context.resolve(session_for "any", function() end, { sessions_root = "/fixture" })
+  })
+  context.resolve(session_for("any"), function() end, { sessions_root = "/fixture" })
   expect.equality(seen.sessions_root, "/fixture")
 end
 
 T["registry"]["reports nothing when no resolver claims the session"] = function()
-  local context = require "agentcomplete.context"
-  context.register { name = "declines", resolve = function() end }
+  local context = require("agentcomplete.context")
+  context.register({ name = "declines", resolve = function() end })
   local called = false
   expect.equality(
-    context.resolve(session_for "any", function()
+    context.resolve(session_for("any"), function()
       called = true
     end),
     nil
@@ -165,46 +173,52 @@ end
 T["claude_code.resolve"] = new_set()
 
 T["claude_code.resolve"]["reports the newest assistant text, past later tool-only turns"] = function()
-  local result = resolve(fixture {
-    assistant { text_block "older" },
-    assistant { text_block "the answer" },
-    assistant { tool_block "Bash" },
-    assistant { tool_block "Read" },
-  })
+  local result = resolve(fixture({
+    assistant({ text_block("older") }),
+    assistant({ text_block("the answer") }),
+    assistant({ tool_block("Bash") }),
+    assistant({ tool_block("Read") }),
+  }))
   expect.equality(result.ok, true)
   expect.equality(result.text, "the answer")
 end
 
 T["claude_code.resolve"]["skips sidechain entries"] = function()
-  local result = resolve(fixture {
-    assistant { text_block "main thread" },
-    assistant({ text_block "subagent chatter" }, { isSidechain = true }),
-  })
+  local result = resolve(fixture({
+    assistant({ text_block("main thread") }),
+    assistant({ text_block("subagent chatter") }, { isSidechain = true }),
+  }))
   expect.equality(result.text, "main thread")
 end
 
 T["claude_code.resolve"]["concatenates every text block in the entry"] = function()
-  local result = resolve(fixture { assistant { text_block "first", tool_block "Bash", text_block "second" } })
+  local result = resolve(
+    fixture({
+      assistant({ text_block("first"), tool_block("Bash"), text_block("second") }),
+    })
+  )
   expect.equality(result.text, "first\n\nsecond")
 end
 
 -- `tool_result` payloads routinely embed transcript-shaped JSON as a string, so a line that
 -- fails to decode (or decodes to something unexpected) must not abort the backward walk.
 T["claude_code.resolve"]["an undecodable line does not abort the scan"] = function()
-  local result = resolve(fixture {
-    assistant { text_block "the answer" },
+  local result = resolve(fixture({
+    assistant({ text_block("the answer") }),
     '{"type":"assistant","message":{"content":[{"type":"text","text":"trunc',
-  })
+  }))
   expect.equality(result.text, "the answer")
 end
 
 -- A real transcript's final turns are tool calls, so the newest text block can sit hundreds of
 -- kilobytes back: the tail has to grow past its initial chunk rather than give up at it.
 T["claude_code.resolve"]["finds a message beyond the first tail chunk"] = function()
-  local lines = { assistant { text_block "deep answer" } }
+  local lines = { assistant({ text_block("deep answer") }) }
   local pad = string.rep("x", 50000)
   for _ = 1, 8 do
-    lines[#lines + 1] = assistant { { type = "tool_use", id = "t1", name = "Bash", input = { command = pad } } }
+    lines[#lines + 1] = assistant({
+      { type = "tool_use", id = "t1", name = "Bash", input = { command = pad } },
+    })
   end
   local result = resolve(fixture(lines))
   expect.equality(result.ok, true)
@@ -213,57 +227,60 @@ end
 
 T["claude_code.resolve"]["walks up to the session file through a ps hop"] = function()
   local orphan = vim.loop.os_getppid() + 1000000
-  local fx = fixture({ assistant { text_block "found via hop" } }, orphan)
+  local fx = fixture({ assistant({ text_block("found via hop") }) }, orphan)
   local asked = {}
-  local result = resolve {
+  local result = resolve({
     sessions_root = fx.sessions_root,
     projects_root = fx.projects_root,
     system = function(cmd)
       asked[#asked + 1] = cmd
       return "  " .. orphan .. "\n"
     end,
-  }
+  })
   expect.equality(result.text, "found via hop")
   expect.equality(#asked, 1)
 end
 
 T["claude_code.resolve"]["reports the session id and transcript it resolved"] = function()
-  local fx = fixture { assistant { text_block "hi" } }
-  local result = resolve { sessions_root = fx.sessions_root, projects_root = fx.projects_root }
+  local fx = fixture({ assistant({ text_block("hi") }) })
+  local result =
+    resolve({ sessions_root = fx.sessions_root, projects_root = fx.projects_root })
   expect.equality(result.session_id, SID)
   expect.equality(result.transcript, fx.transcript)
 end
 
 T["claude_code.resolve"]["fills the session's id, which detection leaves nil"] = function()
-  local fx = fixture { assistant { text_block "hi" } }
-  local session = session_for "claude-code"
+  local fx = fixture({ assistant({ text_block("hi") }) })
+  local session = session_for("claude-code")
   resolve({ sessions_root = fx.sessions_root, projects_root = fx.projects_root }, session)
   expect.equality(session.session_id, SID)
 end
 
 T["claude_code.resolve"]["fails soft when no session file is found"] = function()
-  local result = resolve {
+  local result = resolve({
     sessions_root = tmpdir(),
     projects_root = tmpdir(),
     system = function()
       return ""
     end,
-  }
+  })
   expect.equality(result.ok, false)
   expect.equality(type(result.err), "string")
 end
 
 T["claude_code.resolve"]["fails soft when the transcript is missing"] = function()
-  local fx = fixture { assistant { text_block "hi" } }
+  local fx = fixture({ assistant({ text_block("hi") }) })
   vim.fn.delete(fx.transcript)
-  local result = resolve { sessions_root = fx.sessions_root, projects_root = fx.projects_root }
+  local result =
+    resolve({ sessions_root = fx.sessions_root, projects_root = fx.projects_root })
   expect.equality(result.ok, false)
   expect.equality(type(result.err), "string")
 end
 
 T["claude_code.resolve"]["fails soft when the transcript holds no assistant text"] = function()
-  local fx = fixture { assistant { tool_block "Bash" } }
-  local result = resolve { sessions_root = fx.sessions_root, projects_root = fx.projects_root }
+  local fx = fixture({ assistant({ tool_block("Bash") }) })
+  local result =
+    resolve({ sessions_root = fx.sessions_root, projects_root = fx.projects_root })
   expect.equality(result.ok, false)
   expect.equality(type(result.err), "string")
 end
@@ -271,9 +288,11 @@ end
 -- Every resolver sees every session, so declining one that isn't its tool is what lets the
 -- registry keep walking to the one that owns it.
 T["claude_code.resolve"]["declines a session belonging to another tool"] = function()
-  local fx = fixture { assistant { text_block "hi" } }
-  local result, claimed =
-    resolve({ sessions_root = fx.sessions_root, projects_root = fx.projects_root }, session_for "opencode")
+  local fx = fixture({ assistant({ text_block("hi") }) })
+  local result, claimed = resolve(
+    { sessions_root = fx.sessions_root, projects_root = fx.projects_root },
+    session_for("opencode")
+  )
   expect.equality(claimed, nil)
   expect.equality(result, nil)
 end
@@ -304,19 +323,19 @@ local function recording_system(record)
 end
 
 T["format"]["returns the formatter's output"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   expect.equality(context.format("*  a\n", nil, fake_system(0, "- a\n")), "- a\n")
 end
 
 T["format"]["formats with rumdl's built-in defaults when no config path is given"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local record = {}
   context.format("*  a\n", nil, recording_system(record))
   expect.equality(record.cmd, { "rumdl", "fmt", "--no-config", "-" })
 end
 
 T["format"]["points rumdl at a config path when one is given"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local record = {}
   context.format("*  a\n", "/p.toml", recording_system(record))
   expect.equality(record.cmd, { "rumdl", "fmt", "-c", "/p.toml", "-" })
@@ -325,34 +344,34 @@ end
 -- `vim.system` spawns without a shell, so a `~` the user wrote in `context.rumdl_config`
 -- reaches rumdl literally and it exits with "config file not found".
 T["format"]["expands a ~ in the config path"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local record = {}
   context.format("*  a\n", "~/p.toml", recording_system(record))
-  expect.equality(record.cmd[4], vim.fs.normalize "~/p.toml")
+  expect.equality(record.cmd[4], vim.fs.normalize("~/p.toml"))
 end
 
 T["format"]["falls back to the raw text when the formatter fails"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   expect.equality(context.format("*  a\n", nil, fake_system(1, "")), "*  a\n")
 end
 
 T["format"]["reports why it fell back, naming the config path it was given"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local _, err = context.format("*  a\n", "/p.toml", fake_system(1, ""))
   expect.equality(assert(err, "no error reported"):find("/p.toml", 1, true) ~= nil, true)
 end
 
 T["format"]["reports nothing when the formatter succeeded"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local _, err = context.format("*  a\n", nil, fake_system(0, "- a\n"))
   expect.equality(err, nil)
 end
 
 T["format"]["falls back to the raw text when the formatter is absent"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   expect.equality(
     context.format("*  a\n", nil, function()
-      error "ENOENT"
+      error("ENOENT")
     end),
     "*  a\n"
   )
@@ -361,7 +380,7 @@ end
 -- Unbounded, this waits on the main loop as the prompt buffer opens, so a hung formatter
 -- would freeze the editor rather than cost the pane.
 T["format"]["falls back to the raw text when the formatter outruns its timeout"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local waited
   local system = function()
     return {
@@ -378,7 +397,7 @@ end
 T["log"] = new_set()
 
 T["log"]["appends one timestamped line per call"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local path = tmpdir() .. "/context.log"
   context.log(path, "first", "T1")
   context.log(path, "second", "T2")
@@ -388,34 +407,34 @@ end
 -- `vim.fn.mkdir` throws when the directory cannot be made, and both the module docstring and
 -- the vimdoc promise this path raises nothing.
 T["log"]["does not raise when the directory cannot be created"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local blocker = tmpdir() .. "/blocker"
   vim.fn.writefile({ "" }, blocker)
   expect.equality(pcall(context.log, blocker .. "/context.log", "boom", "T1"), true)
 end
 
-T["open"] = new_set {
+T["open"] = new_set({
   hooks = {
     pre_case = function()
-      vim.cmd "silent! only"
+      vim.cmd("silent! only")
     end,
     post_case = function()
-      local context = require "agentcomplete.context"
+      local context = require("agentcomplete.context")
       for buf in pairs(context._state) do
         context.close(buf)
       end
-      local layout = require "agentcomplete.layout"
+      local layout = require("agentcomplete.layout")
       for buf in pairs(layout._layouts) do
         layout.detach(buf)
       end
       -- A case that fed keys and failed before its own cleanup would otherwise leave every
       -- case after it running in insert mode.
-      vim.cmd "silent! stopinsert"
-      vim.cmd "silent! only"
+      vim.cmd("silent! stopinsert")
+      vim.cmd("silent! only")
       vim.o.columns = 80
     end,
   },
-}
+})
 
 ---A prompt buffer holding `lines`, focused, with the layout the pane reserves its room in. No
 ---margins, so the windows each case counts are the pane's own.
@@ -424,7 +443,10 @@ local function prompt_buffer(lines)
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or { "" })
   vim.api.nvim_set_current_buf(buf)
-  require("agentcomplete.layout").attach(buf, { measure = 80, margins = false, inset = 0 })
+  require("agentcomplete.layout").attach(
+    buf,
+    { measure = 80, margins = false, inset = 0 }
+  )
   return buf
 end
 
@@ -443,7 +465,13 @@ local function with_resolver(result)
 end
 
 local function ok_result(text)
-  return { ok = true, resolver = "claude-code", text = text, session_id = SID, transcript = "/t.jsonl" }
+  return {
+    ok = true,
+    resolver = "claude-code",
+    text = text,
+    session_id = SID,
+    transcript = "/t.jsonl",
+  }
 end
 
 ---The window holding the message: the floating one. `open` leaves two windows behind — the
@@ -482,67 +510,95 @@ end
 
 -- Left to right is the order the conversation reads in: the message, then the reply to it.
 T["open"]["sits to the left of the prompt when the terminal is at least min_width wide"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "row")
-  expect.equality({ layout[2][1][2], layout[2][2][2] }, { spacer_win(prompt_win), prompt_win })
+  expect.equality(
+    { layout[2][1][2], layout[2][2][2] },
+    { spacer_win(prompt_win), prompt_win }
+  )
 end
 
 -- Stacked, a chat reads top to bottom: the message, then the reply under it.
 T["open"]["stacks above the prompt when the terminal is narrower than min_width"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 80
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "col")
   expect.equality(layout[2][1][2], spacer_win(prompt_win))
 end
 
 T["open"]["stacks the pane below the prompt when asked to"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 80
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
   local config = { enabled = true, min_width = 160, stacked = "below" }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "col")
   expect.equality(layout[2][1][2], prompt_win)
 end
 
 T["open"]["hands the pane's formatter the configured rumdl config path"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local opts = with_resolver(ok_result "hello")
+  local opts = with_resolver(ok_result("hello"))
   local seen
   opts.format = function(text, config_path)
     seen = config_path
     return text
   end
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160, rumdl_config = "/p.toml" }, opts)
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160, rumdl_config = "/p.toml" },
+    opts
+  )
   expect.equality(seen, "/p.toml")
 end
 
 T["open"]["leaves the pane read-only and the cursor in the prompt"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local win = assert(pane_win())
   expect.equality(vim.bo[vim.api.nvim_win_get_buf(win)].modifiable, false)
   expect.equality(vim.api.nvim_get_current_win(), prompt_win)
 end
 
 T["open"]["frames the message, naming the resolver in the border"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local win = assert(pane_win())
   expect.equality(vim.api.nvim_win_get_config(win).border[1], "╭")
   expect.equality(title_text(win), "─ claude-code · last message ")
@@ -552,11 +608,20 @@ end
 -- The rung the resolver answered on is what admits a guessed session is a guess, so it belongs
 -- where the reader already looks to see whose message this is.
 T["open"]["names the resolution rung in the border"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local result = { ok = true, resolver = "opencode", rung = "pointer file", text = "hello" }
-  context.open(buf, session_for "opencode", { enabled = true, min_width = 160 }, with_resolver(result))
-  expect.equality(title_text(assert(pane_win())), "─ opencode · pointer file · last message ")
+  local result =
+    { ok = true, resolver = "opencode", rung = "pointer file", text = "hello" }
+  context.open(
+    buf,
+    session_for("opencode"),
+    { enabled = true, min_width = 160 },
+    with_resolver(result)
+  )
+  expect.equality(
+    title_text(assert(pane_win())),
+    "─ opencode · pointer file · last message "
+  )
 end
 
 local SCROLL_KEYS = { scroll_down = "<C-f>", scroll_up = "<C-b>" }
@@ -564,37 +629,49 @@ local SCROLL_KEYS = { scroll_down = "<C-f>", scroll_up = "<C-b>" }
 -- The pane is reference material for the prompt beside it, so the keys that scroll it belong
 -- where the reader is already looking rather than in the help alone.
 T["open"]["advertises the scroll keys in the footer"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   expect.equality(footer_text(assert(pane_win())), "─ ^B/^F scroll · read-only ─")
 end
 
 T["open"]["advertises only the scroll key that is mapped"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = false } }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  local config = {
+    enabled = true,
+    min_width = 160,
+    keys = { scroll_down = "<C-f>", scroll_up = false },
+  }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   expect.equality(footer_text(assert(pane_win())), "─ ^F scroll · read-only ─")
 end
 
 T["open"]["keeps the footer to what the pane still is when no key scrolls it"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local config = { enabled = true, min_width = 160, keys = { scroll_down = false, scroll_up = false } }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  local config =
+    { enabled = true, min_width = 160, keys = { scroll_down = false, scroll_up = false } }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   expect.equality(footer_text(assert(pane_win())), "─ read-only ─")
 end
 
 -- Anything that is not a plain control key is shown as Vim spells it, since there is no
 -- shorter form of it a reader would recognise.
 T["open"]["shows a non-control scroll key by its Vim notation"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<PageDown>", scroll_up = false } }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
-  expect.equality(footer_text(assert(pane_win())), "─ <PageDown> scroll · read-only ─")
+  local config = {
+    enabled = true,
+    min_width = 160,
+    keys = { scroll_down = "<PageDown>", scroll_up = false },
+  }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  expect.equality(
+    footer_text(assert(pane_win())),
+    "─ <PageDown> scroll · read-only ─"
+  )
 end
 
 ---A message long enough that the pane has somewhere to scroll to.
@@ -618,7 +695,11 @@ end
 
 ---Press `lhs` in the current window, running the mapping it fires.
 local function press(lhs)
-  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(lhs, true, false, true), "x", false)
+  vim.api.nvim_feedkeys(
+    vim.api.nvim_replace_termcodes(lhs, true, false, true),
+    "x",
+    false
+  )
 end
 
 ---The line the pane is showing from.
@@ -627,26 +708,31 @@ local function pane_line()
 end
 
 T["open"]["scrolls the pane a line per press from the prompt in normal mode"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
-  press "<C-f>"
+  context.open(
+    buf,
+    session_for("claude-code"),
+    config,
+    with_resolver(ok_result(long_message()))
+  )
+  press("<C-f>")
   expect.equality(pane_line(), 2)
-  press "<C-b>"
+  press("<C-b>")
   expect.equality(pane_line(), 1)
 end
 
 -- Vim counts a wrapped paragraph as one line, so stepping by lines would jump it whole.
 T["open"]["scrolls a wrapped paragraph a row at a time"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
   local text = string.rep("word ", 200) .. "\n" .. long_message()
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(text)))
-  press "<C-f>"
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result(text)))
+  press("<C-f>")
   local view = vim.api.nvim_win_call(assert(pane_win()), vim.fn.winsaveview)
   expect.equality({ view.topline, view.skipcol > 0 }, { 1, true })
 end
@@ -656,23 +742,29 @@ end
 -- asserted directly -- this pins what does survive instead: the prompt's window staying
 -- current across the scroll.
 T["open"]["scrolls the pane from insert mode without disturbing the prompt"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
-  local prompt_win, prompt_cursor = vim.api.nvim_get_current_win(), vim.api.nvim_win_get_cursor(0)
-  press "i<C-f>"
+  context.open(
+    buf,
+    session_for("claude-code"),
+    config,
+    with_resolver(ok_result(long_message()))
+  )
+  local prompt_win, prompt_cursor =
+    vim.api.nvim_get_current_win(), vim.api.nvim_win_get_cursor(0)
+  press("i<C-f>")
   expect.equality(pane_line() > 1, true)
   expect.equality(vim.api.nvim_get_current_win(), prompt_win)
   expect.equality(vim.api.nvim_win_get_cursor(0), prompt_cursor)
 end
 
 T["open"]["takes the scroll keys back off the prompt when the pane closes"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   expect.equality(mapping(buf, "n", "<C-f>") ~= nil, true)
   expect.equality(mapping(buf, "i", "<C-b>") ~= nil, true)
   context.close(buf)
@@ -684,17 +776,22 @@ end
 -- that closure for the buffer's life -- so ours goes on being called after the pane it scrolled
 -- has gone. There the key has to do what it does unmapped: `<C-f>` pages the prompt.
 T["open"]["hands the key back to the prompt once the pane is gone"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer(vim.split(long_message(), "\n"))
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result(long_message())))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    config,
+    with_resolver(ok_result(long_message()))
+  )
   local map = assert(mapping(buf, "i", "<C-f>"), "the pane maps <C-f>")
   local stale = assert(map.callback, "the mapping runs a callback")
   context.close(buf)
   local prompt_win = vim.api.nvim_get_current_win()
   stale()
-  press ""
+  press("")
   expect.equality(vim.fn.line("w0", prompt_win) > 2, true)
 end
 
@@ -702,11 +799,16 @@ end
 -- blink.cmp does exactly that, on the buffer's first `InsertEnter` -- so closing the pane
 -- must not take their mapping away with ours.
 T["open"]["leaves a scroll key a neighbour has since remapped"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
-  vim.keymap.set({ "n", "i" }, "<C-f>", function() end, { buffer = buf, desc = "neighbour: scroll docs" })
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  vim.keymap.set(
+    { "n", "i" },
+    "<C-f>",
+    function() end,
+    { buffer = buf, desc = "neighbour: scroll docs" }
+  )
   context.close(buf)
   expect.equality(assert(mapping(buf, "i", "<C-f>")).desc, "neighbour: scroll docs")
   expect.equality(mapping(buf, "i", "<C-b>"), nil)
@@ -715,10 +817,14 @@ end
 -- `false` is how a user keeps a key they have their own use for -- blink.cmp's documentation
 -- scroll being the one this plugin is most likely to be sitting next to.
 T["open"]["leaves a scroll key alone when it is disabled"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local config = { enabled = true, min_width = 160, keys = { scroll_down = "<C-f>", scroll_up = false } }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  local config = {
+    enabled = true,
+    min_width = 160,
+    keys = { scroll_down = "<C-f>", scroll_up = false },
+  }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   expect.equality(mapping(buf, "i", "<C-f>") ~= nil, true)
   expect.equality(mapping(buf, "i", "<C-b>"), nil)
 end
@@ -727,9 +833,14 @@ end
 -- be edited is what it hides. Everything a gutter is for -- line numbers to jump to, signs,
 -- folds -- addresses a buffer you act on, and this is a buffer you read.
 T["open"]["reads as a document rather than an editable buffer"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local win = assert(pane_win())
   expect.equality(vim.wo[win].number, false)
   expect.equality(vim.wo[win].relativenumber, false)
@@ -749,7 +860,7 @@ end
 -- thrown away with it. The pane needs its window first or it renders as plain text: the
 -- markdown plugins that would style it are exactly the ones setting those options.
 T["open"]["gives the pane a window before its filetype, so ftplugins reach it"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local grp = vim.api.nvim_create_augroup("AgentCompleteContextFtTest", { clear = true })
   vim.api.nvim_create_autocmd("FileType", {
@@ -759,26 +870,42 @@ T["open"]["gives the pane a window before its filetype, so ftplugins reach it"] 
       vim.opt_local.foldlevel = 7
     end,
   })
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   vim.api.nvim_del_augroup_by_id(grp)
   expect.equality(vim.wo[assert(pane_win())].foldlevel, 7)
 end
 
 T["open"]["shows the message from its first line"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
-  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win())), 0, -1, false)
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  local lines =
+    vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win())), 0, -1, false)
   expect.equality(lines[1], "hello")
 end
 
 -- The split exists only to reserve the room the float fills; landing in it means landing on an
 -- empty buffer exactly where the message appears to be.
 T["open"]["hands the cursor to the message when the split is entered"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   vim.api.nvim_set_current_win(assert(spacer_win(prompt_win)))
   vim.wait(100)
   expect.equality(vim.api.nvim_get_current_win(), pane_win())
@@ -788,10 +915,15 @@ end
 -- `<C-w>W` all do. Passing the cursor on to the message there, rather than back out, is what
 -- makes the pane impossible to leave.
 T["open"]["lets the cursor leave the message through the split"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   vim.api.nvim_set_current_win(assert(pane_win()))
   vim.api.nvim_set_current_win(assert(spacer_win(prompt_win)))
   vim.wait(100)
@@ -800,11 +932,16 @@ end
 
 -- The message wraps at the same measure the reply does, and its frame is drawn around that.
 T["open"]["gives the message the layout's measure beside the prompt"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 86)
   expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), 82)
 end
@@ -812,10 +949,15 @@ end
 -- The terminal is resized mid-session, and an orientation chosen once at open time leaves the
 -- pane wedged beside a prompt with no room for either.
 T["open"]["stacks the pane with the prompt when the terminal narrows"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   expect.equality(vim.fn.winlayout()[1], "row")
   vim.o.columns = 80
   vim.api.nvim_exec_autocmds("VimResized", {})
@@ -826,12 +968,12 @@ end
 -- The same narrowing, with the stacked side configured: a re-place that reached for the default
 -- would put the pane above the prompt the first time the terminal narrowed.
 T["open"]["moves the pane below the prompt when the terminal narrows"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
   local config = { enabled = true, min_width = 160, stacked = "below" }
-  context.open(buf, session_for "claude-code", config, with_resolver(ok_result "hello"))
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   vim.o.columns = 80
   vim.api.nvim_exec_autocmds("VimResized", {})
   vim.wait(100)
@@ -842,15 +984,23 @@ end
 
 -- The float carries the frame, so it has to follow the split it is drawn over.
 T["open"]["refits the message to its room when the terminal is resized"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   vim.o.columns = 100
   vim.api.nvim_exec_autocmds("VimResized", {})
   local spacer = assert(spacer_win(prompt_win))
-  expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), vim.api.nvim_win_get_width(spacer) - 4)
+  expect.equality(
+    vim.api.nvim_win_get_width(assert(pane_win())),
+    vim.api.nvim_win_get_width(spacer) - 4
+  )
 end
 
 -- Quitting the prompt is how the agent CLI is answered, so both of the pane's windows have to
@@ -859,10 +1009,15 @@ end
 -- agent. Asserting the prompt window is still open is what pins the ordering — after it closes,
 -- dismissing the pane is too late to matter.
 T["open"]["dismisses the pane before the prompt's quit resolves"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local prompt_win = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local win, spacer = assert(pane_win()), assert(spacer_win(prompt_win))
   vim.api.nvim_exec_autocmds("QuitPre", { buffer = buf })
   expect.equality(vim.api.nvim_win_is_valid(win), false)
@@ -871,13 +1026,18 @@ T["open"]["dismisses the pane before the prompt's quit resolves"] = function()
 end
 
 T["open"]["closes the pane when the prompt buffer is wiped"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local win = assert(pane_win())
   -- Deleting the prompt buffer closes its window; without a third one the pane would be the
   -- last window standing, which Neovim will not close.
-  vim.cmd "botright new"
+  vim.cmd("botright new")
   vim.api.nvim_buf_delete(buf, { force = true })
   vim.wait(500, function()
     return not vim.api.nvim_win_is_valid(win)
@@ -888,41 +1048,65 @@ end
 -- Claude Code's own `externalEditorContext` renders the conversation into the prompt buffer.
 -- Opening beside it would show the same message twice.
 T["open"]["skips a buffer Claude Code already rendered context into"] = function()
-  local context = require "agentcomplete.context"
-  local buf = prompt_buffer { "prior turn", "# ─── Write your reply below this line ───", "" }
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer({
+    "prior turn",
+    "# ─── Write your reply below this line ───",
+    "",
+  })
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   expect.equality(#vim.api.nvim_list_wins(), 1)
 end
 
 -- The sentence is Claude Code's, so only a Claude Code buffer proves anything by carrying it.
 T["open"]["opens for an OpenCode buffer that happens to carry that sentence"] = function()
-  local context = require "agentcomplete.context"
-  local buf = prompt_buffer { "quoting: Write your reply below this line", "" }
-  context.open(buf, session_for "opencode", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer({ "quoting: Write your reply below this line", "" })
+  context.open(
+    buf,
+    session_for("opencode"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   expect.equality(#vim.api.nvim_list_wins() > 1, true)
 end
 
 T["open"]["skips when the feature is disabled"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = false, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = false, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   expect.equality(#vim.api.nvim_list_wins(), 1)
 end
 
 T["open"]["skips when there is no UI to split"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local opts = with_resolver(ok_result "hello")
+  local opts = with_resolver(ok_result("hello"))
   opts.headless = true
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, opts)
   expect.equality(#vim.api.nvim_list_wins(), 1)
 end
 
 T["open"]["records what it resolved for the diagnostics report"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local result = vim.tbl_extend("force", ok_result "hello", { rung = "guessed" })
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(result))
+  local result = vim.tbl_extend("force", ok_result("hello"), { rung = "guessed" })
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(result)
+  )
   expect.equality(context._state[buf].resolver, "claude-code")
   expect.equality(context._state[buf].rung, "guessed")
   expect.equality(context._state[buf].session_id, SID)
@@ -933,21 +1117,22 @@ end
 -- The only pane failure a user can cause is a bad 'context.rumdl_config', and it costs
 -- formatting rather than the pane — so the log is the only place it can surface.
 T["open"]["logs a formatter that fell back to the raw message"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local opts = with_resolver(ok_result "hello")
+  local opts = with_resolver(ok_result("hello"))
   opts.format = function(text)
     return text, "rumdl formatting failed with config /p.toml"
   end
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, opts)
   expect.equality(vim.fn.readfile(opts.log_path)[1]:find("/p.toml", 1, true) ~= nil, true)
 end
 
 T["open"]["logs a resolver failure instead of opening a pane"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local opts = with_resolver { ok = false, resolver = "claude-code", err = "no transcript" }
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  local opts =
+    with_resolver({ ok = false, resolver = "claude-code", err = "no transcript" })
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, opts)
   expect.equality(#vim.api.nvim_list_wins(), 1)
   expect.equality(#vim.fn.readfile(opts.log_path), 1)
   expect.equality(context._state[buf].err, "no transcript")
@@ -956,59 +1141,76 @@ end
 -- A tool whose resolver has not shipped yet is normal operation, not a failure, and the log
 -- lives in the user's own project — so this path must leave the filesystem alone.
 T["open"]["records a tool no resolver claims without writing a log"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local opts = { headless = false, log_path = tmpdir() .. "/context.log" }
-  context.open(buf, session_for "some-other-agent", { enabled = true, min_width = 160 }, opts)
+  context.open(
+    buf,
+    session_for("some-other-agent"),
+    { enabled = true, min_width = 160 },
+    opts
+  )
   expect.equality(#vim.api.nvim_list_wins(), 1)
   expect.equality(vim.fn.filereadable(opts.log_path), 0)
   expect.equality(type(context._state[buf].err), "string")
 end
 
 T["open"]["logs a resolver that raised, naming it"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  context.register {
+  context.register({
     name = "explodes",
     resolve = function()
-      error "transcript decode blew up"
+      error("transcript decode blew up")
     end,
-  }
+  })
   local opts = { headless = false, log_path = tmpdir() .. "/context.log" }
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
-  expect.equality(vim.fn.readfile(opts.log_path)[1]:find("transcript decode blew up", 1, true) ~= nil, true)
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, opts)
+  expect.equality(
+    vim.fn.readfile(opts.log_path)[1]:find("transcript decode blew up", 1, true) ~= nil,
+    true
+  )
 end
 
 T["open"]["opens one pane however many times it is called"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local opts = with_resolver(ok_result "hello")
+  local opts = with_resolver(ok_result("hello"))
   local config = { enabled = true, min_width = 160 }
-  context.open(buf, session_for "claude-code", config, opts)
-  context.open(buf, session_for "claude-code", config, opts)
+  context.open(buf, session_for("claude-code"), config, opts)
+  context.open(buf, session_for("claude-code"), config, opts)
   expect.equality(#vim.api.nvim_list_wins(), 3)
 end
 
 -- `:edit!` fires BufUnload but not BufDelete, and the buffer survives it — so must the pane.
 T["open"]["keeps the pane across a reload of the prompt buffer"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local path = tmpdir() .. "/claude-prompt-reload.md"
   vim.fn.writefile({ "draft" }, path)
   vim.cmd("silent edit " .. vim.fn.fnameescape(path))
   local buf = vim.api.nvim_get_current_buf()
-  require("agentcomplete.layout").attach(buf, { measure = 80, margins = false, inset = 0 })
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  require("agentcomplete.layout").attach(
+    buf,
+    { measure = 80, margins = false, inset = 0 }
+  )
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local win = assert(pane_win())
-  vim.cmd "silent edit!"
+  vim.cmd("silent edit!")
   vim.wait(100)
   expect.equality(vim.api.nvim_win_is_valid(win), true)
 end
 
 T["open"]["releases per-buffer state when a failed buffer goes away"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
-  local opts = with_resolver { ok = false, resolver = "claude-code", err = "no transcript" }
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, opts)
+  local opts =
+    with_resolver({ ok = false, resolver = "claude-code", err = "no transcript" })
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, opts)
   expect.equality(context._state[buf].err, "no transcript")
   vim.api.nvim_buf_delete(buf, { force = true })
   vim.wait(500, function()
@@ -1020,11 +1222,11 @@ end
 -- The registry, the real resolver, and the pane are otherwise only tested apart; this is the
 -- one case that drives all three together.
 T["open"]["shows a message resolved by the real Claude Code resolver"] = function()
-  local context = require "agentcomplete.context"
-  context.register(require "agentcomplete.context.claude_code")
-  local fx = fixture { assistant { text_block "resolved for real" } }
+  local context = require("agentcomplete.context")
+  context.register(require("agentcomplete.context.claude_code"))
+  local fx = fixture({ assistant({ text_block("resolved for real") }) })
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, {
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, {
     headless = false,
     log_path = tmpdir() .. "/context.log",
     format = function(text)
@@ -1032,7 +1234,8 @@ T["open"]["shows a message resolved by the real Claude Code resolver"] = functio
     end,
     resolver = { sessions_root = fx.sessions_root, projects_root = fx.projects_root },
   })
-  local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win())), 0, -1, false)
+  local lines =
+    vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(assert(pane_win())), 0, -1, false)
   expect.equality(vim.tbl_contains(lines, "resolved for real"), true)
   expect.equality(context._state[buf].session_id, SID)
   expect.equality(context._state[buf].transcript, fx.transcript)
@@ -1041,10 +1244,15 @@ end
 -- The pane is two windows over two scratch buffers, and closing a window does not take its
 -- buffer with it: unwiped, every prompt a session opens leaves one behind for its lifetime.
 T["open"]["leaves no buffer behind when the pane closes"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local before = #vim.api.nvim_list_bufs()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   context.close(buf)
   expect.equality(#vim.api.nvim_list_bufs(), before)
 end
@@ -1052,27 +1260,32 @@ end
 -- `_state` is what the diagnostics report reads to explain a missing pane, so "the message
 -- resolved" and "the message is on screen" cannot be the same answer.
 T["open"]["records a failure when the prompt buffer is on no screen to split from"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hi"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hi"))
+  )
   expect.equality(type(context._state[buf].err), "string")
 end
 
 -- A resolver reports once. A second report would build a second pane over the first and
 -- overwrite the record of the first one's windows, leaving two nothing can close.
 T["open"]["ignores a resolver that reports twice"] = function()
-  local context = require "agentcomplete.context"
-  context.register {
+  local context = require("agentcomplete.context")
+  context.register({
     name = "twice",
     resolve = function(_, cb)
-      cb(ok_result "first")
-      cb(ok_result "second")
+      cb(ok_result("first"))
+      cb(ok_result("second"))
       return true
     end,
-  }
+  })
   local buf = prompt_buffer()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, {
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, {
     headless = false,
     log_path = tmpdir() .. "/context.log",
     format = function(text)
@@ -1085,10 +1298,15 @@ end
 -- Every window the pane owns is a way out of it, so the teardown listens on all of them: a
 -- split closed on its own would otherwise leave the float drawn over nothing.
 T["open"]["dismisses the pane when the split it sits over is closed"] = function()
-  local context = require "agentcomplete.context"
+  local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local prompt = vim.api.nvim_get_current_win()
-  context.open(buf, session_for "claude-code", { enabled = true, min_width = 160 }, with_resolver(ok_result "hello"))
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
   local float = assert(pane_win())
   vim.api.nvim_win_close(assert(spacer_win(prompt)), true)
   expect.equality(vim.api.nvim_win_is_valid(float), false)
@@ -1099,16 +1317,16 @@ T["opencode.parse_etime"] = new_set()
 -- `ps -o etime=` is POSIX `[[dd-]hh:]mm:ss`; macOS has no `etimes` to ask for seconds
 -- directly, so the heuristic rung's floor rides on reading every one of those shapes.
 T["opencode.parse_etime"]["reads every field width ps emits"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  expect.equality(opencode.parse_etime "03:15", 195)
-  expect.equality(opencode.parse_etime "  01:02:03", 3723)
-  expect.equality(opencode.parse_etime "2-01:02:03", 2 * 86400 + 3723)
+  local opencode = require("agentcomplete.context.opencode")
+  expect.equality(opencode.parse_etime("03:15"), 195)
+  expect.equality(opencode.parse_etime("  01:02:03"), 3723)
+  expect.equality(opencode.parse_etime("2-01:02:03"), 2 * 86400 + 3723)
 end
 
 T["opencode.parse_etime"]["returns nil for output that is not an elapsed time"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  expect.equality(opencode.parse_etime "", nil)
-  expect.equality(opencode.parse_etime "ps: etime: keyword not found", nil)
+  local opencode = require("agentcomplete.context.opencode")
+  expect.equality(opencode.parse_etime(""), nil)
+  expect.equality(opencode.parse_etime("ps: etime: keyword not found"), nil)
 end
 
 -- Both roots follow the XDG base OpenCode itself resolves them under, so a user who moves
@@ -1116,14 +1334,20 @@ end
 T["opencode.roots"] = new_set()
 
 T["opencode.roots"]["hang the database and the pointers off their XDG bases"] = function()
-  local opencode = require "agentcomplete.context.opencode"
+  local opencode = require("agentcomplete.context.opencode")
   local saved = { data = vim.env.XDG_DATA_HOME, state = vim.env.XDG_STATE_HOME }
   vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME = "/xdg/data", "/xdg/state"
   expect.equality(opencode.db_path(), "/xdg/data/opencode/opencode.db")
   expect.equality(opencode.pointer_dir(), "/xdg/state/opencode/agentcomplete")
   vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME = nil, nil
-  expect.equality(opencode.db_path(), vim.fs.normalize "~/.local/share" .. "/opencode/opencode.db")
-  expect.equality(opencode.pointer_dir(), vim.fs.normalize "~/.local/state" .. "/opencode/agentcomplete")
+  expect.equality(
+    opencode.db_path(),
+    vim.fs.normalize("~/.local/share") .. "/opencode/opencode.db"
+  )
+  expect.equality(
+    opencode.pointer_dir(),
+    vim.fs.normalize("~/.local/state") .. "/opencode/agentcomplete"
+  )
   vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME = saved.data, saved.state
 end
 
@@ -1141,46 +1365,56 @@ local function pointer(fields)
 end
 
 T["opencode.pick_pointer"]["takes the record whose pids reach this process tree"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  local records = { pointer { pids = { 9 }, sessionID = "ses_elsewhere" }, pointer { pids = { 7, 4242 } } }
-  expect.equality(opencode.pick_pointer(records, { 4242, 11 }, "/proj").sessionID, "ses_a")
+  local opencode = require("agentcomplete.context.opencode")
+  local records = {
+    pointer({ pids = { 9 }, sessionID = "ses_elsewhere" }),
+    pointer({ pids = { 7, 4242 } }),
+  }
+  expect.equality(
+    opencode.pick_pointer(records, { 4242, 11 }, "/proj").sessionID,
+    "ses_a"
+  )
 end
 
 -- A worktree checkout runs OpenCode from the worktree while the session records the main
 -- checkout as its directory, so either side of that pair is a match.
 T["opencode.pick_pointer"]["matches a cwd that is the record's worktree rather than its directory"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  local records = { pointer { directory = "/main", worktree = "/proj" } }
+  local opencode = require("agentcomplete.context.opencode")
+  local records = { pointer({ directory = "/main", worktree = "/proj" }) }
   expect.equality(opencode.pick_pointer(records, { 4242 }, "/proj").sessionID, "ses_a")
 end
 
 -- Pids are recycled, so a pid match alone would let a week-old record from an unrelated
 -- project answer for this one.
 T["opencode.pick_pointer"]["skips a record naming another directory"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  local records = { pointer { directory = "/elsewhere", worktree = "/elsewhere" } }
+  local opencode = require("agentcomplete.context.opencode")
+  local records = { pointer({ directory = "/elsewhere", worktree = "/elsewhere" }) }
   expect.equality(opencode.pick_pointer(records, { 4242 }, "/proj"), nil)
 end
 
 T["opencode.pick_pointer"]["prefers the freshest of several matching records"] = function()
-  local opencode = require "agentcomplete.context.opencode"
+  local opencode = require("agentcomplete.context.opencode")
   local records = {
-    pointer { sessionID = "ses_fresh", ts = 2000 },
-    pointer { sessionID = "ses_stale", ts = 500 },
+    pointer({ sessionID = "ses_fresh", ts = 2000 }),
+    pointer({ sessionID = "ses_stale", ts = 500 }),
   }
-  expect.equality(opencode.pick_pointer(records, { 4242 }, "/proj").sessionID, "ses_fresh")
+  expect.equality(
+    opencode.pick_pointer(records, { 4242 }, "/proj").sessionID,
+    "ses_fresh"
+  )
 end
 
 T["opencode.pick_pointer"]["declines when no record names a pid in the chain"] = function()
-  local opencode = require "agentcomplete.context.opencode"
+  local opencode = require("agentcomplete.context.opencode")
   expect.equality(opencode.pick_pointer({ pointer() }, { 55, 56 }, "/proj"), nil)
 end
 
 local saved_opencode
-T["opencode.resolve"] = new_set {
+T["opencode.resolve"] = new_set({
   hooks = {
     pre_case = function()
-      saved_opencode = { session = vim.env.OPENCODE_SESSION_ID, pid = vim.env.OPENCODE_PID }
+      saved_opencode =
+        { session = vim.env.OPENCODE_SESSION_ID, pid = vim.env.OPENCODE_PID }
       vim.env.OPENCODE_SESSION_ID = nil
       vim.env.OPENCODE_PID = nil
     end,
@@ -1189,7 +1423,7 @@ T["opencode.resolve"] = new_set {
       vim.env.OPENCODE_PID = saved_opencode.pid
     end,
   },
-}
+})
 
 local function session_row(id, parent, directory, created, updated)
   return ("insert into session values('%s',%s,'%s',%d,%d);"):format(
@@ -1208,7 +1442,7 @@ local function turn(session_id, id, created, parts)
       id,
       session_id,
       created,
-      vim.json.encode { role = "assistant" }
+      vim.json.encode({ role = "assistant" })
     ),
   }
   for i, part in ipairs(parts) do
@@ -1218,7 +1452,7 @@ local function turn(session_id, id, created, parts)
       id,
       session_id,
       created + i,
-      vim.json.encode { type = part[1], text = part[2] }
+      vim.json.encode({ type = part[1], text = part[2] })
     )
   end
   return table.concat(rows, "\n")
@@ -1248,7 +1482,12 @@ local function opencode_db()
       turn("ses_old", "m1", 1000100, { { "text", "old answer" } }),
       session_row("ses_new", nil, "/proj", 1800000, 1800300),
       turn("ses_new", "m2", 1800100, { { "text", "superseded" } }),
-      turn("ses_new", "m3", 1800200, { { "text", "the answer" }, { "text", "and more" } }),
+      turn(
+        "ses_new",
+        "m3",
+        1800200,
+        { { "text", "the answer" }, { "text", "and more" } }
+      ),
       turn("ses_new", "m4", 1800300, { { "tool" } }),
       session_row("ses_child", "ses_new", "/proj", 1850000, 1850100),
       turn("ses_child", "m5", 1850100, { { "text", "subagent chatter" } }),
@@ -1265,7 +1504,10 @@ end
 ---Write `record` where the OpenCode plugin writes its pointers, under a fixture state root.
 local function write_pointer(root, pid, record)
   vim.fn.mkdir(root .. "/opencode/agentcomplete", "p")
-  vim.fn.writefile({ vim.json.encode(record) }, root .. "/opencode/agentcomplete/" .. pid .. ".json")
+  vim.fn.writefile(
+    { vim.json.encode(record) },
+    root .. "/opencode/agentcomplete/" .. pid .. ".json"
+  )
 end
 
 ---A `ps` stand-in: an elapsed time for the heuristic's floor, and no parent for the pid climb,
@@ -1290,9 +1532,13 @@ end
 ---Run the OpenCode resolver against `opts`, waiting for its asynchronous report.
 local function resolve_opencode(opts, session)
   local result
-  local claimed = require("agentcomplete.context.opencode").resolve(session or session_for "opencode", function(r)
-    result = r
-  end, opts)
+  local claimed = require("agentcomplete.context.opencode").resolve(
+    session or session_for("opencode"),
+    function(r)
+      result = r
+    end,
+    opts
+  )
   if claimed then
     vim.wait(5000, function()
       return result ~= nil
@@ -1304,15 +1550,21 @@ end
 -- The parts of one message, not every assistant part in the session: a session's whole
 -- conversation would otherwise land in the pane.
 T["opencode.resolve"]["reads the newest assistant message that carries text"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  local out = vim.fn.system { "sqlite3", "-readonly", "-json", opencode_db(), opencode.message_sql "'ses_new'" }
+  local opencode = require("agentcomplete.context.opencode")
+  local out = vim.fn.system({
+    "sqlite3",
+    "-readonly",
+    "-json",
+    opencode_db(),
+    opencode.message_sql("'ses_new'"),
+  })
   expect.equality(opencode.join_rows(out), "the answer\n\nand more")
 end
 
 T["opencode.resolve"]["reports nothing for output that is not a result set"] = function()
-  local opencode = require "agentcomplete.context.opencode"
-  expect.equality(opencode.join_rows "", nil)
-  expect.equality(opencode.join_rows "[]", nil)
+  local opencode = require("agentcomplete.context.opencode")
+  expect.equality(opencode.join_rows(""), nil)
+  expect.equality(opencode.join_rows("[]"), nil)
 end
 
 -- Nothing exports this today, but three lines in OpenCode's `openEditor` would, and it is the
@@ -1327,8 +1579,12 @@ end
 T["opencode.resolve"]["takes the session id from a pointer naming this process tree"] = function()
   vim.env.OPENCODE_PID = "4242"
   local root = tmpdir()
-  write_pointer(root, 4242, { pids = { 4242 }, sessionID = "ses_old", directory = "/proj", ts = 1750000 })
-  local result = resolve_opencode(opencode_opts { state_root = root })
+  write_pointer(
+    root,
+    4242,
+    { pids = { 4242 }, sessionID = "ses_old", directory = "/proj", ts = 1750000 }
+  )
+  local result = resolve_opencode(opencode_opts({ state_root = root }))
   expect.equality(result.rung, "pointer file")
   expect.equality(result.session_id, "ses_old")
 end
@@ -1346,7 +1602,7 @@ end
 -- guess by when a session was created hides exactly the conversation being worked in.
 T["opencode.resolve"]["guesses a session created before the TUI but used since"] = function()
   vim.env.OPENCODE_PID = "4242"
-  local session = session_for "opencode"
+  local session = session_for("opencode")
   session.cwd = "/resumed"
   local result = resolve_opencode(opencode_opts(), session)
   expect.equality(result.rung, "guessed")
@@ -1358,8 +1614,12 @@ end
 T["opencode.resolve"]["ignores a pointer written before the TUI started"] = function()
   vim.env.OPENCODE_PID = "4242"
   local root = tmpdir()
-  write_pointer(root, 4242, { pids = { 4242 }, sessionID = "ses_old", directory = "/proj", ts = 1 })
-  local result = resolve_opencode(opencode_opts { state_root = root })
+  write_pointer(
+    root,
+    4242,
+    { pids = { 4242 }, sessionID = "ses_old", directory = "/proj", ts = 1 }
+  )
+  local result = resolve_opencode(opencode_opts({ state_root = root }))
   expect.equality(result.rung, "guessed")
 end
 
@@ -1378,14 +1638,18 @@ T["opencode.resolve"]["guesses when the only pointer names another process tree"
   vim.env.OPENCODE_PID = "4242"
   local root = tmpdir()
   local orphan = vim.loop.os_getppid() + 1000000
-  write_pointer(root, orphan, { pids = { orphan }, sessionID = "ses_old", directory = "/proj", ts = 1750000 })
-  local result = resolve_opencode(opencode_opts { state_root = root })
+  write_pointer(
+    root,
+    orphan,
+    { pids = { orphan }, sessionID = "ses_old", directory = "/proj", ts = 1750000 }
+  )
+  local result = resolve_opencode(opencode_opts({ state_root = root }))
   expect.equality(result.rung, "guessed")
 end
 
 T["opencode.resolve"]["fills the session's id, which detection leaves holding a pid"] = function()
   vim.env.OPENCODE_SESSION_ID = "ses_old"
-  local session = session_for "opencode"
+  local session = session_for("opencode")
   session.session_id = "4242"
   resolve_opencode(opencode_opts(), session)
   expect.equality(session.session_id, "ses_old")
@@ -1411,7 +1675,8 @@ end
 -- rung is what tells them which resolution was being attempted when it failed.
 T["opencode.resolve"]["reports the rung it was attempting when the read fails"] = function()
   vim.env.OPENCODE_SESSION_ID = "ses_old"
-  local result = resolve_opencode(opencode_opts { spawn = fake_spawn { code = 1, stderr = "boom" } })
+  local result =
+    resolve_opencode(opencode_opts({ spawn = fake_spawn({ code = 1, stderr = "boom" }) }))
   expect.equality(result.ok, false)
   expect.equality(result.rung, "$OPENCODE_SESSION_ID")
 end
@@ -1421,13 +1686,15 @@ T["opencode.resolve"]["fails soft on every way the read can go wrong"] = functio
   local cases = {
     ["missing sqlite3"] = {
       spawn = function()
-        error "ENOENT: no such file or directory"
+        error("ENOENT: no such file or directory")
       end,
     },
     ["missing database"] = { db_path = tmpdir() .. "/absent.db" },
-    ["non-zero exit"] = { spawn = fake_spawn { code = 1, stderr = "file is not a database" } },
-    ["unparseable output"] = { spawn = fake_spawn { code = 0, stdout = "not json" } },
-    ["no rows"] = { spawn = fake_spawn { code = 0, stdout = "" } },
+    ["non-zero exit"] = {
+      spawn = fake_spawn({ code = 1, stderr = "file is not a database" }),
+    },
+    ["unparseable output"] = { spawn = fake_spawn({ code = 0, stdout = "not json" }) },
+    ["no rows"] = { spawn = fake_spawn({ code = 0, stdout = "" }) },
   }
   local soft = {}
   for name, override in pairs(cases) do
@@ -1444,7 +1711,7 @@ T["opencode.resolve"]["fails soft on every way the read can go wrong"] = functio
 end
 
 T["opencode.resolve"]["declines a session belonging to another tool"] = function()
-  local result, claimed = resolve_opencode(opencode_opts(), session_for "claude-code")
+  local result, claimed = resolve_opencode(opencode_opts(), session_for("claude-code"))
   expect.equality(claimed, nil)
   expect.equality(result, nil)
 end

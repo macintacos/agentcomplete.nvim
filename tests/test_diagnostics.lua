@@ -2,7 +2,7 @@
 -- EXC-653 root-cause heuristic) and the pure markdown renderer. The glue
 -- (collect/run, which read live editor state and write a file) is exercised by
 -- the headless smoke check in `mise run diag`, not here.
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
@@ -32,53 +32,54 @@ local T = new_set()
 T["diagnose_suppression"] = new_set()
 
 T["diagnose_suppression"]["native backend: nothing to suppress"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { resolved_backend = "native" })
+  local diag = require("agentcomplete.diagnostics")
+  local r = diag.diagnose_suppression(state({ resolved_backend = "native" }))
   expect.equality(r.active, false)
   expect.equality(has(r.cause, "native backend"), true)
 end
 
 T["diagnose_suppression"]["blink active but config not reachable"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { config_reachable = false, registered = nil })
+  local diag = require("agentcomplete.diagnostics")
+  local r =
+    diag.diagnose_suppression(state({ config_reachable = false, registered = nil }))
   expect.equality(r.active, true)
   expect.equality(r.config_reachable, false)
   expect.equality(has(r.cause, "not reachable"), true)
 end
 
 T["diagnose_suppression"]["agentcomplete not a registered provider"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { registered = { path = true } })
+  local diag = require("agentcomplete.diagnostics")
+  local r = diag.diagnose_suppression(state({ registered = { path = true } }))
   expect.equality(r.agentcomplete_registered, false)
   expect.equality(has(r.cause, "not a registered blink provider"), true)
 end
 
 T["diagnose_suppression"]["registered but wrap not installed (load order)"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { wrap_installed = false })
+  local diag = require("agentcomplete.diagnostics")
+  local r = diag.diagnose_suppression(state({ wrap_installed = false }))
   expect.equality(r.agentcomplete_registered, true)
   expect.equality(r.wrap_installed, false)
   expect.equality(has(r.cause, "load order"), true)
 end
 
 T["diagnose_suppression"]["wrap installed but current buffer not detected"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { detected = false })
+  local diag = require("agentcomplete.diagnostics")
+  local r = diag.diagnose_suppression(state({ detected = false }))
   expect.equality(r.wrap_installed, true)
   expect.equality(r.detected, false)
   expect.equality(has(r.cause, "not detected as an agent prompt buffer"), true)
 end
 
 T["diagnose_suppression"]["installed and detected: agentcomplete is the only source"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { allowed_sources = { "path" } })
+  local diag = require("agentcomplete.diagnostics")
+  local r = diag.diagnose_suppression(state({ allowed_sources = { "path" } }))
   expect.equality(r.effective, { "agentcomplete", "path" })
   expect.equality(has(r.cause, "only source"), true)
 end
 
 T["diagnose_suppression"]["unregistered allowed_sources are reported as dropped"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local r = diag.diagnose_suppression(state { allowed_sources = { "path", "ghost" } })
+  local diag = require("agentcomplete.diagnostics")
+  local r = diag.diagnose_suppression(state({ allowed_sources = { "path", "ghost" } }))
   expect.equality(r.effective, { "agentcomplete", "path" })
   expect.equality(r.dropped, { "ghost" })
 end
@@ -87,7 +88,7 @@ T["render"] = new_set()
 
 -- A fully-populated report, mirroring what collect() builds in a detected buffer.
 local function full_report()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   return {
     nvim_version = "0.11.0",
     config = {
@@ -106,7 +107,14 @@ local function full_report()
       session_source = "detected",
     },
     session = { tool = "claude-code", cwd = "/proj", session_id = nil },
-    discovery = { skills = 3, cli_skills = 0, commands = 2, cli_commands = 0, extra_commands = 0, files = 42 },
+    discovery = {
+      skills = 3,
+      cli_skills = 0,
+      commands = 2,
+      cli_commands = 0,
+      extra_commands = 0,
+      files = 42,
+    },
     highlighting = {
       attached = true,
       painted = 2,
@@ -119,7 +127,7 @@ local function full_report()
       transcript = "/proj/.claude/transcript.jsonl",
       bytes = 1234,
     },
-    blink = diag.diagnose_suppression(state { allowed_sources = { "path" } }),
+    blink = diag.diagnose_suppression(state({ allowed_sources = { "path" } })),
     env = {
       AGENTCOMPLETE_CWD = nil,
       agentcomplete_cwd_g = nil,
@@ -133,10 +141,10 @@ local function full_report()
 end
 
 T["render"]["includes the title and every section header"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local out = diag.render(full_report())
   expect.equality(type(out), "string")
-  for _, header in ipairs {
+  for _, header in ipairs({
     "# agentcomplete.nvim diagnostics",
     "## Config",
     "## Detection",
@@ -145,7 +153,7 @@ T["render"]["includes the title and every section header"] = function()
     "## Context",
     "## blink suppression",
     "## Environment",
-  } do
+  }) do
     expect.equality(has(out, header), true)
   end
   -- The diagnosis cause is surfaced in the body.
@@ -157,7 +165,7 @@ end
 -- The pane is decoration on someone's prompt buffer, so it fails silently by design; this
 -- section is where a missing one becomes legible.
 T["render"]["names the resolver, session, transcript, and size of the shown message"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local out = diag.render(full_report())
   expect.equality(has(out, "claude-code"), true)
   expect.equality(has(out, "/proj/.claude/transcript.jsonl"), true)
@@ -167,9 +175,10 @@ end
 -- A pane showing the wrong conversation looks identical to one showing the right conversation,
 -- so the rung that chose the session is what a reader has to be able to see.
 T["render"]["names the rung that resolved the session and where pointers are looked for"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
-  report.context = { resolver = "opencode", rung = "guessed", session_id = "ses_x", bytes = 12 }
+  report.context =
+    { resolver = "opencode", rung = "guessed", session_id = "ses_x", bytes = 12 }
   report.pointer_dir = "/state/opencode/agentcomplete"
   local out = diag.render(report)
   expect.equality(has(out, "guessed"), true)
@@ -177,7 +186,7 @@ T["render"]["names the rung that resolved the session and where pointers are loo
 end
 
 T["render"]["reports the OpenCode session env and what the plugin path holds"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
   report.env.OPENCODE_SESSION_ID = "ses_env"
   report.env.XDG_STATE_HOME = "/state"
@@ -189,7 +198,7 @@ T["render"]["reports the OpenCode session env and what the plugin path holds"] =
 end
 
 T["render"]["surfaces the reason no pane opened"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
   report.context = { resolver = "claude-code", err = "no transcript for session sess-1" }
   local out = diag.render(report)
@@ -197,8 +206,8 @@ T["render"]["surfaces the reason no pane opened"] = function()
 end
 
 T["render"]["a minimal report (no session, blink inactive) renders without error"] = function()
-  local diag = require "agentcomplete.diagnostics"
-  local out = diag.render {
+  local diag = require("agentcomplete.diagnostics")
+  local out = diag.render({
     nvim_version = "0.11.0",
     config = {
       backend = "native",
@@ -208,14 +217,20 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
       sources = { slash = true, file = true },
       allowed_sources = {},
     },
-    buffer = { nr = 1, name = "", detected = false, native_attached = false, session_source = "none" },
+    buffer = {
+      nr = 1,
+      name = "",
+      detected = false,
+      native_attached = false,
+      session_source = "none",
+    },
     session = nil,
     discovery = nil,
     highlighting = { attached = false, painted = 0, groups = {}, slash_set = nil },
     context = nil,
-    blink = diag.diagnose_suppression(state { resolved_backend = "native" }),
+    blink = diag.diagnose_suppression(state({ resolved_backend = "native" })),
     env = { cwd = "/proj" },
-  }
+  })
   expect.equality(type(out), "string")
   expect.equality(has(out, "# agentcomplete.nvim diagnostics"), true)
   -- No session ⇒ the detection section says so rather than erroring on nil.
@@ -227,7 +242,7 @@ T["render"]["a minimal report (no session, blink inactive) renders without error
 end
 
 T["render"]["surfaces OpenCode env signals and the session's search dirs"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
   report.session.tool = "opencode"
   report.session.skill_dirs = { "/proj/.opencode/skill" }
@@ -245,7 +260,7 @@ T["render"]["surfaces OpenCode env signals and the session's search dirs"] = fun
 end
 
 T["render"]["names both highlight groups and what each resolves to"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local out = diag.render(full_report())
   expect.equality(has(out, "AgentCompleteSkill"), true)
   expect.equality(has(out, "Special"), true)
@@ -254,7 +269,7 @@ T["render"]["names both highlight groups and what each resolves to"] = function(
 end
 
 T["render"]["reports the size of the resolved / set"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
   report.highlighting.slash_set = 23
   expect.equality(has(diag.render(report), "set size:      23"), true)
@@ -263,16 +278,17 @@ end
 -- The count is what separates "nothing resolves" from "it painted, look at your
 -- colorscheme" — the fork the diagnostics doc sends a reader here to settle.
 T["render"]["reports how many tokens are currently painted"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
   report.highlighting.painted = 9
   expect.equality(has(diag.render(report), "painted: 9"), true)
 end
 
 T["render"]["surfaces the CLI resolver toggle and its resolved skill count"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
-  report.config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false }
+  report.config.opencode =
+    { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = false }
   report.discovery.cli_skills = 17
   local out = diag.render(report)
   expect.equality(has(out, "resolve_via_cli"), true)
@@ -283,17 +299,21 @@ end
 -- A `guessed` context rung with no plugin installed forks on whether the user ever asked for the
 -- install; without this line the report cannot settle it.
 T["render"]["surfaces whether setup() was asked to install the OpenCode plugin"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
-  report.config.opencode = { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = true }
-  expect.equality(has(diag.render(report), "opencode.install_plugin:            yes"), true)
+  report.config.opencode =
+    { show_all_builtin_commands = false, resolve_via_cli = true, install_plugin = true }
+  expect.equality(
+    has(diag.render(report), "opencode.install_plugin:            yes"),
+    true
+  )
 end
 
 -- Counting commands per source is what makes a discovery path that searched the wrong directory
 -- legible: summing them let ~17 static built-ins pass for a healthy command line while the
 -- filesystem scan found nothing.
 T["render"]["counts each command source separately"] = function()
-  local diag = require "agentcomplete.diagnostics"
+  local diag = require("agentcomplete.diagnostics")
   local report = full_report()
   report.discovery.commands = 0
   report.discovery.cli_commands = 25

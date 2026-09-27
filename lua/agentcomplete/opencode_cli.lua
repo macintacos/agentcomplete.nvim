@@ -92,7 +92,10 @@ function M.parse_commands(stdout)
   local out = {}
   for _, name in ipairs(names) do
     local spec = data.command[name]
-    local desc = type(spec) == "table" and type(spec.description) == "string" and spec.description or nil
+    local desc = type(spec) == "table"
+        and type(spec.description) == "string"
+        and spec.description
+      or nil
     out[#out + 1] = { name = name, description = desc }
   end
   return out

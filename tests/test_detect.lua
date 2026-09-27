@@ -1,6 +1,6 @@
 -- Tests for agentcomplete.detect: the per-tool detector registry and the
 -- Claude Code detector (prompt-buffer name + editor cwd).
-local MiniTest = require "mini.test"
+local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
 
@@ -26,7 +26,7 @@ local function write(path, lines)
 end
 
 local saved = {}
-local T = new_set {
+local T = new_set({
   hooks = {
     pre_case = function()
       saved.env = vim.env.AGENTCOMPLETE_CWD
@@ -49,55 +49,55 @@ local T = new_set {
       vim.env.OPENCODE_CONFIG_DIR = saved.oc_config_dir
     end,
   },
-}
+})
 
 T["registry"] = new_set()
 
 T["registry"]["detect returns nil when no detectors are registered"] = function()
-  local detect = require "agentcomplete.detect"
+  local detect = require("agentcomplete.detect")
   detect.clear()
   expect.equality(detect.detect(0), nil)
 end
 
 T["registry"]["detect returns the first matching detector's session"] = function()
-  local detect = require "agentcomplete.detect"
+  local detect = require("agentcomplete.detect")
   detect.clear()
-  detect.register {
+  detect.register({
     name = "a",
     detect = function()
       return nil
     end,
-  }
-  detect.register {
+  })
+  detect.register({
     name = "b",
     detect = function()
       return { tool = "b" }
     end,
-  }
-  detect.register {
+  })
+  detect.register({
     name = "c",
     detect = function()
       return { tool = "c" }
     end,
-  }
+  })
   expect.equality(assert(detect.detect(0)).tool, "b")
 end
 
 T["registry"]["a throwing detector is skipped, not fatal"] = function()
-  local detect = require "agentcomplete.detect"
+  local detect = require("agentcomplete.detect")
   detect.clear()
-  detect.register {
+  detect.register({
     name = "boom",
     detect = function()
-      error "kaboom"
+      error("kaboom")
     end,
-  }
-  detect.register {
+  })
+  detect.register({
     name = "ok",
     detect = function()
       return { tool = "ok" }
     end,
-  }
+  })
   expect.equality(assert(detect.detect(0)).tool, "ok")
 end
 
@@ -106,8 +106,8 @@ T["claude_code"] = new_set()
 T["claude_code"]["matches a claude-prompt-<uuid>.md buffer, rooted at cwd"] = function()
   vim.env.AGENTCOMPLETE_CWD = nil
   vim.g.agentcomplete_cwd = nil
-  local buf = named_buf "/private/tmp/claude-502/claude-prompt-abc12345.md"
-  local cc = require "agentcomplete.detect.claude_code"
+  local buf = named_buf("/private/tmp/claude-502/claude-prompt-abc12345.md")
+  local cc = require("agentcomplete.detect.claude_code")
   local s = assert(cc.detect(buf))
   expect.equality(s.tool, "claude-code")
   expect.equality(s.session_id, nil)
@@ -117,50 +117,50 @@ T["claude_code"]["matches a claude-prompt-<uuid>.md buffer, rooted at cwd"] = fu
 end
 
 T["claude_code"]["ignores buffers that are not a claude prompt"] = function()
-  local cc = require "agentcomplete.detect.claude_code"
-  expect.equality(cc.detect(named_buf "/tmp/ac-a/notes.md"), nil)
-  expect.equality(cc.detect(named_buf "/tmp/ac-b/claude-prompt.txt"), nil) -- wrong extension
-  expect.equality(cc.detect(named_buf "/tmp/ac-c/prompt-x.md"), nil) -- wrong prefix
-  expect.equality(cc.detect(named_buf ""), nil) -- unnamed buffer
+  local cc = require("agentcomplete.detect.claude_code")
+  expect.equality(cc.detect(named_buf("/tmp/ac-a/notes.md")), nil)
+  expect.equality(cc.detect(named_buf("/tmp/ac-b/claude-prompt.txt")), nil) -- wrong extension
+  expect.equality(cc.detect(named_buf("/tmp/ac-c/prompt-x.md")), nil) -- wrong prefix
+  expect.equality(cc.detect(named_buf("")), nil) -- unnamed buffer
 end
 
 T["claude_code"]["AGENTCOMPLETE_CWD env wins over vim.g and cwd"] = function()
   vim.env.AGENTCOMPLETE_CWD = "/tmp/projEnv"
   vim.g.agentcomplete_cwd = "/tmp/projG"
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(named_buf "/tmp/ac-d/claude-prompt-d.md"))
+  local cc = require("agentcomplete.detect.claude_code")
+  local s = assert(cc.detect(named_buf("/tmp/ac-d/claude-prompt-d.md")))
   expect.equality(s.cwd, "/tmp/projEnv")
 end
 
 T["claude_code"]["vim.g.agentcomplete_cwd wins over cwd when env is unset"] = function()
   vim.env.AGENTCOMPLETE_CWD = nil
   vim.g.agentcomplete_cwd = "/tmp/projG"
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(named_buf "/tmp/ac-e/claude-prompt-e.md"))
+  local cc = require("agentcomplete.detect.claude_code")
+  local s = assert(cc.detect(named_buf("/tmp/ac-e/claude-prompt-e.md")))
   expect.equality(s.cwd, "/tmp/projG")
 end
 
 T["claude_code"]["empty AGENTCOMPLETE_CWD is ignored (treated as unset)"] = function()
   vim.env.AGENTCOMPLETE_CWD = ""
   vim.g.agentcomplete_cwd = "/tmp/projG"
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(named_buf "/tmp/ac-f/claude-prompt-f.md"))
+  local cc = require("agentcomplete.detect.claude_code")
+  local s = assert(cc.detect(named_buf("/tmp/ac-f/claude-prompt-f.md")))
   expect.equality(s.cwd, "/tmp/projG")
 end
 
 T["claude_code"]["empty vim.g.agentcomplete_cwd falls through to the editor cwd"] = function()
   vim.env.AGENTCOMPLETE_CWD = nil
   vim.g.agentcomplete_cwd = ""
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(named_buf "/tmp/ac-h/claude-prompt-h.md"))
+  local cc = require("agentcomplete.detect.claude_code")
+  local s = assert(cc.detect(named_buf("/tmp/ac-h/claude-prompt-h.md")))
   expect.equality(s.cwd, vim.loop.cwd())
 end
 
 T["claude_code"]["derives project-local skill/command dirs from the resolved cwd"] = function()
   vim.env.AGENTCOMPLETE_CWD = "/tmp/projX"
   vim.g.agentcomplete_cwd = nil
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(named_buf "/tmp/ac-g/claude-prompt-g.md"))
+  local cc = require("agentcomplete.detect.claude_code")
+  local s = assert(cc.detect(named_buf("/tmp/ac-g/claude-prompt-g.md")))
   expect.equality(vim.tbl_contains(s.skill_dirs, "/tmp/projX/.claude/skills"), true)
   expect.equality(vim.tbl_contains(s.command_dirs, "/tmp/projX/.claude/commands"), true)
 end
@@ -168,8 +168,8 @@ end
 T["claude_code"]["never sets extra_skills (the CLI resolver is OpenCode-only)"] = function()
   vim.env.AGENTCOMPLETE_CWD = nil
   vim.g.agentcomplete_cwd = nil
-  local cc = require "agentcomplete.detect.claude_code"
-  local s = assert(cc.detect(named_buf "/tmp/ac-cc/claude-prompt-noextra.md"))
+  local cc = require("agentcomplete.detect.claude_code")
+  local s = assert(cc.detect(named_buf("/tmp/ac-cc/claude-prompt-noextra.md")))
   expect.equality(s.extra_skills, nil)
 end
 
@@ -180,8 +180,8 @@ T["opencode"]["matches a <millis>.md buffer when OPENCODE=1, rooted at cwd"] = f
   vim.g.agentcomplete_cwd = nil
   vim.env.OPENCODE = "1"
   vim.env.OPENCODE_PID = "12345"
-  local buf = named_buf "/private/tmp/1718646000001.md"
-  local oc = require "agentcomplete.detect.opencode"
+  local buf = named_buf("/private/tmp/1718646000001.md")
+  local oc = require("agentcomplete.detect.opencode")
   local s = assert(oc.detect(buf))
   expect.equality(s.tool, "opencode")
   expect.equality(s.session_id, "12345")
@@ -193,25 +193,25 @@ end
 T["opencode"]["ignores every buffer when OPENCODE is not set"] = function()
   vim.env.OPENCODE = nil
   vim.env.OPENCODE_PID = nil
-  local oc = require "agentcomplete.detect.opencode"
-  expect.equality(oc.detect(named_buf "/private/tmp/1718646000002.md"), nil)
+  local oc = require("agentcomplete.detect.opencode")
+  expect.equality(oc.detect(named_buf("/private/tmp/1718646000002.md")), nil)
 end
 
 T["opencode"]["ignores non-opencode-shaped names even when OPENCODE=1"] = function()
   vim.env.OPENCODE = "1"
-  local oc = require "agentcomplete.detect.opencode"
-  expect.equality(oc.detect(named_buf "/tmp/oc-a/notes.md"), nil) -- non-digit basename
-  expect.equality(oc.detect(named_buf "/tmp/oc-b/123.txt"), nil) -- wrong extension
-  expect.equality(oc.detect(named_buf "/tmp/oc-c/12a45.md"), nil) -- not all digits
-  expect.equality(oc.detect(named_buf ""), nil) -- unnamed buffer
+  local oc = require("agentcomplete.detect.opencode")
+  expect.equality(oc.detect(named_buf("/tmp/oc-a/notes.md")), nil) -- non-digit basename
+  expect.equality(oc.detect(named_buf("/tmp/oc-b/123.txt")), nil) -- wrong extension
+  expect.equality(oc.detect(named_buf("/tmp/oc-c/12a45.md")), nil) -- not all digits
+  expect.equality(oc.detect(named_buf("")), nil) -- unnamed buffer
 end
 
 T["opencode"]["AGENTCOMPLETE_CWD overrides the editor cwd"] = function()
   vim.env.OPENCODE = "1"
   vim.env.AGENTCOMPLETE_CWD = "/tmp/projEnvO"
   vim.g.agentcomplete_cwd = nil
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000003.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000003.md")))
   expect.equality(s.cwd, "/tmp/projEnvO")
 end
 
@@ -219,8 +219,8 @@ T["opencode"]["derives project-local skill/command dirs from the resolved cwd"] 
   vim.env.OPENCODE = "1"
   vim.env.AGENTCOMPLETE_CWD = "/tmp/projXO"
   vim.g.agentcomplete_cwd = nil
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000004.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000004.md")))
   expect.equality(vim.tbl_contains(s.skill_dirs, "/tmp/projXO/.opencode/skill"), true)
   expect.equality(vim.tbl_contains(s.command_dirs, "/tmp/projXO/.opencode/command"), true)
 end
@@ -232,10 +232,13 @@ T["opencode"]["populates extra_commands from the project opencode.json command m
   vim.env.OPENCODE_CONFIG = nil
   vim.env.OPENCODE_CONFIG_DIR = nil
   local proj = tmpdir()
-  write(proj .. "/opencode.json", { '{ "command": { "release": { "description": "Cut a release" } } }' })
+  write(
+    proj .. "/opencode.json",
+    { '{ "command": { "release": { "description": "Cut a release" } } }' }
+  )
   vim.env.AGENTCOMPLETE_CWD = proj
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000005.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000005.md")))
   local by = {}
   for _, c in ipairs(s.extra_commands or {}) do
     by[c.name] = c
@@ -251,8 +254,8 @@ T["opencode"]["surfaces OpenCode built-in commands in extra_commands"] = functio
   vim.env.OPENCODE_CONFIG = nil
   vim.env.OPENCODE_CONFIG_DIR = nil
   vim.env.AGENTCOMPLETE_CWD = tmpdir() -- project with no opencode.json / command files
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000006.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000006.md")))
   local names = {}
   for _, c in ipairs(s.extra_commands or {}) do
     names[c.name] = true
@@ -267,10 +270,13 @@ T["opencode"]["orders config-map commands before built-in commands"] = function(
   vim.env.OPENCODE_CONFIG = nil
   vim.env.OPENCODE_CONFIG_DIR = nil
   local proj = tmpdir()
-  write(proj .. "/opencode.json", { '{ "command": { "deploy": { "description": "Ship it" } } }' })
+  write(
+    proj .. "/opencode.json",
+    { '{ "command": { "deploy": { "description": "Ship it" } } }' }
+  )
   vim.env.AGENTCOMPLETE_CWD = proj
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000007.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000007.md")))
   -- config-map "deploy" must precede any built-in (e.g. "init") so a user's config command
   -- wins the name-dedup in sources.items.
   local idx_deploy, idx_init
@@ -298,8 +304,8 @@ T["opencode"]["populates extra_skills and cli_commands from the CLI resolver whe
     skills = { { name = "cli-only-skill", description = "from the CLI" } },
     commands = { { name = "cli-only-command", description = "from the CLI" } },
   }
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000008.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000008.md")))
   local names = {}
   for _, sk in ipairs(s.extra_skills or {}) do
     names[sk.name] = true
@@ -307,7 +313,10 @@ T["opencode"]["populates extra_skills and cli_commands from the CLI resolver whe
   expect.equality(names["cli-only-skill"], true)
   expect.equality((s.cli_commands or {})[1].name, "cli-only-command")
   -- Handed over by reference, not copied: the resolver fills these lists after detect returns.
-  expect.equality(s.cli_commands == require("agentcomplete.opencode_cli")._cache[proj].commands, true)
+  expect.equality(
+    s.cli_commands == require("agentcomplete.opencode_cli")._cache[proj].commands,
+    true
+  )
 end
 
 T["opencode"]["omits the CLI-resolved sets when resolve_via_cli is false"] = function()
@@ -317,8 +326,8 @@ T["opencode"]["omits the CLI-resolved sets when resolve_via_cli is false"] = fun
   vim.env.AGENTCOMPLETE_CWD = proj
   require("agentcomplete").config.opencode =
     { show_all_builtin_commands = false, resolve_via_cli = false, install_plugin = false }
-  local oc = require "agentcomplete.detect.opencode"
-  local s = assert(oc.detect(named_buf "/private/tmp/1718646000009.md"))
+  local oc = require("agentcomplete.detect.opencode")
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000009.md")))
   expect.equality(s.extra_skills, nil)
   expect.equality(s.cli_commands, nil)
 end

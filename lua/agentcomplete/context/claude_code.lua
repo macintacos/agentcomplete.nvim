@@ -10,7 +10,7 @@
 local M = { name = "claude-code" }
 
 local uv = vim.loop
-local proc = require "agentcomplete.context.proc"
+local proc = require("agentcomplete.context.proc")
 
 local MAX_PID_HOPS = 5
 
@@ -66,7 +66,12 @@ end
 local function newest_message(lines)
   for i = #lines, 1, -1 do
     local ok, entry = pcall(vim.json.decode, lines[i])
-    if ok and type(entry) == "table" and entry.type == "assistant" and entry.isSidechain ~= true then
+    if
+      ok
+      and type(entry) == "table"
+      and entry.type == "assistant"
+      and entry.isSidechain ~= true
+    then
       local text = entry_text(entry)
       if text then
         return text
@@ -112,7 +117,7 @@ end
 ---@param err string
 ---@return true
 local function fail(cb, err)
-  cb { ok = false, resolver = M.name, err = err }
+  cb({ ok = false, resolver = M.name, err = err })
   return true
 end
 
@@ -126,8 +131,8 @@ function M.resolve(session, cb, opts)
   end
   opts = opts or {}
   local system = opts.system or vim.fn.system
-  local sessions_root = opts.sessions_root or vim.fs.normalize "~/.claude/sessions"
-  local projects_root = opts.projects_root or vim.fs.normalize "~/.claude/projects"
+  local sessions_root = opts.sessions_root or vim.fs.normalize("~/.claude/sessions")
+  local projects_root = opts.projects_root or vim.fs.normalize("~/.claude/projects")
 
   local pointer_path = session_file(sessions_root, system)
   if not pointer_path then
@@ -141,15 +146,25 @@ function M.resolve(session, cb, opts)
   end
   session.session_id = session_id
 
-  local transcript = vim.fn.glob(projects_root .. "/*/" .. session_id .. ".jsonl", true, true)[1]
+  local transcript =
+    vim.fn.glob(projects_root .. "/*/" .. session_id .. ".jsonl", true, true)[1]
   if not transcript then
-    return fail(cb, "no transcript for session " .. session_id .. " under " .. projects_root)
+    return fail(
+      cb,
+      "no transcript for session " .. session_id .. " under " .. projects_root
+    )
   end
   local text = scan_backwards(transcript)
   if not text then
     return fail(cb, "no assistant message in " .. transcript)
   end
-  cb { ok = true, resolver = M.name, text = text, session_id = session_id, transcript = transcript }
+  cb({
+    ok = true,
+    resolver = M.name,
+    text = text,
+    session_id = session_id,
+    transcript = transcript,
+  })
   return true
 end
 

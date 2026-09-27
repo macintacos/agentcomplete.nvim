@@ -30,7 +30,7 @@ local function read_frontmatter(path)
     if lines[i] == "---" then
       break
     end
-    local k, v = lines[i]:match "^([%w_%-]+):%s*(.*)$"
+    local k, v = lines[i]:match("^([%w_%-]+):%s*(.*)$")
     if k then
       v = v:gsub('^"(.*)"$', "%1"):gsub("^'(.*)'$", "%1")
       fm[k] = v
@@ -59,7 +59,10 @@ function M.skills(dirs, namespaces)
             local fm = read_frontmatter(skill_md)
             local base = fm.name or name
             local qualified = ns and (ns .. ":" .. base) or base
-            table.insert(out, { name = qualified, description = fm.description, path = skill_md })
+            table.insert(
+              out,
+              { name = qualified, description = fm.description, path = skill_md }
+            )
           end
         end
       end
@@ -77,10 +80,13 @@ function M.commands(dirs)
   for _, dir in ipairs(dirs or {}) do
     if vim.fn.isdirectory(dir) == 1 then
       for relpath, kind in vim.fs.dir(dir, { depth = 32 }) do
-        if kind == "file" and relpath:match "%.md$" then
+        if kind == "file" and relpath:match("%.md$") then
           local name = relpath:gsub("%.md$", ""):gsub("/", ":")
           local fm = read_frontmatter(dir .. "/" .. relpath)
-          table.insert(out, { name = name, description = fm.description, path = dir .. "/" .. relpath })
+          table.insert(
+            out,
+            { name = name, description = fm.description, path = dir .. "/" .. relpath }
+          )
         end
       end
     end
@@ -105,7 +111,8 @@ end
 ---@param cwd string
 ---@return boolean
 local function in_work_tree(cwd)
-  local probe = vim.fn.systemlist { "git", "-C", cwd, "rev-parse", "--is-inside-work-tree" }
+  local probe =
+    vim.fn.systemlist({ "git", "-C", cwd, "rev-parse", "--is-inside-work-tree" })
   return vim.v.shell_error == 0 and probe[1] == "true"
 end
 
@@ -117,7 +124,7 @@ end
 local function walk(cwd, kind)
   local out = {}
   for relpath, k in vim.fs.dir(cwd, { depth = 32 }) do
-    if k == kind and not relpath:match "^%." and not relpath:match "/%." then
+    if k == kind and not relpath:match("^%.") and not relpath:match("/%.") then
       out[#out + 1] = relpath
     end
   end
@@ -131,7 +138,15 @@ end
 ---@return string[]
 function M.files(cwd)
   if in_work_tree(cwd) then
-    local tracked = vim.fn.systemlist { "git", "-C", cwd, "ls-files", "--cached", "--others", "--exclude-standard" }
+    local tracked = vim.fn.systemlist({
+      "git",
+      "-C",
+      cwd,
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+    })
     if vim.v.shell_error == 0 then
       return tracked
     end
@@ -167,7 +182,15 @@ end
 ---@param files string[]
 ---@return string[]|nil
 local function git_folders(cwd, files)
-  local untracked = vim.fn.systemlist { "git", "-C", cwd, "ls-files", "--others", "--directory", "--exclude-standard" }
+  local untracked = vim.fn.systemlist({
+    "git",
+    "-C",
+    cwd,
+    "ls-files",
+    "--others",
+    "--directory",
+    "--exclude-standard",
+  })
   if vim.v.shell_error ~= 0 then
     return nil
   end
@@ -201,7 +224,7 @@ end
 local function claude_home()
   local base = vim.env.CLAUDE_CONFIG_DIR
   if not base or base == "" then
-    base = vim.fn.expand "~/.claude"
+    base = vim.fn.expand("~/.claude")
   end
   return base
 end
@@ -219,11 +242,16 @@ local function plugin_name(install_path, key)
     local ok, data = pcall(function()
       return vim.json.decode(table.concat(vim.fn.readfile(manifest), "\n"))
     end)
-    if ok and type(data) == "table" and type(data.name) == "string" and data.name ~= "" then
+    if
+      ok
+      and type(data) == "table"
+      and type(data.name) == "string"
+      and data.name ~= ""
+    then
       return data.name
     end
   end
-  return (key:match "^(.-)@") or key
+  return (key:match("^(.-)@")) or key
 end
 
 ---Every enabled plugin, read from `<home>/plugins/installed_plugins.json`
@@ -248,8 +276,15 @@ local function enabled_plugin_roots(home)
   for key, records in pairs(data.plugins) do
     if type(key) == "string" and type(records) == "table" then
       for _, record in ipairs(records) do
-        if type(record) == "table" and type(record.installPath) == "string" and record.installPath ~= "" then
-          table.insert(roots, { name = plugin_name(record.installPath, key), path = record.installPath })
+        if
+          type(record) == "table"
+          and type(record.installPath) == "string"
+          and record.installPath ~= ""
+        then
+          table.insert(
+            roots,
+            { name = plugin_name(record.installPath, key), path = record.installPath }
+          )
         end
       end
     end
@@ -289,7 +324,8 @@ end
 ---@return string
 function M.opencode_config_home()
   local xdg = vim.env.XDG_CONFIG_HOME
-  return (xdg and xdg ~= "") and (xdg .. "/opencode") or vim.fn.expand "~/.config/opencode"
+  return (xdg and xdg ~= "") and (xdg .. "/opencode")
+    or vim.fn.expand("~/.config/opencode")
 end
 
 ---OpenCode's config base directories for a session rooted at `cwd`: the global config
@@ -381,7 +417,7 @@ local function strip_jsonc(s)
       pending_comma = false -- drop the trailing comma
       out[#out + 1] = c
       i = i + 1
-    elseif c:match "%s" then
+    elseif c:match("%s") then
       out[#out + 1] = c -- whitespace doesn't resolve a pending comma
       i = i + 1
     else
@@ -405,7 +441,7 @@ local function opencode_config_files(cwd)
   if explicit and explicit ~= "" then
     files[#files + 1] = explicit
   end
-  for _, base in ipairs { M.opencode_config_home(), cwd } do
+  for _, base in ipairs({ M.opencode_config_home(), cwd }) do
     files[#files + 1] = base .. "/opencode.json"
     files[#files + 1] = base .. "/opencode.jsonc"
   end
@@ -453,7 +489,11 @@ function M.opencode_builtin_commands()
     { name = "compact", description = "Compact the current session." },
     { name = "connect", description = "Add a provider to OpenCode.", hidden = true },
     { name = "details", description = "Toggle tool execution details.", hidden = true },
-    { name = "editor", description = "Open external editor for composing messages.", hidden = true },
+    {
+      name = "editor",
+      description = "Open external editor for composing messages.",
+      hidden = true,
+    },
     { name = "exit", description = "Exit OpenCode.", hidden = true },
     { name = "export", description = "Export the current conversation to Markdown." },
     { name = "help", description = "Show the help dialog.", hidden = true },
@@ -461,10 +501,18 @@ function M.opencode_builtin_commands()
     { name = "models", description = "List available models.", hidden = true },
     { name = "new", description = "Start a new session.", hidden = true },
     { name = "redo", description = "Redo a previously undone message." },
-    { name = "sessions", description = "List and switch between sessions.", hidden = true },
+    {
+      name = "sessions",
+      description = "List and switch between sessions.",
+      hidden = true,
+    },
     { name = "share", description = "Share the current session." },
     { name = "themes", description = "List available themes.", hidden = true },
-    { name = "thinking", description = "Toggle visibility of thinking/reasoning blocks.", hidden = true },
+    {
+      name = "thinking",
+      description = "Toggle visibility of thinking/reasoning blocks.",
+      hidden = true,
+    },
     { name = "undo", description = "Undo the last message in the conversation." },
     { name = "unshare", description = "Unshare the current session." },
   }
