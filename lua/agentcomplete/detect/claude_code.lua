@@ -9,8 +9,6 @@
 ---non-standard launches.
 local M = { name = "claude-code" }
 
-local scan = require("agentcomplete.scan")
-
 ---Whether the buffer is Claude Code's external-editor prompt, judged by name.
 ---@param bufnr integer
 ---@return boolean
@@ -39,6 +37,7 @@ function M.detect(bufnr)
     return nil
   end
   local cwd = resolve_cwd()
+  local scan = require("agentcomplete.scan")
   local skill_dirs, command_dirs, skill_namespaces = scan.claude_dirs(cwd)
   return {
     tool = "claude-code",

@@ -65,17 +65,9 @@ require("blink.cmp").setup({
 })
 ```
 
-Call `require("agentcomplete").setup()` **after** `blink.cmp` is configured. With
-lazy.nvim, add blink as a dependency so it loads first; `opts = {}` then runs
-agentcomplete's `setup()` in the right order:
-
-```lua
-{
-  "macintacos/agentcomplete.nvim",
-  dependencies = { "saghen/blink.cmp" },
-  opts = {},
-}
-```
+agentcomplete reads blink's config when a prompt buffer opens, so blink just has to be
+loadable by then (lazy.nvim's load-on-`require` is fine; a blink added on an event is
+not).
 
 Once registered, the source self-gates — it stays dormant everywhere except a detected
 prompt buffer, so listing it above is harmless.

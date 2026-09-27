@@ -9,9 +9,9 @@
 
 Installation and nothing more: the one-line description, requirements, the install
 snippets, the **setup gotchas** that actually block a first run (blink must register the
-source; `setup()` runs after `blink.cmp`; the `backend = "native"` escape hatch; the
-one-line only-source-suppression heads-up), and the "Learn more" pointers to
-`:help agentcomplete` and [`CONTRIBUTING.md`](../../../CONTRIBUTING.md).
+source; the `backend = "native"` escape hatch; the one-line only-source-suppression
+heads-up), and the "Learn more" pointers to `:help agentcomplete` and
+[`CONTRIBUTING.md`](../../../CONTRIBUTING.md).
 
 ## What does NOT belong here
 

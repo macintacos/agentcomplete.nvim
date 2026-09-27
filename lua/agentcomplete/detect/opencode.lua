@@ -10,8 +10,6 @@
 ---`$AGENTCOMPLETE_CWD` (per-launch) or `vim.g.agentcomplete_cwd` (static config).
 local M = { name = "opencode" }
 
-local scan = require("agentcomplete.scan")
-
 ---Whether the buffer is OpenCode's external-editor prompt: OpenCode launched this Neovim
 ---(`$OPENCODE`) and the buffer is its `<epoch-millis>.md` temp file.
 ---@param bufnr integer
@@ -44,6 +42,7 @@ function M.detect(bufnr)
     return nil
   end
   local cwd = resolve_cwd()
+  local scan = require("agentcomplete.scan")
   local skill_dirs, command_dirs = scan.opencode_dirs(cwd)
   -- Config-map commands first so a user's own command wins the name-dedup in `sources.items`
   -- over a built-in of the same name; OpenCode's built-in TUI commands fill in the rest.
@@ -51,7 +50,7 @@ function M.detect(bufnr)
   vim.list_extend(extra_commands, scan.opencode_builtin_commands())
   -- OpenCode's authoritative skill and command sets, resolved asynchronously via
   -- `opencode debug skill` / `opencode debug config` (config is read at call-time, mirroring
-  -- backends/blink.lua, to avoid an init<->detect require cycle). Opt-out via
+  -- backends/blink.lua, because setup() replaces the config wholesale). Opt-out via
   -- `opencode.resolve_via_cli = false`. The first detect kicks off the background jobs and
   -- returns the empty cache; later detects read the result. The lists are handed over by
   -- reference, not copied, because the jobs fill them in place after this returns.

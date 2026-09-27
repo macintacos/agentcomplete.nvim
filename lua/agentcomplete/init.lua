@@ -20,14 +20,6 @@
 ---@class AgentComplete
 local M = {}
 
-local detect = require("agentcomplete.detect")
-local backends = require("agentcomplete.backends")
-local highlight = require("agentcomplete.highlight")
-local context = require("agentcomplete.context")
-local layout = require("agentcomplete.layout")
-local composer = require("agentcomplete.composer")
-local scan = require("agentcomplete.scan")
-
 ---Default configuration.
 ---@type AgentComplete.Config
 local defaults = {
@@ -57,7 +49,8 @@ M.config = vim.deepcopy(defaults)
 ---@return AgentComplete.Session
 local function fallback_session()
   local cwd = vim.loop.cwd() or vim.fn.getcwd()
-  local skill_dirs, command_dirs, skill_namespaces = scan.claude_dirs(cwd)
+  local skill_dirs, command_dirs, skill_namespaces =
+    require("agentcomplete.scan").claude_dirs(cwd)
   return {
     tool = "manual",
     cwd = cwd,
@@ -69,7 +62,7 @@ local function fallback_session()
 end
 
 ---Add each of `builtins` to a registry it is not already in, by name. Idempotent, so repeated
----setup calls are safe.
+---setup and attach calls are safe.
 ---@param registry { name: string }[]
 ---@param register fun(item: any)
 ---@param builtins { name: string }[]
@@ -88,14 +81,21 @@ local function ensure_registered(registry, register, builtins)
   end
 end
 
----Register the built-in detectors and last-message resolvers.
-local function ensure_builtins()
+---Register the built-in detectors. Eager, unlike the resolvers: blink's provider gates on
+---this registry itself, before any attach.
+local function ensure_detectors()
+  local detect = require("agentcomplete.detect")
   -- Detector order is significant (first match wins); Claude Code before OpenCode. The two are
   -- mutually exclusive in practice, so the order is harmless either way.
   ensure_registered(detect.detectors, detect.register, {
     require("agentcomplete.detect.claude_code"),
     require("agentcomplete.detect.opencode"),
   })
+end
+
+---Register the built-in last-message resolvers.
+local function ensure_resolvers()
+  local context = require("agentcomplete.context")
   ensure_registered(context.resolvers, context.register, {
     require("agentcomplete.context.claude_code"),
     require("agentcomplete.context.opencode"),
@@ -156,7 +156,7 @@ local function install_opencode_plugin_from_rtp()
   -- A runtimepath entry may be relative; the symlink is resolved from another directory.
   return M.install_opencode_plugin(
     vim.fn.fnamemodify(source, ":p"),
-    scan.opencode_config_home()
+    require("agentcomplete.scan").opencode_config_home()
   )
 end
 
@@ -183,12 +183,21 @@ function M.attach(bufnr, opts)
 
   local session
   if M.config.detect ~= "never" then
-    session = detect.detect(buf)
+    session = require("agentcomplete.detect").detect(buf)
   end
   if not session and (opts.force or M.config.detect == "always") then
     session = fallback_session()
   end
   if session then
+    -- Here, not in setup(): these load the pane modules and blink.cmp, which startup must not.
+    -- Both are idempotent.
+    ensure_resolvers()
+    local backends = require("agentcomplete.backends")
+    backends.install_suppression(M.config)
+    local highlight = require("agentcomplete.highlight")
+    local layout = require("agentcomplete.layout")
+    local composer = require("agentcomplete.composer")
+    local context = require("agentcomplete.context")
     session.sources = M.config.sources
     session.show_all_builtin_commands = M.config.opencode.show_all_builtin_commands
     backends.attach(buf, session, M.config)
@@ -216,6 +225,11 @@ function M.detach(bufnr)
   if buf == 0 then
     buf = vim.api.nvim_get_current_buf()
   end
+  local backends = require("agentcomplete.backends")
+  local highlight = require("agentcomplete.highlight")
+  local context = require("agentcomplete.context")
+  local layout = require("agentcomplete.layout")
+  local composer = require("agentcomplete.composer")
   backends.detach(buf)
   highlight.detach(buf)
   context.close(buf)
@@ -228,8 +242,7 @@ end
 ---@return AgentComplete
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
-  ensure_builtins()
-  backends.install_suppression(M.config)
+  ensure_detectors()
 
   vim.api.nvim_create_user_command("AgentCompleteAttach", function()
     M.attach(0, { force = true })
