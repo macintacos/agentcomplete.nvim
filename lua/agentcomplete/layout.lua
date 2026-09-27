@@ -11,9 +11,8 @@
 ---@class AgentComplete.Layout
 local M = {}
 
----Columns the pane's frame adds around its text: a blank column either side, the border, and the
----pane's own two-column inset.
-local PANE_FRAME = 6
+---Columns the pane's frame adds around its text: a blank column either side, and the border.
+local PANE_FRAME = 4
 
 ---Rows the boxed prompt is never shorter than, however little it holds.
 local BOX_HEIGHT = 10

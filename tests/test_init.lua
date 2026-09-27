@@ -288,7 +288,7 @@ T["attach"]["turns the prompt window into a page, and detach turns it back"] = f
   agentcomplete.setup({ backend = "native" })
   local buf = numbered_buffer()
   expect.equality(agentcomplete.attach(buf, { force = true }), true)
-  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { false, "    " })
+  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { false, "  " })
   agentcomplete.detach(buf)
   expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { true, "" })
 end

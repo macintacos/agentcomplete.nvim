@@ -20,10 +20,9 @@ M._panes = {}
 ---What the pane turns off beyond `style = "minimal"`, which already clears 'number',
 ---'relativenumber', 'cursorline', 'foldcolumn', 'spell' and 'list'. 'conceallevel' is the
 ---point of the pane rather than a detail of it: markdown markup exists to be edited, and this
----is the one markdown in the editor nobody will edit. The inset is a 'statuscolumn' rather
----than padding on the text, which would land in every yank and hide the markup from the
----parser that renders it. 'smoothscroll' lets the scroll keys step through a paragraph the
----pane wraps a row at a time, where Vim would otherwise skip it whole as one line.
+---is the one markdown in the editor nobody will edit. 'smoothscroll' lets the scroll keys step
+---through a paragraph the pane wraps a row at a time, where Vim would otherwise skip it whole as
+---one line.
 local PANE_OPTIONS = {
   wrap = true,
   linebreak = true,
@@ -31,7 +30,7 @@ local PANE_OPTIONS = {
   conceallevel = 3,
   concealcursor = "nc",
   signcolumn = "no",
-  statuscolumn = "  ",
+  statuscolumn = "",
   winhighlight = "Normal:NormalFloat",
 }
 
@@ -136,7 +135,7 @@ end
 ---@param scrolls AgentComplete.Context.Pane.Scroll[]
 ---@return vim.api.keyset.win_config
 local function chrome(resolver, rung, scrolls)
-  local title = { { "  ", "FloatBorder" }, { resolver, "Title" } }
+  local title = { { resolver, "Title" } }
   if rung then
     title[#title + 1] = { " · " .. rung, "Comment" }
   end

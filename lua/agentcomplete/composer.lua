@@ -9,7 +9,7 @@ local M = {}
 
 ---Columns of inset before the prompt's text. `layout` sizes the prompt window to the measure plus
 ---this, and it matches the pane's own frame, so stacked the reply shares the message's left edge.
-M.INSET = 4
+M.INSET = 2
 
 ---What the prompt window turns off and on. The statusline is absent on purpose: it is the
 ---user's, and it is where their mode shows. The inset is a 'statuscolumn' rather than padding on

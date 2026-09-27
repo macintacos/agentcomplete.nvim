@@ -938,8 +938,8 @@ T["open"]["gives the message the layout's measure beside the prompt"] = function
     { enabled = true, min_width = 160 },
     with_resolver(ok_result("hello"))
   )
-  expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 86)
-  expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), 82)
+  expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 84)
+  expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), 80)
 end
 
 -- The terminal is resized mid-session, and an orientation chosen once at open time leaves the

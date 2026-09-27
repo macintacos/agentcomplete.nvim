@@ -500,7 +500,7 @@ In the prompt window, agentcomplete:
 		line, and the winbar
 	wraps	at word boundaries, with a wrapped list item hanging
 		under its text rather than its bullet
-	insets	the text four columns from the window's edge
+	insets	the text two columns from the window's edge
 	blanks	the window separators and the `~` rows past the last
 		line
 

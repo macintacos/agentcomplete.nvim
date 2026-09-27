@@ -54,7 +54,7 @@ T["attach"]["drops the gutter and wraps prose inside an inset"] = function()
   expect.equality(vim.wo[win].signcolumn, "no")
   expect.equality(vim.wo[win].cursorline, false)
   expect.equality(vim.wo[win].winbar, "")
-  expect.equality(vim.wo[win].statuscolumn, "    ")
+  expect.equality(vim.wo[win].statuscolumn, "  ")
   expect.equality(
     { vim.wo[win].wrap, vim.wo[win].linebreak, vim.wo[win].breakindent },
     { true, true, true }
@@ -116,7 +116,7 @@ T["attach"]["takes the statuscolumn back from a plain :set in the prompt"] = fun
   vim.cmd("set statuscolumn=%l")
   local held = vim.wo[win].statuscolumn
   vim.go.statuscolumn = ""
-  expect.equality(held, "    ")
+  expect.equality(held, "  ")
 end
 
 -- An empty local winbar falls back to a global one, so emptying it would hide nothing.

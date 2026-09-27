@@ -13,7 +13,7 @@ local function plan(input)
     min_width = 160,
     pane = true,
     margins = true,
-    inset = 4,
+    inset = 2,
   }, input))
 end
 
@@ -22,7 +22,7 @@ T["plan"] = new_set()
 T["plan"]["centers the message and the reply side by side at full measure"] = function()
   expect.equality(
     plan({ columns = 200 }),
-    { beside = true, left = 13, right = 14, pane = 86, prompt = 84 }
+    { beside = true, left = 15, right = 16, pane = 84, prompt = 82 }
   )
 end
 
@@ -31,7 +31,7 @@ T["plan"]["shares a width too narrow for both measures evenly"] = function()
   local p = plan({ columns = 160 })
   expect.equality(p, { beside = true, left = 1, right = 1, pane = 78, prompt = 77 })
   -- Text either side of the pane's frame and the prompt's inset.
-  expect.equality({ p.pane - 6, p.prompt - 4 }, { 72, 73 })
+  expect.equality({ p.pane - 4, p.prompt - 2 }, { 74, 75 })
 end
 
 -- Stacked, the prompt shares the pane's column, so the column is the pane's frame wide and the
@@ -39,14 +39,14 @@ end
 T["plan"]["centers one column for the thread below min_width"] = function()
   expect.equality(
     plan({ columns = 120 }),
-    { beside = false, left = 16, right = 16, prompt = 86 }
+    { beside = false, left = 17, right = 17, prompt = 84 }
   )
 end
 
 T["plan"]["centers the prompt alone when there is no pane"] = function()
   expect.equality(
     plan({ columns = 200, pane = false }),
-    { beside = false, left = 57, right = 57, prompt = 84 }
+    { beside = false, left = 58, right = 58, prompt = 82 }
   )
 end
 
@@ -59,7 +59,7 @@ end
 
 -- Without margins the prompt is not the layout's to size: only the pane gets a width.
 T["plan"]["sizes only the pane when there are no margins"] = function()
-  expect.equality(plan({ columns = 200, margins = false }), { beside = true, pane = 86 })
+  expect.equality(plan({ columns = 200, margins = false }), { beside = true, pane = 84 })
   expect.equality(plan({ columns = 120, margins = false }), { beside = false })
 end
 
@@ -139,7 +139,7 @@ local function attached(opts)
   vim.api.nvim_set_current_buf(buf)
   require("agentcomplete.layout").attach(
     buf,
-    vim.tbl_extend("force", { measure = 80, margins = true, inset = 4 }, opts or {})
+    vim.tbl_extend("force", { measure = 80, margins = true, inset = 2 }, opts or {})
   )
   return buf, vim.api.nvim_get_current_win()
 end
@@ -181,7 +181,7 @@ end
 T["windows"]["holds the prompt at the measure between margins"] = function()
   vim.o.columns = 200
   local _, host = attached()
-  expect.equality(row_widths(), { 57, 84, 57 })
+  expect.equality(row_widths(), { 58, 82, 58 })
   expect.equality(prompt_column()[2], host)
 end
 
@@ -278,7 +278,7 @@ T["windows"]["reserves the pane's room to the left of the prompt when wide"] = f
   vim.o.columns = 200
   local buf, host = attached()
   local spacer = require("agentcomplete.layout").reserve(buf, PLACEMENT)
-  expect.equality(row_widths(), { 13, 86, 84, 14 })
+  expect.equality(row_widths(), { 15, 84, 82, 16 })
   expect.equality({ vim.fn.winlayout()[2][2][2], prompt_column()[2] }, { spacer, host })
 end
 
@@ -288,7 +288,7 @@ T["windows"]["stacks the pane's room in the prompt's column when narrow"] = func
   local spacer = require("agentcomplete.layout").reserve(buf, PLACEMENT)
   local column = prompt_column()
   expect.equality({ #column, column[1], column[3] }, { 4, spacer, host })
-  expect.equality(row_widths(), { 16, 86, 16 })
+  expect.equality(row_widths(), { 17, 84, 17 })
   expect.equality(column_heights(), { 11, 1, 6, 1 })
 end
 
@@ -311,10 +311,10 @@ T["windows"]["re-places the pane and the margins when the terminal is resized"] 
   require("agentcomplete.layout").reserve(buf, PLACEMENT)
   vim.o.columns = 120
   vim.api.nvim_exec_autocmds("VimResized", {})
-  expect.equality(row_widths(), { 16, 86, 16 })
+  expect.equality(row_widths(), { 17, 84, 17 })
   vim.o.columns = 200
   vim.api.nvim_exec_autocmds("VimResized", {})
-  expect.equality(row_widths(), { 13, 86, 84, 14 })
+  expect.equality(row_widths(), { 15, 84, 82, 16 })
 end
 
 T["windows"]["keeps the prompt boxed as the pane restacks"] = function()
@@ -338,7 +338,7 @@ T["windows"]["gives the pane's room back when it is released"] = function()
   local spacer = assert(layout.reserve(buf, PLACEMENT), "no spacer reserved")
   layout.release(buf)
   expect.equality(vim.api.nvim_win_is_valid(spacer), false)
-  expect.equality(row_widths(), { 57, 84, 57 })
+  expect.equality(row_widths(), { 58, 82, 58 })
   expect.equality(prompt_column()[2], host)
 end
 
@@ -346,7 +346,7 @@ T["windows"]["sizes the pane beside a prompt with no margins"] = function()
   vim.o.columns = 200
   local buf = attached({ margins = false })
   require("agentcomplete.layout").reserve(buf, PLACEMENT)
-  expect.equality(row_widths(), { 86, 113 })
+  expect.equality(row_widths(), { 84, 115 })
 end
 
 T["windows"]["hands the cursor back to the prompt from a margin"] = function()
