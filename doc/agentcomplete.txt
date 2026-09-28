@@ -497,19 +497,19 @@ nothing around it asks for your attention.
 In the prompt window, agentcomplete:
 
 	hides	line numbers, the sign and fold columns, the cursor
-		line, and the winbar
+		line, and the winbar's contents
+	pads	the text with a blank row above it, where the
+		winbar was
 	wraps	at word boundaries, with a wrapped list item hanging
 		under its text rather than its bullet
 	insets	the text two columns from the window's edge
 	blanks	the window separators and the `~` rows past the last
 		line
 
-A winbar you set globally cannot be switched off for one window, so it is
-blanked there instead, leaving an empty row. Your statusline, colorscheme,
-spelling, 'textwidth', and keymaps are left alone. Every option is set for
-the prompt buffer only (|:setlocal|), so any other buffer opened in that
-window looks as it always does, and each is put back by
-|:AgentCompleteDetach|.
+Your statusline, colorscheme, spelling, 'textwidth', and keymaps are left
+alone. Every option is set for the prompt buffer only (|:setlocal|), so any
+other buffer opened in that window looks as it always does, and each is put
+back by |:AgentCompleteDetach|.
 
 The text wraps at 'composer.width' columns — 80 by default — however wide the
 terminal is. Blank margins either side hold the prompt at that width and keep
@@ -521,9 +521,9 @@ prompt closes them first, so `:q` still leaves Neovim in one step.
 The prompt is boxed in the middle of its column instead of running its full
 height. The box starts ten rows tall and grows with your text, staying
 centered, until it is a few rows short of the top and bottom edges; past that
-the prompt scrolls. Its rounded border sits right above your text, with a row
-inside it below the text — where the prompt's own statusline sits, when each
-window has one ('laststatus' other than 3). Beside the
+the prompt scrolls. Its rounded border sits a blank row above your text, with
+a row inside it below the text — where the prompt's own statusline sits, when
+each window has one ('laststatus' other than 3). Beside the
 |agentcomplete-context| pane the box is centered on the screen's full height;
 stacked with it, in the half of the column the pane leaves.
 

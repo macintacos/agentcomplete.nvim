@@ -53,12 +53,18 @@ T["attach"]["drops the gutter and wraps prose inside an inset"] = function()
   expect.equality(vim.wo[win].relativenumber, false)
   expect.equality(vim.wo[win].signcolumn, "no")
   expect.equality(vim.wo[win].cursorline, false)
-  expect.equality(vim.wo[win].winbar, "")
   expect.equality(vim.wo[win].statuscolumn, "  ")
   expect.equality(
     { vim.wo[win].wrap, vim.wo[win].linebreak, vim.wo[win].breakindent },
     { true, true, true }
   )
+end
+
+-- The winbar row is the padding between the box's top border and the first line.
+T["attach"]["pads the text with a blank row above it"] = function()
+  local buf, win = prompt()
+  require("agentcomplete.composer").attach(buf)
+  expect.equality(vim.wo[win].winbar, " ")
 end
 
 T["attach"]["keeps the window's other fill characters"] = function()
@@ -85,7 +91,7 @@ T["attach"]["takes the winbar back off when a plugin sets it again"] = function(
   require("agentcomplete.composer").attach(buf)
   vim.cmd("vsplit")
   vim.wo[win].winbar = "%{%v:lua.dropbar()%}"
-  expect.equality(vim.wo[win].winbar, "")
+  expect.equality(vim.wo[win].winbar, " ")
 end
 
 -- dropbar re-attaches from inside its own `BufWritePost` handler, where `OptionSet` never fires:
@@ -104,9 +110,9 @@ T["attach"]["takes the winbar back off when a plugin sets it from its own autocm
   vim.api.nvim_exec_autocmds("BufWritePost", { buffer = buf })
   vim.api.nvim_del_augroup_by_id(grp)
   vim.wait(100, function()
-    return vim.wo[win].winbar == ""
+    return vim.wo[win].winbar == " "
   end)
-  expect.equality(vim.wo[win].winbar, "")
+  expect.equality(vim.wo[win].winbar, " ")
 end
 
 -- A `:set` in the prompt sets its local value as much as a `:setlocal` does.
@@ -117,16 +123,6 @@ T["attach"]["takes the statuscolumn back from a plain :set in the prompt"] = fun
   local held = vim.wo[win].statuscolumn
   vim.go.statuscolumn = ""
   expect.equality(held, "  ")
-end
-
--- An empty local winbar falls back to a global one, so emptying it would hide nothing.
-T["attach"]["blanks a global winbar rather than falling back to it"] = function()
-  vim.go.winbar = "%f"
-  local buf, win = prompt()
-  require("agentcomplete.composer").attach(buf)
-  local winbar = vim.api.nvim_get_option_value("winbar", { win = win, scope = "local" })
-  vim.go.winbar = ""
-  expect.equality(winbar, " ")
 end
 
 -- A user who sets the number column in the prompt meant to.

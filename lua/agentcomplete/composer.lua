@@ -21,6 +21,9 @@ local OPTIONS = {
   foldcolumn = "0",
   cursorline = false,
   statuscolumn = string.rep(" ", M.INSET),
+  -- Blank rather than empty: a row of padding above the text, and one no global winbar can
+  -- draw into.
+  winbar = " ",
   wrap = true,
   linebreak = true,
   breakindent = true,
@@ -79,8 +82,6 @@ function M.attach(buf)
   end
   local wanted = vim.tbl_extend("error", OPTIONS, {
     fillchars = M.fillchars(vim.api.nvim_get_option_value("fillchars", { win = win })),
-    -- An empty local winbar falls back to a global one, so that is blanked rather than emptied.
-    winbar = vim.go.winbar == "" and "" or " ",
   })
   local saved = {}
   for option, value in pairs(wanted) do

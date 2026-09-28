@@ -199,6 +199,16 @@ T["windows"]["grows the box with the prompt's text"] = function()
   expect.equality(column_heights(), { 10, 15, 11 })
 end
 
+-- The winbar is the composer's row of padding above the text, and takes a row of the window.
+T["windows"]["fits the box to the text below a winbar"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
+  local buf, host = attached()
+  vim.wo[host][0].winbar = " "
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  expect.equality(column_heights(), { 10, 16, 10 })
+end
+
 -- A terminal shrunk and grown again scrolls the prompt to keep its cursor in view, and growing
 -- the window back does not scroll it back.
 T["windows"]["shows the prompt from its first line whenever it all fits"] = function()
@@ -245,7 +255,10 @@ end
 T["windows"]["tints the box against the margins"] = function()
   vim.o.columns = 200
   local _, host = attached()
-  expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt")
+  expect.equality(
+    vim.wo[host].winhighlight,
+    "Normal:AgentCompletePrompt,WinBar:AgentCompletePrompt,WinBarNC:AgentCompletePrompt"
+  )
   expect.equality(
     vim.api.nvim_get_hl(0, { name = "AgentCompletePrompt" }).link,
     "NormalFloat"
@@ -258,7 +271,10 @@ T["windows"]["boxes the prompt beside a pane that runs the full height"] = funct
   local spacer = assert(require("agentcomplete.layout").reserve(buf, PLACEMENT))
   expect.equality(column_heights(), { 13, 10, 13 })
   expect.equality(vim.api.nvim_win_get_height(spacer), 38)
-  expect.equality(vim.wo[host].winhighlight, "Normal:AgentCompletePrompt")
+  expect.equality(
+    vim.wo[host].winhighlight,
+    "Normal:AgentCompletePrompt,WinBar:AgentCompletePrompt,WinBarNC:AgentCompletePrompt"
+  )
 end
 
 T["windows"]["opens no margins around a prompt sharing the screen"] = function()

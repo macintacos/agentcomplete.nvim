@@ -283,7 +283,9 @@ local function open_box(state)
     winhighlight = winhighlight,
   }
   vim.w[state.host].agentcomplete_box = true
-  local tint = "Normal:AgentCompletePrompt"
+  -- The winbar too: it is the box's row of padding above the text.
+  local tint =
+    "Normal:AgentCompletePrompt,WinBar:AgentCompletePrompt,WinBarNC:AgentCompletePrompt"
   set_winhighlight(
     state.host,
     winhighlight == "" and tint or (winhighlight .. "," .. tint)
@@ -349,7 +351,9 @@ end
 local function fit_box(box, host)
   local height = vim.api.nvim_win_get_height
   local rows = height(box.top) + height(host) + height(box.bottom)
+  -- A window's height counts its winbar; its text's does not.
   local content = vim.api.nvim_win_text_height(host, {}).all
+    + vim.fn.getwininfo(host)[1].winbar
   local heights = M.box(rows, content, BOX_HEIGHT)
   vim.api.nvim_win_set_height(box.top, heights.top)
   vim.api.nvim_win_set_height(host, heights.prompt)
