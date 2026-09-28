@@ -74,22 +74,137 @@ T["box"] = new_set()
 
 T["box"]["centers a prompt of the minimum height"] = function()
   expect.equality(
-    require("agentcomplete.layout").box(36, 1, 10),
+    require("agentcomplete.layout").box(36, 1),
     { top = 13, prompt = 10, bottom = 13 }
   )
 end
 
 T["box"]["grows with the prompt's text, staying centered"] = function()
   expect.equality(
-    require("agentcomplete.layout").box(36, 15, 10),
+    require("agentcomplete.layout").box(36, 15),
     { top = 10, prompt = 15, bottom = 11 }
   )
 end
 
 T["box"]["stops growing a row short of either edge"] = function()
   expect.equality(
-    require("agentcomplete.layout").box(36, 50, 10),
+    require("agentcomplete.layout").box(36, 50),
     { top = 1, prompt = 34, bottom = 1 }
+  )
+end
+
+T["box"]["centers the box and the message stacked above it as a pair"] = function()
+  expect.equality(
+    require("agentcomplete.layout").box(35, 1, { side = "above", rows = 2 }),
+    { pane = 13, top = 1, prompt = 10, bottom = 11 }
+  )
+end
+
+T["box"]["centers the box and the message stacked below it as a pair"] = function()
+  expect.equality(
+    require("agentcomplete.layout").box(35, 1, { side = "below", rows = 2 }),
+    { top = 10, prompt = 10, bottom = 1, pane = 14 }
+  )
+end
+
+T["box"]["gives a long message every row the prompt leaves"] = function()
+  expect.equality(
+    require("agentcomplete.layout").box(35, 1, { side = "above", rows = 60 }),
+    { pane = 23, top = 1, prompt = 10, bottom = 1 }
+  )
+end
+
+T["box"]["lets a long prompt grow past half the column beside a short message"] = function()
+  expect.equality(
+    require("agentcomplete.layout").box(35, 25, { side = "above", rows = 2 }),
+    { pane = 6, top = 1, prompt = 25, bottom = 3 }
+  )
+end
+
+T["box"]["holds a long prompt to half the column beside a long message"] = function()
+  expect.equality(
+    require("agentcomplete.layout").box(35, 30, { side = "above", rows = 60 }),
+    { pane = 17, top = 1, prompt = 16, bottom = 1 }
+  )
+end
+
+T["message"] = new_set()
+
+---Where the message's float goes, for a spacer at `area` and the box's edges at `box`.
+local function message_at(input)
+  return require("agentcomplete.layout").message(input)
+end
+
+T["message"]["centers the message on the box beside it"] = function()
+  expect.equality(
+    message_at({
+      area = { row = 0, col = 16, width = 84, height = 38 },
+      rows = 2,
+      side = "left",
+      box = { top = 13, bottom = 25 },
+    }),
+    { row = 17, col = 17, width = 80, height = 2 }
+  )
+end
+
+T["message"]["keeps a message taller than its room on screen beside the box"] = function()
+  expect.equality(
+    message_at({
+      area = { row = 0, col = 16, width = 84, height = 38 },
+      rows = 60,
+      side = "left",
+      box = { top = 20, bottom = 32 },
+    }),
+    { row = 0, col = 17, width = 80, height = 36 }
+  )
+end
+
+-- The row between them is the one blank row left: the message's footer runs on over the
+-- spacer's statusline.
+T["message"]["hangs the message a row clear of the box stacked above it"] = function()
+  expect.equality(
+    message_at({
+      area = { row = 0, col = 18, width = 84, height = 14 },
+      rows = 2,
+      side = "above",
+      box = { top = 16, bottom = 28 },
+    }),
+    { row = 11, col = 19, width = 80, height = 2 }
+  )
+end
+
+T["message"]["stops a long message stacked above at the top of its room"] = function()
+  expect.equality(
+    message_at({
+      area = { row = 0, col = 18, width = 84, height = 14 },
+      rows = 60,
+      side = "above",
+      box = { top = 16, bottom = 28 },
+    }),
+    { row = 0, col = 19, width = 80, height = 13 }
+  )
+end
+
+T["message"]["hangs the message a row clear of the box stacked below it"] = function()
+  expect.equality(
+    message_at({
+      area = { row = 24, col = 18, width = 84, height = 14 },
+      rows = 2,
+      side = "below",
+      box = { top = 10, bottom = 22 },
+    }),
+    { row = 24, col = 19, width = 80, height = 2 }
+  )
+end
+
+T["message"]["fills its room when the prompt is not boxed"] = function()
+  expect.equality(
+    message_at({
+      area = { row = 0, col = 0, width = 84, height = 38 },
+      rows = 2,
+      side = "left",
+    }),
+    { row = 0, col = 1, width = 80, height = 36 }
   )
 end
 
@@ -319,6 +434,73 @@ T["windows"]["grows the box without taking rows from a pane stacked below it"] =
   vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
   expect.equality(prompt_column()[4], spacer)
   expect.equality(vim.api.nvim_win_get_height(spacer), height)
+end
+
+---A float holding `lines`, opened as the context pane opens its own, and handed to the layout.
+---@param buf integer
+---@param lines string[]
+---@return integer
+local function message(buf, lines)
+  local scratch = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(scratch, 0, -1, false, lines)
+  local win = vim.api.nvim_open_win(scratch, false, {
+    relative = "editor",
+    row = 0,
+    col = 0,
+    width = 1,
+    height = 1,
+    border = "solid",
+  })
+  require("agentcomplete.layout").fill(buf, win)
+  return win
+end
+
+---The float's row, column, and text size.
+local function placed(win)
+  local config = vim.api.nvim_win_get_config(win)
+  return {
+    row = config.row,
+    col = config.col,
+    width = config.width,
+    height = config.height,
+  }
+end
+
+T["windows"]["centers the message on the box beside it"] = function()
+  vim.o.columns, vim.o.lines = 200, 40
+  local buf = attached()
+  require("agentcomplete.layout").reserve(buf, PLACEMENT)
+  local win = message(buf, { "hello", "world" })
+  expect.equality(placed(win), { row = 17, col = 17, width = 80, height = 2 })
+end
+
+T["windows"]["hangs the message a row above the box, the two centered as a pair"] = function()
+  vim.o.columns, vim.o.lines = 120, 40
+  local buf = attached()
+  require("agentcomplete.layout").reserve(buf, PLACEMENT)
+  local win = message(buf, { "hello", "world" })
+  expect.equality(column_heights(), { 13, 1, 10, 11 })
+  expect.equality(placed(win).row, 10)
+end
+
+T["windows"]["hangs the message a row below the box when stacked below it"] = function()
+  vim.o.columns, vim.o.lines = 120, 40
+  local buf = attached()
+  require("agentcomplete.layout").reserve(buf, { min_width = 160, stacked = "below" })
+  local win = message(buf, { "hello", "world" })
+  expect.equality(column_heights(), { 10, 10, 1, 14 })
+  expect.equality(placed(win).row, 24)
+end
+
+T["windows"]["keeps the message a row above the box as the prompt grows"] = function()
+  vim.o.columns, vim.o.lines = 120, 40
+  local buf = attached()
+  require("agentcomplete.layout").reserve(buf, PLACEMENT)
+  local win = message(buf, { "hello", "world" })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(string.rep("line\n", 14), "\n"))
+  vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+  expect.equality(column_heights(), { 11, 1, 15, 8 })
+  expect.equality(placed(win).row, 8)
 end
 
 T["windows"]["re-places the pane and the margins when the terminal is resized"] = function()

@@ -3,8 +3,9 @@
 ---The prompt stays a real window, so quitting it quits Neovim exactly as it always has. Around
 ---it sit blank splits: a margin on either side that holds the prompt at a readable measure, one
 ---above and one below that box it in the middle of its column, and the spacer the context pane
----draws its message over. This module owns all of them, and is the one place that resizes any of
----them — two modules each answering the same resize would race.
+---draws its message over. This module owns all of them, places the message's float against the
+---box, and is the one place that resizes any of them — two modules each answering the same resize
+---would race.
 ---
 ---`M.plan` is the editor-state-free core the tests drive directly; the rest is the glue that
 ---applies a plan to windows.
@@ -13,6 +14,9 @@ local M = {}
 
 ---Columns the pane's frame adds around its text: a blank column either side, and the border.
 local PANE_FRAME = 4
+
+---Rows the pane's frame adds around its text: the title above it and the footer below.
+local PANE_FRAME_ROWS = 2
 
 ---Rows the boxed prompt is never shorter than, however little it holds.
 local BOX_HEIGHT = 10
@@ -101,21 +105,42 @@ function M.plan(input)
   }
 end
 
+---@class AgentComplete.Layout.Stack
+---@field side "above"|"below" Edge of the box the message is on.
+---@field rows integer Rows the message's text takes.
+
 ---@class AgentComplete.Layout.Heights
 ---@field top integer
 ---@field prompt integer
 ---@field bottom integer
+---@field pane? integer The spacer's, while the message is stacked in the column.
 
----Heights for the prompt boxed in the middle of its column: as tall as its text but never under
----`min`, centered, and a row short of either edge.
----@param rows integer Rows the top margin, the prompt and the bottom margin share.
+---Heights for the prompt boxed in its column: as tall as its text but never under `BOX_HEIGHT`,
+---and a row short of either edge. Alone, the box is centered. With the message stacked in the
+---column the two are centered as a pair, a single row of margin between them, and the box
+---leaves the message up to half the column.
+---@param rows integer Rows the column's windows share.
 ---@param content integer Rows the prompt's text takes at its width.
----@param min integer
+---@param stack? AgentComplete.Layout.Stack
 ---@return AgentComplete.Layout.Heights
-function M.box(rows, content, min)
-  local prompt = math.max(1, math.min(math.max(content, min), rows - 2))
-  local top = math.max(1, math.floor((rows - prompt) / 2))
-  return { top = top, prompt = prompt, bottom = math.max(1, rows - prompt - top) }
+function M.box(rows, content, stack)
+  local message = stack and stack.rows + PANE_FRAME_ROWS or 0
+  local reserved = math.min(message, math.floor(rows / 2))
+  local prompt = math.max(1, math.min(math.max(content, BOX_HEIGHT), rows - 2 - reserved))
+  if not stack then
+    local top = math.max(1, math.floor((rows - prompt) / 2))
+    return { top = top, prompt = prompt, bottom = math.max(1, rows - prompt - top) }
+  end
+  message = math.min(message, rows - 2 - prompt)
+  -- Two rows more for the far margin with the message above: there the box's bottom edge sits
+  -- in that margin, and the message's footer runs on past the spacer.
+  local owed = stack.side == "above" and 2 or 0
+  local far = math.max(1, math.floor((rows - 1 - prompt - message + owed) / 2))
+  local pane = rows - 1 - prompt - far
+  if stack.side == "above" then
+    return { pane = pane, top = 1, prompt = prompt, bottom = far }
+  end
+  return { top = far, prompt = prompt, bottom = 1, pane = pane }
 end
 
 ---@alias AgentComplete.Layout.Edge "top"|"left"|"right"|"bottom"
@@ -125,6 +150,46 @@ end
 ---@field col integer Screen column of the top-left cell, from 0.
 ---@field width integer
 ---@field height integer
+
+---@class AgentComplete.Layout.MessageInput
+---@field area AgentComplete.Layout.Rect The spacer's rectangle.
+---@field rows integer Rows the message's text takes at the float's width.
+---@field side "left"|"above"|"below" Side of the prompt the spacer is on.
+---@field box? { top: integer, bottom: integer } Screen rows of the box's top and bottom edges, while the prompt is boxed.
+
+---Where the message's float goes: the top-left of its frame, and the size of its text. Beside the
+---box it is centered on it; stacked, it hangs a row clear of it. Either way it is only as tall as
+---the message, and stays within the spacer. With no box to place it against, it fills the spacer.
+---@param input AgentComplete.Layout.MessageInput
+---@return AgentComplete.Layout.Rect
+function M.message(input)
+  local area, box = input.area, input.box
+  local wanted = input.rows + PANE_FRAME_ROWS
+  local row, height
+  if not box then
+    row, height = area.row, area.height
+  elseif input.side == "left" then
+    height = math.min(wanted, area.height)
+    local centered = math.floor((box.top + box.bottom + 1 - height) / 2)
+    row = math.max(area.row, math.min(centered, area.row + area.height - height))
+  elseif input.side == "above" then
+    -- Two rows up, so the box's one-row margin stays blank: the footer covers the spacer's
+    -- statusline instead.
+    local last = box.top - 2
+    height = math.min(wanted, last - area.row + 1)
+    row = last - height + 1
+  else
+    row = box.bottom + 2
+    height = math.min(wanted, area.row + area.height - row)
+  end
+  -- Inset a column, so the spacer's separator and the frame are not drawn against each other.
+  return {
+    row = row,
+    col = area.col + 1,
+    width = math.max(1, area.width - PANE_FRAME),
+    height = math.max(1, height - PANE_FRAME_ROWS),
+  }
+end
 
 ---@class AgentComplete.Layout.EdgePlacement: AgentComplete.Layout.Rect
 ---@field lines string[] What the edge draws.
@@ -190,6 +255,7 @@ end
 ---@field right? integer Right margin.
 ---@field box? AgentComplete.Layout.Box While the prompt is boxed: whenever it is between margins.
 ---@field spacer? integer Split the pane draws over.
+---@field message? integer Float the pane draws its message in, once it is handed over.
 ---@field placement? AgentComplete.Layout.Placement How the spacer is placed, while there is one.
 ---@field beside? boolean Where the spacer sits now.
 ---@field arranging? boolean Set while `arrange` resizes, which raises the events that call it.
@@ -224,6 +290,19 @@ end
 ---@return boolean
 local function valid(win)
   return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
+
+---`win`'s whole rectangle on the screen, its winbar included.
+---@param win integer
+---@return AgentComplete.Layout.Rect
+local function rect(win)
+  local origin = vim.fn.win_screenpos(win)
+  return {
+    row = origin[1] - 1,
+    col = origin[2] - 1,
+    width = vim.api.nvim_win_get_width(win),
+    height = vim.api.nvim_win_get_height(win),
+  }
 end
 
 ---Whether `win` is the only non-floating window in its tabpage. Margins frame the whole screen,
@@ -318,13 +397,7 @@ end
 ---@param frame table<AgentComplete.Layout.Edge, integer>
 ---@param host integer
 local function draw_frame(frame, host)
-  local origin = vim.fn.win_screenpos(host)
-  local edges = M.frame({
-    row = origin[1] - 1,
-    col = origin[2] - 1,
-    width = vim.api.nvim_win_get_width(host),
-    height = vim.api.nvim_win_get_height(host),
-  })
+  local edges = M.frame(rect(host))
   for edge, win in pairs(frame) do
     local placement = edges[edge]
     vim.api.nvim_buf_set_lines(
@@ -344,19 +417,33 @@ local function draw_frame(frame, host)
   end
 end
 
----Size the box to the prompt's text at the width it has just been given. The bottom margin takes
----the rows the other two leave: set directly, it would trade rows with a pane stacked below it.
----@param box AgentComplete.Layout.Box
----@param host integer
-local function fit_box(box, host)
-  local height = vim.api.nvim_win_get_height
-  local rows = height(box.top) + height(host) + height(box.bottom)
+---Size the box to the prompt's text at the width it has just been given, and the spacer with it
+---while the message is stacked in the column. The column's last window takes the rows the others
+---leave: set directly, it would trade rows with a spacer below it that holds no message yet.
+---@param state AgentComplete.Layout.State
+---@param message? integer Rows the message's text takes, once the layout places it.
+local function fit_box(state, message)
+  local box = state.box --[[@as AgentComplete.Layout.Box]]
+  local host = state.host
+  local stack = message
+      and not state.beside
+      and { side = state.placement.stacked, rows = message }
+    or nil
+  local column = { { "top", box.top }, { "prompt", host }, { "bottom", box.bottom } }
+  if stack then
+    table.insert(column, stack.side == "above" and 1 or 4, { "pane", state.spacer })
+  end
+  local rows = 0
+  for _, window in ipairs(column) do
+    rows = rows + vim.api.nvim_win_get_height(window[2])
+  end
   -- A window's height counts its winbar; its text's does not.
   local content = vim.api.nvim_win_text_height(host, {}).all
     + vim.fn.getwininfo(host)[1].winbar
-  local heights = M.box(rows, content, BOX_HEIGHT)
-  vim.api.nvim_win_set_height(box.top, heights.top)
-  vim.api.nvim_win_set_height(host, heights.prompt)
+  local heights = M.box(rows, content, stack)
+  for i = 1, #column - 1 do
+    vim.api.nvim_win_set_height(column[i][2], heights[column[i][1]])
+  end
   draw_frame(box.frame, host)
   if content > heights.prompt then
     return
@@ -388,6 +475,36 @@ local function place_spacer(state, split)
     open_box(state)
   end
   vim.api.nvim_win_set_height(state.spacer, height)
+end
+
+---Rows the message's text takes at the width its spacer gives it.
+---@param state AgentComplete.Layout.State
+---@return integer
+local function measure(state)
+  local width = math.max(1, vim.api.nvim_win_get_width(state.spacer) - PANE_FRAME)
+  vim.api.nvim_win_set_config(state.message, { width = width })
+  return vim.api.nvim_win_text_height(state.message, {}).all
+end
+
+---Place the message's float against the box as it is placed now.
+---@param state AgentComplete.Layout.State
+---@param rows integer Rows the message's text takes.
+local function place_message(state, rows)
+  local box
+  if state.box then
+    local edges = M.frame(rect(state.host))
+    box = { top = edges.top.row, bottom = edges.bottom.row }
+  end
+  local placed = M.message({
+    area = rect(state.spacer),
+    rows = rows,
+    side = state.beside and "left" or state.placement.stacked,
+    box = box,
+  })
+  vim.api.nvim_win_set_config(
+    state.message,
+    vim.tbl_extend("error", { relative = "editor" }, placed)
+  )
 end
 
 ---Resize every window around the prompt for the terminal as it is now. The margins and the
@@ -424,8 +541,12 @@ function M.arrange(buf)
     if plan.prompt then
       vim.api.nvim_win_set_width(state.host, plan.prompt)
     end
+    local message = valid(state.message) and valid(state.spacer) and measure(state) or nil
     if state.box then
-      fit_box(state.box, state.host)
+      fit_box(state, message)
+    end
+    if message then
+      place_message(state, message)
     end
   end)
   state.arranging = false
@@ -566,6 +687,19 @@ function M.reserve(buf, placement)
   return state.spacer
 end
 
+---Hand over the float the pane draws its message in, to be placed and sized with the windows
+---around the prompt from here on. Closing it stays the pane's.
+---@param buf integer
+---@param win integer
+function M.fill(buf, win)
+  local state = M._layouts[buf]
+  if not state then
+    return
+  end
+  state.message = win
+  M.arrange(buf)
+end
+
 ---Close the pane's spacer and give its room back.
 ---@param buf integer
 function M.release(buf)
@@ -574,7 +708,7 @@ function M.release(buf)
     return
   end
   local spacer = state.spacer
-  state.spacer, state.placement, state.beside = nil, nil, nil
+  state.spacer, state.placement, state.beside, state.message = nil, nil, nil, nil
   pcall(vim.api.nvim_win_close, spacer, true)
   M.arrange(buf)
 end

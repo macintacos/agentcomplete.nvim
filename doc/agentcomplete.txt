@@ -525,7 +525,9 @@ the prompt scrolls. Its rounded border sits a blank row above your text, with
 a row inside it below the text — where the prompt's own statusline sits, when
 each window has one ('laststatus' other than 3). Beside the
 |agentcomplete-context| pane the box is centered on the screen's full height;
-stacked with it, in the half of the column the pane leaves.
+stacked with it, the box and the message are centered together, a row apart,
+and the box grows into no more than half the column while the message needs
+the rest.
 
 With the |agentcomplete-context| pane open the page reads as a conversation.
 On a terminal at least 'context.min_width' columns wide the message sits to
@@ -602,7 +604,10 @@ the reply on top instead: >lua
 Either way it is drawn without a border, padded by a blank cell all round:
 titled on the blank row above with the agent that spoke, and footed on the
 one below with the keys that scroll it and a reminder that you cannot answer
-here: "<S-Up>/<S-Down> scroll · read-only".
+here: "<S-Up>/<S-Down> scroll · read-only". Around a boxed prompt
+(|agentcomplete-composer|) it is only as tall as the message: beside the box
+it is centered on it, and stacked it sits a row clear of it. A message longer
+than the room it has scrolls.
 
 It reads as a document rather than a buffer you act on: no line numbers, no
 sign or fold column, and markdown markup concealed. That last one is the point

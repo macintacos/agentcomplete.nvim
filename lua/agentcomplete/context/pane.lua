@@ -4,8 +4,8 @@
 ---
 ---A split cannot carry a border and a float alone would cover the prompt rather than sit
 ---beside it, so the pane is both: a split reserves the room and takes the resize, and a float
----drawn inside it carries the frame. The split is `layout`'s — it places and sizes every window
----around the prompt — and this module keeps the float in step with it.
+---drawn inside it carries the frame. The split is `layout`'s, and so is the float's place:
+---`layout` places and sizes every window around the prompt, the float included.
 ---@class AgentComplete.Context.Pane
 local M = {}
 
@@ -33,21 +33,6 @@ local PANE_OPTIONS = {
   statuscolumn = "",
   winhighlight = "Normal:NormalFloat",
 }
-
----The float's rectangle: inset a column so the split's separator and the border are not drawn
----against each other, and short of the full height so the bottom border stays on screen.
----@param spacer integer
----@return vim.api.keyset.win_config
-local function geometry(spacer)
-  return {
-    relative = "win",
-    win = spacer,
-    row = 0,
-    col = 1,
-    width = math.max(1, vim.api.nvim_win_get_width(spacer) - 4),
-    height = math.max(1, vim.api.nvim_win_get_height(spacer) - 2),
-  }
-end
 
 ---A key as the footer shows it: `<C-f>` becomes `^F`, and anything that is not a plain
 ---control key stays as Vim spells it.
@@ -173,14 +158,6 @@ local function follow(pane)
     return vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_is_valid(spacer)
   end
 
-  ---Refit the float to the spacer, wherever `layout` has just put it. `layout` attached first,
-  ---so on the same resize event its handler has already run.
-  local function fit()
-    if valid() then
-      vim.api.nvim_win_set_config(win, geometry(spacer))
-    end
-  end
-
   ---On into the message when the cursor arrives from outside, back out to the prompt when it
   ---arrives from the message — which is every window move that leaves the float, since they
   ---all land on the spacer first.
@@ -200,10 +177,6 @@ local function follow(pane)
     end
   end
 
-  vim.api.nvim_create_autocmd(
-    { "VimResized", "WinResized" },
-    { group = group, callback = fit }
-  )
   vim.api.nvim_create_autocmd(
     "WinEnter",
     { group = group, callback = pass_through_spacer }
@@ -255,8 +228,10 @@ function M.open(buf, opts)
 
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  local win_config = vim.tbl_extend("error", geometry(spacer), frame)
-  local win = vim.api.nvim_open_win(pane_buf, false, win_config)
+  -- Anywhere to start with: `layout.fill` places it once it holds the message it is sized to.
+  local placeholder = { relative = "editor", row = 0, col = 0, width = 1, height = 1 }
+  local win =
+    vim.api.nvim_open_win(pane_buf, false, vim.tbl_extend("error", placeholder, frame))
 
   -- Contents and filetype after the window, not before: window-local options are set against
   -- whichever window is current, so a filetype set while the pane has none sends every
@@ -267,6 +242,7 @@ function M.open(buf, opts)
   for option, value in pairs(PANE_OPTIONS) do
     vim.wo[win][option] = value
   end
+  layout.fill(buf, win)
 
   -- On the prompt buffer, not the pane: the message has to be readable without leaving the
   -- reply.

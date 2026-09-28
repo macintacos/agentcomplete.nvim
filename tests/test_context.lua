@@ -430,6 +430,7 @@ T["open"] = new_set({
       vim.cmd("silent! stopinsert")
       vim.cmd("silent! only")
       vim.o.columns = 80
+      vim.o.lines = 24
     end,
   },
 })
@@ -940,6 +941,23 @@ T["open"]["gives the message the layout's measure beside the prompt"] = function
   )
   expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 84)
   expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), 80)
+end
+
+-- Boxed, the message is placed against the box rather than filling the room reserved for it.
+T["open"]["sizes the message to its text beside a boxed prompt"] = function()
+  local context = require("agentcomplete.context")
+  vim.o.columns, vim.o.lines = 200, 40
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf)
+  require("agentcomplete.layout").attach(buf, { measure = 80, margins = true, inset = 2 })
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  local win = require("agentcomplete.context.pane")._panes[buf].win
+  expect.equality(vim.api.nvim_win_get_height(win), 1)
 end
 
 -- The terminal is resized mid-session, and an orientation chosen once at open time leaves the
