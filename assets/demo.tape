@@ -10,7 +10,7 @@ Require nvim
 Set Shell "bash"
 Set FontFamily "Berkeley Mono, Symbols Nerd Font Mono"
 Set FontSize 16
-# Wide enough that the context pane sits beside the prompt (context.min_width = 160).
+# Wide enough that the context pane sits beside the prompt (context.min_width = 140).
 Set Width 1800
 Set Height 760
 Set Padding 24

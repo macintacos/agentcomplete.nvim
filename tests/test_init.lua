@@ -200,7 +200,7 @@ T["setup defaults the context pane on, with a split-direction threshold"] = func
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({})
   expect.equality(agentcomplete.config.context.enabled, true)
-  expect.equality(agentcomplete.config.context.min_width, 160)
+  expect.equality(agentcomplete.config.context.min_width, 140)
 end
 
 T["setup stacks the context pane above the prompt by default"] = function()
@@ -219,7 +219,7 @@ T["setup merges a context override over the defaults"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({ context = { enabled = false } })
   expect.equality(agentcomplete.config.context.enabled, false)
-  expect.equality(agentcomplete.config.context.min_width, 160) -- sibling default preserved
+  expect.equality(agentcomplete.config.context.min_width, 140) -- sibling default preserved
 end
 
 -- `rumdl_config` has no `defaults` entry — its default is "unset" — so the merge passing a

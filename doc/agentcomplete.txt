@@ -161,7 +161,7 @@ The full default configuration, with every option: >lua
 	  allowed_sources = {},  -- blink only: extra blink sources to keep in detected buffers
 	  context = {
 	    enabled = true,      -- read-only pane showing the agent's last message
-	    min_width = 160,     -- columns at or above which it sits left of the prompt
+	    min_width = 140,     -- columns at or above which it sits left of the prompt
 	    stacked = "above",   -- "above" | "below": which side it takes under min_width
 	    rumdl_config = nil,  -- path to a rumdl config file for the pane's formatting
 	    keys = {
@@ -212,7 +212,7 @@ The full default configuration, with every option: >lua
 			read-only pane showing the agent's last message. See
 			|agentcomplete-context|.
 
-'context.min_width'	number (default `160`). Terminal width at or above
+'context.min_width'	number (default `140`). Terminal width at or above
 			which the context pane sits to the left of the prompt,
 			as wide as 'composer.width'; below that, stacked with
 			it. Re-checked whenever the terminal is resized.
