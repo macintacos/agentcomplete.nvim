@@ -190,11 +190,11 @@ T["render"]["reports the OpenCode session env and what the plugin path holds"] =
   local report = full_report()
   report.env.OPENCODE_SESSION_ID = "ses_env"
   report.env.XDG_STATE_HOME = "/state"
-  report.opencode_plugin = "/checkout/opencode/agentcomplete.ts"
+  report.opencode_plugin = "/checkout/opencode/agentcomplete"
   local out = diag.render(report)
   expect.equality(has(out, "OPENCODE_SESSION_ID"), true)
   expect.equality(has(out, "XDG_STATE_HOME"), true)
-  expect.equality(has(out, "/checkout/opencode/agentcomplete.ts"), true)
+  expect.equality(has(out, "/checkout/opencode/agentcomplete"), true)
 end
 
 -- OpenCode v2 exports nothing to its editor, so the TUI found up the process tree is what both

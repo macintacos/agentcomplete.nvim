@@ -84,21 +84,24 @@ launch).
   the colorscheme renders invisibly.
 - `## Context` — what the last-message pane resolved for this buffer: the `resolver` that
   claimed the session, the `rung` of its chain that answered, the `session id` and
-  `transcript` it read, the message's size in `bytes`, the `pointer dir` the OpenCode
-  resolver looks in, what the `opencode plugin` install path holds, and the `last error`.
-  A failed resolution still reports its rung, so the row says which resolution was being
-  attempted even when no pane opened.
+  `transcript` it read (OpenCode reads through `opencode api`, so it leaves `transcript`
+  unset), the message's size in `bytes`, the `pointer dir` the OpenCode resolver looks in,
+  what the `opencode plugin` install path (`plugins/agentcomplete`) holds, and the
+  `last error`. A failed resolution still reports its rung, so the row says which
+  resolution was being attempted even when no pane opened.
 
   The `rung` is what to read when an OpenCode pane shows the *wrong* conversation.
   `pointer file` and `$OPENCODE_SESSION_ID` are certainties; `guessed` means the resolver
   fell back to the session most recently used in the cwd, which is wrong whenever two
-  OpenCode processes share a directory. A `guessed` rung alongside
-  `opencode plugin: (unset)` is the ordinary cause, and
-  `:AgentCompleteInstallOpenCodePlugin` is the fix; a `guessed` rung *with* the plugin
-  installed means no pointer record matched this process tree, so ask whether OpenCode is
-  running as a shared daemon. `opencode plugin` reports the checkout a symlink resolves to
-  rather than a yes/no, because a link left behind by a moved checkout reads as installed
-  and resolves nothing.
+  OpenCode TUIs share a directory. A `guessed` rung alongside `opencode plugin: (unset)`
+  is the ordinary cause, and `:AgentCompleteInstallOpenCodePlugin` is the fix; a `guessed`
+  rung *with* the plugin installed means `<pointer dir>/<agent_pid>.json` is missing or
+  predates the TUI, so check OpenCode's `/plugins` list for `agentcomplete` under both TUI
+  and Server — the pointer is written by the plugin's TUI half, which OpenCode loads only
+  after its server half. A `pointer file` rung failing with "the TUI is showing no
+  session" is the prompt opened from the home screen, and correct. `opencode plugin`
+  reports the checkout a symlink resolves to rather than a yes/no, because a link left
+  behind by a moved checkout reads as installed and resolves nothing.
 
   `(no context resolved)` means resolution never ran for this buffer — the feature is off,
   there is no UI to split, Claude Code's own `externalEditorContext` already rendered into

@@ -102,24 +102,31 @@ local function ensure_resolvers()
   })
 end
 
----Symlink the shipped OpenCode plugin into `<config_home>/plugin/`, so OpenCode loads it and
----the context pane can resolve a session by pointer file rather than by guess. A symlink
+---Symlink the shipped OpenCode plugin directory into `<config_home>/plugins/`, so OpenCode loads
+---it and the context pane can resolve a session by pointer file rather than by guess. A symlink
 ---rather than a copy, so the installed plugin tracks the checkout.
 ---
----A symlink to some other `opencode/agentcomplete.ts` is taken to be ours from a checkout that
----has moved, and is re-pointed. A regular file is the user's and is left alone. The two are
----told apart by shape alone, so a hand-written symlink of that name is re-pointed too.
----@param source string The shipped `agentcomplete.ts`.
+---A symlink to some other `opencode/agentcomplete` is taken to be ours from a checkout that has
+---moved, and is re-pointed. Anything else is the user's and is left alone. The two are told
+---apart by shape alone, so a hand-written symlink of that name is re-pointed too.
+---@param source string The shipped `opencode/agentcomplete` directory.
 ---@param config_home string OpenCode's config home.
 ---@return "created"|"current"|"relinked"|"conflict"|"failed" status
 ---@return string target Where the plugin was installed, or what stood in the way.
 function M.install_opencode_plugin(source, config_home)
-  local target = config_home .. "/plugin/agentcomplete.ts"
+  -- The v1 single-file plugin an older install linked. OpenCode v2 loads `plugin/` too, and
+  -- lists it as failed.
+  local legacy = config_home .. "/plugin/agentcomplete.ts"
+  if vim.endswith(vim.loop.fs_readlink(legacy) or "", "opencode/agentcomplete.ts") then
+    vim.loop.fs_unlink(legacy)
+  end
+
+  local target = config_home .. "/plugins/agentcomplete"
   local linked = vim.loop.fs_readlink(target)
   if linked == source then
     return "current", target
   end
-  if linked and vim.endswith(linked, "opencode/agentcomplete.ts") then
+  if linked and vim.endswith(linked, "opencode/agentcomplete") then
     local ok = vim.loop.fs_unlink(target) and vim.loop.fs_symlink(source, target)
     return ok and "relinked" or "failed", target
   end
@@ -128,7 +135,7 @@ function M.install_opencode_plugin(source, config_home)
   end
   -- `mkdir` raises rather than returning 0 on an unwritable parent, which would escape the
   -- command as a traceback while the rarer symlink failure came back as a tidy report.
-  if not pcall(vim.fn.mkdir, config_home .. "/plugin", "p") then
+  if not pcall(vim.fn.mkdir, config_home .. "/plugins", "p") then
     return "failed", target
   end
   return vim.loop.fs_symlink(source, target) and "created" or "failed", target
@@ -140,22 +147,23 @@ local INSTALL_MESSAGES = {
   created = "installed the OpenCode plugin at ",
   current = "the OpenCode plugin is already installed at ",
   relinked = "re-pointed the OpenCode plugin at this checkout: ",
-  conflict = "remove it and re-run — refusing to overwrite the file already at ",
+  conflict = "remove it and re-run — refusing to overwrite what is already at ",
   failed = "could not symlink the OpenCode plugin into ",
-  missing = "no opencode/agentcomplete.ts on the runtimepath",
+  missing = "no opencode/agentcomplete on the runtimepath",
 }
 
 ---Resolve the shipped plugin on the runtimepath and symlink it into OpenCode's config home.
 ---@return "created"|"current"|"relinked"|"conflict"|"failed"|"missing" status
 ---@return string target Where it landed, what stood in the way, or "" when unresolved.
 local function install_opencode_plugin_from_rtp()
-  local source = vim.api.nvim_get_runtime_file("opencode/agentcomplete.ts", false)[1]
-  if not source then
+  -- Found by a file inside it: the runtimepath search matches files, not directories.
+  local entry = vim.api.nvim_get_runtime_file("opencode/agentcomplete/tui.ts", false)[1]
+  if not entry then
     return "missing", ""
   end
   -- A runtimepath entry may be relative; the symlink is resolved from another directory.
   return M.install_opencode_plugin(
-    vim.fn.fnamemodify(source, ":p"),
+    vim.fn.fnamemodify(entry, ":p:h"),
     require("agentcomplete.scan").opencode_config_home()
   )
 end

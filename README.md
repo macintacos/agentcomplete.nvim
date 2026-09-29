@@ -13,8 +13,8 @@ built-in completion.
 ## Requirements
 
 - Neovim 0.10+ (0.12+ for the `vim.pack` install below)
-- `sqlite3` on `$PATH` — only for OpenCode's last-message pane (preinstalled on macOS; a
-  separate package on most Linux distributions)
+- OpenCode 2, if you use OpenCode — its skill and command lookup, last-message pane, and
+  session plugin use the v2 server API
 - Optional: [blink.cmp](https://github.com/Saghen/blink.cmp) v1 — without it, the built-in
   completion backend is used
 
@@ -82,9 +82,9 @@ belongs to. Run this once to remove the guess:
 :AgentCompleteInstallOpenCodePlugin
 ```
 
-It symlinks a small plugin into OpenCode's config directory; restart OpenCode to pick it
-up. Skipping it costs you only certainty — the pane still opens, labelled `guessed`. See
-`:help agentcomplete-context`.
+It symlinks a small plugin into OpenCode's `plugins/` directory; restart OpenCode to pick
+it up. Skipping it costs you only certainty — the pane still opens, labelled `guessed`.
+See `:help agentcomplete-context`.
 
 If your Neovim config is synced across machines, ask for the same symlink from `setup()`
 instead — the command is a one-shot you have to remember on each new machine, while

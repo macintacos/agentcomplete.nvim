@@ -1,7 +1,6 @@
 -- Tests for agentcomplete.context: the resolver registry, the Claude Code transcript resolver,
--- the OpenCode database resolver, and the pane built around them. Roots, subprocesses and the
--- clock are injected, so no real `$HOME`, `ps`, formatter or OpenCode database is touched --
--- except the fixture database the OpenCode query is deliberately run against.
+-- the OpenCode server resolver, and the pane built around them. Roots, subprocesses and the
+-- clock are injected, so no real `$HOME`, `ps`, formatter or OpenCode server is touched.
 local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
@@ -1343,176 +1342,136 @@ T["opencode.parse_etime"]["returns nil for output that is not an elapsed time"] 
   expect.equality(opencode.parse_etime("ps: etime: keyword not found"), nil)
 end
 
--- Both roots follow the XDG base OpenCode itself resolves them under, so a user who moves
--- either one keeps working rather than silently losing the pane.
+-- The pointers follow the XDG base OpenCode itself resolves its state under, so a user who moves
+-- it keeps working rather than silently losing the pane.
 T["opencode.roots"] = new_set()
 
-T["opencode.roots"]["hang the database and the pointers off their XDG bases"] = function()
+T["opencode.roots"]["hang the pointers off the XDG state base"] = function()
   local opencode = require("agentcomplete.context.opencode")
-  local saved = { data = vim.env.XDG_DATA_HOME, state = vim.env.XDG_STATE_HOME }
-  vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME = "/xdg/data", "/xdg/state"
-  expect.equality(opencode.db_path(), "/xdg/data/opencode/opencode.db")
+  local saved = vim.env.XDG_STATE_HOME
+  vim.env.XDG_STATE_HOME = "/xdg/state"
   expect.equality(opencode.pointer_dir(), "/xdg/state/opencode/agentcomplete")
-  vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME = nil, nil
-  expect.equality(
-    opencode.db_path(),
-    vim.fs.normalize("~/.local/share") .. "/opencode/opencode.db"
-  )
+  vim.env.XDG_STATE_HOME = nil
   expect.equality(
     opencode.pointer_dir(),
     vim.fs.normalize("~/.local/state") .. "/opencode/agentcomplete"
   )
-  vim.env.XDG_DATA_HOME, vim.env.XDG_STATE_HOME = saved.data, saved.state
+  vim.env.XDG_STATE_HOME = saved
 end
 
-T["opencode.pick_pointer"] = new_set()
-
----A pointer record as the OpenCode plugin writes it.
-local function pointer(fields)
-  return vim.tbl_extend("force", {
-    pids = { 4242 },
-    sessionID = "ses_a",
-    directory = "/proj",
-    worktree = "/proj",
-    ts = 1000,
-  }, fields or {})
-end
-
-T["opencode.pick_pointer"]["takes the record whose pids reach this process tree"] = function()
-  local opencode = require("agentcomplete.context.opencode")
-  local records = {
-    pointer({ pids = { 9 }, sessionID = "ses_elsewhere" }),
-    pointer({ pids = { 7, 4242 } }),
+---An assistant message as `session.message.list` returns it, one content part per
+---`{ type, text }` pair.
+local function assistant_message(parts)
+  return {
+    type = "assistant",
+    content = vim.tbl_map(function(part)
+      return { type = part[1], text = part[2] }
+    end, parts),
   }
+end
+
+-- Newest first, as the resolver asks for them: a tool-only step, the answer (split around
+-- reasoning), then an earlier answer it supersedes.
+local NEW_MESSAGES = {
+  assistant_message({ { "tool" } }),
+  assistant_message({
+    { "text", "the answer" },
+    { "reasoning", "hmm" },
+    { "text", "and more" },
+  }),
+  assistant_message({ { "text", "superseded" } }),
+}
+
+T["opencode.message_text"] = new_set()
+
+-- The text of one message, not every assistant message in the session: a session's whole
+-- conversation would otherwise land in the pane.
+T["opencode.message_text"]["reads the newest assistant message that carries text"] = function()
+  local opencode = require("agentcomplete.context.opencode")
   expect.equality(
-    opencode.pick_pointer(records, { 4242, 11 }, "/proj").sessionID,
-    "ses_a"
+    opencode.message_text({ data = NEW_MESSAGES }),
+    "the answer\n\nand more"
   )
 end
 
--- A worktree checkout runs OpenCode from the worktree while the session records the main
--- checkout as its directory, so either side of that pair is a match.
-T["opencode.pick_pointer"]["matches a cwd that is the record's worktree rather than its directory"] = function()
+T["opencode.message_text"]["reports nothing for a payload with no text to show"] = function()
   local opencode = require("agentcomplete.context.opencode")
-  local records = { pointer({ directory = "/main", worktree = "/proj" }) }
-  expect.equality(opencode.pick_pointer(records, { 4242 }, "/proj").sessionID, "ses_a")
-end
-
--- Pids are recycled, so a pid match alone would let a week-old record from an unrelated
--- project answer for this one.
-T["opencode.pick_pointer"]["skips a record naming another directory"] = function()
-  local opencode = require("agentcomplete.context.opencode")
-  local records = { pointer({ directory = "/elsewhere", worktree = "/elsewhere" }) }
-  expect.equality(opencode.pick_pointer(records, { 4242 }, "/proj"), nil)
-end
-
-T["opencode.pick_pointer"]["prefers the freshest of several matching records"] = function()
-  local opencode = require("agentcomplete.context.opencode")
-  local records = {
-    pointer({ sessionID = "ses_fresh", ts = 2000 }),
-    pointer({ sessionID = "ses_stale", ts = 500 }),
-  }
+  expect.equality(opencode.message_text({ data = {} }), nil)
   expect.equality(
-    opencode.pick_pointer(records, { 4242 }, "/proj").sessionID,
-    "ses_fresh"
+    opencode.message_text({ data = { assistant_message({ { "text", "  " } }) } }),
+    nil
   )
+  expect.equality(opencode.message_text("HTTP 404 Not Found"), nil)
 end
 
-T["opencode.pick_pointer"]["declines when no record names a pid in the chain"] = function()
+---A root session as `session.list` returns it.
+local function session_info(id, created, updated, parent)
+  return { id = id, parentID = parent, time = { created = created, updated = updated } }
+end
+
+T["opencode.newest_session"] = new_set()
+
+-- `opencode --continue` shows a session far older than the process showing it, so dating the
+-- guess by when a session was created hides exactly the conversation being worked in.
+T["opencode.newest_session"]["takes the session used most recently since the floor"] = function()
   local opencode = require("agentcomplete.context.opencode")
-  expect.equality(opencode.pick_pointer({ pointer() }, { 55, 56 }, "/proj"), nil)
+  local payload = {
+    data = {
+      session_info("ses_new", 1800000, 1800300),
+      session_info("ses_resumed", 500000, 1900000),
+      session_info("ses_old", 1000000, 1000100),
+    },
+  }
+  expect.equality(opencode.newest_session(payload, 1700000), "ses_resumed")
+end
+
+T["opencode.newest_session"]["skips subagent sessions and any the floor excludes"] = function()
+  local opencode = require("agentcomplete.context.opencode")
+  local payload = {
+    data = {
+      session_info("ses_child", 1850000, 1850100, "ses_new"),
+      session_info("ses_old", 1000000, 1000100),
+    },
+  }
+  expect.equality(opencode.newest_session(payload, 1700000), nil)
+  expect.equality(opencode.newest_session("not a payload", 0), nil)
 end
 
 local saved_opencode
 T["opencode.resolve"] = new_set({
   hooks = {
     pre_case = function()
-      saved_opencode =
-        { session = vim.env.OPENCODE_SESSION_ID, pid = vim.env.OPENCODE_PID }
+      saved_opencode = vim.env.OPENCODE_SESSION_ID
       vim.env.OPENCODE_SESSION_ID = nil
-      vim.env.OPENCODE_PID = nil
     end,
     post_case = function()
-      vim.env.OPENCODE_SESSION_ID = saved_opencode.session
-      vim.env.OPENCODE_PID = saved_opencode.pid
+      vim.env.OPENCODE_SESSION_ID = saved_opencode
     end,
   },
 })
 
-local function session_row(id, parent, directory, created, updated)
-  return ("insert into session values('%s',%s,'%s',%d,%d);"):format(
-    id,
-    parent and ("'" .. parent .. "'") or "null",
-    directory,
-    created,
-    updated
-  )
-end
-
----An assistant turn: one `message` row, and one `part` row per `{ type, text }` pair.
-local function turn(session_id, id, created, parts)
-  local rows = {
-    ("insert into message values('%s','%s',%d,'%s');"):format(
-      id,
-      session_id,
-      created,
-      vim.json.encode({ role = "assistant" })
-    ),
+---An `opencode api` stand-in serving the `/proj` fixture: `ses_new` is the newest root session,
+---`ses_old` fell idle before the guess's floor. Records each call's arguments in `calls`.
+local function fake_api(calls)
+  local messages = {
+    ses_new = NEW_MESSAGES,
+    ses_old = { assistant_message({ { "text", "old answer" } }) },
   }
-  for i, part in ipairs(parts) do
-    rows[#rows + 1] = ("insert into part values('%s.%d','%s','%s',%d,'%s');"):format(
-      id,
-      i,
-      id,
-      session_id,
-      created + i,
-      vim.json.encode({ type = part[1], text = part[2] })
-    )
+  return function(args, cb)
+    if calls then
+      calls[#calls + 1] = args
+    end
+    if args[1] == "session.list" then
+      return cb({
+        data = {
+          session_info("ses_new", 1800000, 1800300),
+          session_info("ses_old", 1000000, 1000100),
+        },
+      })
+    end
+    local id = table.concat(args, " "):match("sessionID=(%S+)")
+    cb({ data = messages[id] or {} })
   end
-  return table.concat(rows, "\n")
-end
-
----The OpenCode database the query is exercised against. Only the columns the query reads are
----declared — the real tables carry ~28 more, none of them touched here.
----
----In `/proj`: `ses_new` is the newest root session, `ses_old` fell idle before the heuristic's
----floor, `ses_child` is a subagent's. `ses_other` belongs to another project, and `ses_resumed`
----was created long before the floor but used after it — an `opencode --continue`. Read-only, so
----it is built once and shared.
-local db_fixture
-local function opencode_db()
-  if db_fixture then
-    return db_fixture
-  end
-  db_fixture = tmpdir() .. "/opencode.db"
-  vim.fn.system(
-    { "sqlite3", db_fixture },
-    table.concat({
-      "create table session(id text primary key, parent_id text, directory text,"
-        .. " time_created integer, time_updated integer);",
-      "create table message(id text primary key, session_id text, time_created integer, data text);",
-      "create table part(id text primary key, message_id text, session_id text, time_created integer, data text);",
-      session_row("ses_old", nil, "/proj", 1000000, 1000100),
-      turn("ses_old", "m1", 1000100, { { "text", "old answer" } }),
-      session_row("ses_new", nil, "/proj", 1800000, 1800300),
-      turn("ses_new", "m2", 1800100, { { "text", "superseded" } }),
-      turn(
-        "ses_new",
-        "m3",
-        1800200,
-        { { "text", "the answer" }, { "text", "and more" } }
-      ),
-      turn("ses_new", "m4", 1800300, { { "tool" } }),
-      session_row("ses_child", "ses_new", "/proj", 1850000, 1850100),
-      turn("ses_child", "m5", 1850100, { { "text", "subagent chatter" } }),
-      session_row("ses_other", nil, "/other", 1900000, 1900100),
-      turn("ses_other", "m6", 1900100, { { "text", "another project" } }),
-      session_row("ses_resumed", nil, "/resumed", 500000, 1900000),
-      turn("ses_resumed", "m7", 1900000, { { "text", "picked up again" } }),
-    }, "\n")
-  )
-  assert(vim.v.shell_error == 0, "fixture database not built — is sqlite3 on $PATH?")
-  return db_fixture
 end
 
 ---Write `record` where the OpenCode plugin writes its pointers, under a fixture state root.
@@ -1524,18 +1483,17 @@ local function write_pointer(root, pid, record)
   )
 end
 
----A `ps` stand-in: an elapsed time for the heuristic's floor, and no parent for the pid climb,
----so no real process tree is read.
-local function fake_ps(cmd)
-  return cmd[3] == "etime=" and "05:00\n" or ""
+---A `ps -o etime=` stand-in: the TUI has been up five minutes.
+local function fake_ps()
+  return "05:00\n"
 end
 
----Seams placing the resolver's clock 300 seconds past `ses_new`, so the heuristic's floor
----(1700000) falls between `ses_old` and `ses_new`.
+---Seams placing the resolver's clock 300 seconds past `ses_new`, so the guess's floor (1700000)
+---falls between `ses_old` and `ses_new`.
 local function opencode_opts(fields)
   return vim.tbl_extend("force", {
     state_root = tmpdir(),
-    db_path = opencode_db(),
+    api = fake_api(),
     system = fake_ps,
     now = function()
       return 2000000
@@ -1543,185 +1501,131 @@ local function opencode_opts(fields)
   }, fields or {})
 end
 
----Run the OpenCode resolver against `opts`, waiting for its asynchronous report.
+---An OpenCode session whose TUI, as detection found it, is pid 4242.
+local function opencode_session()
+  local session = session_for("opencode")
+  session.agent_pid = 4242
+  return session
+end
+
+---Run the OpenCode resolver against `opts`, returning what it reported and whether it claimed.
 local function resolve_opencode(opts, session)
   local result
   local claimed = require("agentcomplete.context.opencode").resolve(
-    session or session_for("opencode"),
+    session or opencode_session(),
     function(r)
       result = r
     end,
     opts
   )
-  if claimed then
-    vim.wait(5000, function()
-      return result ~= nil
-    end)
-  end
   return result, claimed
 end
 
--- The parts of one message, not every assistant part in the session: a session's whole
--- conversation would otherwise land in the pane.
-T["opencode.resolve"]["reads the newest assistant message that carries text"] = function()
-  local opencode = require("agentcomplete.context.opencode")
-  local out = vim.fn.system({
-    "sqlite3",
-    "-readonly",
-    "-json",
-    opencode_db(),
-    opencode.message_sql("'ses_new'"),
-  })
-  expect.equality(opencode.join_rows(out), "the answer\n\nand more")
-end
-
-T["opencode.resolve"]["reports nothing for output that is not a result set"] = function()
-  local opencode = require("agentcomplete.context.opencode")
-  expect.equality(opencode.join_rows(""), nil)
-  expect.equality(opencode.join_rows("[]"), nil)
-end
-
--- Nothing exports this today, but three lines in OpenCode's `openEditor` would, and it is the
--- one answer that needs neither the process tree nor a guess.
+-- Nothing exports this today, but it is the one answer that needs neither a pointer nor a guess.
 T["opencode.resolve"]["takes the session id from the environment when one is exported"] = function()
   vim.env.OPENCODE_SESSION_ID = "ses_old"
   local result = resolve_opencode(opencode_opts())
   expect.equality(result.rung, "$OPENCODE_SESSION_ID")
-  expect.equality(result.session_id, "ses_old")
+  expect.equality(result.text, "old answer")
 end
 
-T["opencode.resolve"]["takes the session id from a pointer naming this process tree"] = function()
-  vim.env.OPENCODE_PID = "4242"
+T["opencode.resolve"]["takes the session id from the pointer this TUI wrote"] = function()
   local root = tmpdir()
-  write_pointer(
-    root,
-    4242,
-    { pids = { 4242 }, sessionID = "ses_old", directory = "/proj", ts = 1750000 }
-  )
+  write_pointer(root, 4242, { sessionID = "ses_old", ts = 1750000 })
   local result = resolve_opencode(opencode_opts({ state_root = root }))
   expect.equality(result.rung, "pointer file")
   expect.equality(result.session_id, "ses_old")
+  expect.equality(result.text, "old answer")
 end
 
--- The newest root session started in this directory since the TUI did. `ses_old` predates it,
--- `ses_child` is a subagent's, and `ses_other` belongs to another project.
-T["opencode.resolve"]["guesses the newest session in the cwd when nothing points at one"] = function()
-  vim.env.OPENCODE_PID = "4242"
-  local result = resolve_opencode(opencode_opts())
-  expect.equality(result.rung, "guessed")
-  expect.equality(result.session_id, "ses_new")
+-- A prompt written from the home screen belongs to no conversation yet; a guess would show one.
+T["opencode.resolve"]["shows nothing when the pointer says the TUI is on no session"] = function()
+  local root = tmpdir()
+  write_pointer(root, 4242, { ts = 1750000 })
+  local result = resolve_opencode(opencode_opts({ state_root = root }))
+  expect.equality(result.ok, false)
+  expect.equality(result.rung, "pointer file")
 end
 
--- `opencode --continue` shows a session far older than the process showing it, so dating the
--- guess by when a session was created hides exactly the conversation being worked in.
-T["opencode.resolve"]["guesses a session created before the TUI but used since"] = function()
-  vim.env.OPENCODE_PID = "4242"
-  local session = session_for("opencode")
-  session.cwd = "/resumed"
-  local result = resolve_opencode(opencode_opts(), session)
-  expect.equality(result.rung, "guessed")
-  expect.equality(result.text, "picked up again")
+-- `ps` counts elapsed time in whole seconds, so the start it implies can land just after a
+-- pointer the TUI wrote while booting.
+T["opencode.resolve"]["accepts a pointer written within a second of the TUI's start"] = function()
+  local root = tmpdir()
+  write_pointer(root, 4242, { sessionID = "ses_old", ts = 1699500 })
+  local result = resolve_opencode(opencode_opts({ state_root = root }))
+  expect.equality(result.rung, "pointer file")
 end
 
 -- `dispose` only runs on a clean exit, so a crash leaves a pointer behind and pids are
 -- recycled. A record predating the process it claims to describe is one of those.
 T["opencode.resolve"]["ignores a pointer written before the TUI started"] = function()
-  vim.env.OPENCODE_PID = "4242"
   local root = tmpdir()
-  write_pointer(
-    root,
-    4242,
-    { pids = { 4242 }, sessionID = "ses_old", directory = "/proj", ts = 1 }
-  )
+  write_pointer(root, 4242, { sessionID = "ses_old", ts = 1 })
   local result = resolve_opencode(opencode_opts({ state_root = root }))
   expect.equality(result.rung, "guessed")
 end
 
--- Session ids and cwd paths are interpolated into SQL, so an apostrophe in either has to
--- travel as data rather than close the literal.
-T["opencode.resolve"]["carries an apostrophe through to the query as data"] = function()
-  vim.env.OPENCODE_SESSION_ID = "ses_o'brien"
-  local result = resolve_opencode(opencode_opts())
-  expect.equality(result.ok, false)
-  expect.equality(result.err:find("sqlite3 exited", 1, true), nil)
-end
-
--- A daemon serving two TUIs in one directory writes pointers no pid chain reaches. Declining
--- to a labelled guess is what keeps a wrong conversation from being shown as a certain one.
-T["opencode.resolve"]["guesses when the only pointer names another process tree"] = function()
-  vim.env.OPENCODE_PID = "4242"
-  local root = tmpdir()
-  local orphan = vim.loop.os_getppid() + 1000000
-  write_pointer(
-    root,
-    orphan,
-    { pids = { orphan }, sessionID = "ses_old", directory = "/proj", ts = 1750000 }
-  )
-  local result = resolve_opencode(opencode_opts({ state_root = root }))
+-- The newest root session in this directory used since the TUI started; `ses_old` predates it.
+T["opencode.resolve"]["guesses the newest session in the cwd when nothing points at one"] = function()
+  local calls = {}
+  local result = resolve_opencode(opencode_opts({ api = fake_api(calls) }))
   expect.equality(result.rung, "guessed")
+  expect.equality(result.session_id, "ses_new")
+  expect.equality(result.text, "the answer\n\nand more")
+  expect.equality(
+    calls[1],
+    { "session.list", "--param", "directory=/proj", "--param", "parentID=null" }
+  )
 end
 
 T["opencode.resolve"]["fills the session's id, which detection leaves holding a pid"] = function()
   vim.env.OPENCODE_SESSION_ID = "ses_old"
-  local session = session_for("opencode")
+  local session = opencode_session()
   session.session_id = "4242"
   resolve_opencode(opencode_opts(), session)
   expect.equality(session.session_id, "ses_old")
 end
 
--- Without the TUI's start time the guess has no floor, and the newest session in the directory
--- may be one from last week.
+-- Without the TUI's start time neither a pointer nor a guess can be dated, and the newest session
+-- in the directory may be one from last week.
 T["opencode.resolve"]["fails soft rather than guessing with no start time to measure from"] = function()
-  local result = resolve_opencode(opencode_opts())
+  local session = opencode_session()
+  session.agent_pid = nil
+  local result = resolve_opencode(opencode_opts(), session)
   expect.equality(result.ok, false)
+  expect.equality(result.rung, "guessed")
   expect.equality(type(result.err), "string")
 end
 
----A `vim.system` stand-in whose process reports `obj`.
-local function fake_spawn(obj)
-  return function(_, _, on_exit)
-    on_exit(obj)
-    return obj
-  end
+T["opencode.resolve"]["fails soft when no session in the cwd was used since the TUI started"] = function()
+  local result = resolve_opencode(opencode_opts({
+    now = function()
+      return 9000000
+    end,
+  }))
+  expect.equality(result.ok, false)
+  expect.equality(result.rung, "guessed")
 end
 
 -- "No pane appeared" is the complaint that sends someone to the diagnostics report, and the
 -- rung is what tells them which resolution was being attempted when it failed.
 T["opencode.resolve"]["reports the rung it was attempting when the read fails"] = function()
   vim.env.OPENCODE_SESSION_ID = "ses_old"
-  local result =
-    resolve_opencode(opencode_opts({ spawn = fake_spawn({ code = 1, stderr = "boom" }) }))
+  local result = resolve_opencode(opencode_opts({
+    api = function(_, cb)
+      cb(nil, "opencode api exited 1: no server")
+    end,
+  }))
   expect.equality(result.ok, false)
   expect.equality(result.rung, "$OPENCODE_SESSION_ID")
+  expect.equality(result.err, "opencode api exited 1: no server")
 end
 
-T["opencode.resolve"]["fails soft on every way the read can go wrong"] = function()
-  vim.env.OPENCODE_SESSION_ID = "ses_old"
-  local cases = {
-    ["missing sqlite3"] = {
-      spawn = function()
-        error("ENOENT: no such file or directory")
-      end,
-    },
-    ["missing database"] = { db_path = tmpdir() .. "/absent.db" },
-    ["non-zero exit"] = {
-      spawn = fake_spawn({ code = 1, stderr = "file is not a database" }),
-    },
-    ["unparseable output"] = { spawn = fake_spawn({ code = 0, stdout = "not json" }) },
-    ["no rows"] = { spawn = fake_spawn({ code = 0, stdout = "" }) },
-  }
-  local soft = {}
-  for name, override in pairs(cases) do
-    local result = resolve_opencode(opencode_opts(override))
-    soft[name] = result.ok == false and type(result.err) == "string"
-  end
-  expect.equality(soft, {
-    ["missing sqlite3"] = true,
-    ["missing database"] = true,
-    ["non-zero exit"] = true,
-    ["unparseable output"] = true,
-    ["no rows"] = true,
-  })
+T["opencode.resolve"]["fails soft on a session with no assistant text"] = function()
+  vim.env.OPENCODE_SESSION_ID = "ses_empty"
+  local result = resolve_opencode(opencode_opts())
+  expect.equality(result.ok, false)
+  expect.equality(type(result.err), "string")
 end
 
 T["opencode.resolve"]["declines a session belonging to another tool"] = function()

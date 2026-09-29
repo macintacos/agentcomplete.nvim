@@ -29,18 +29,23 @@ end
 
 T["install_opencode_plugin"] = new_set()
 
-T["install_opencode_plugin"]["symlinks the plugin into the config home"] = function()
-  local source, home = tmpdir() .. "/agentcomplete.ts", tmpdir()
-  vim.fn.writefile({ "" }, source)
+---A shipped plugin directory, as a checkout lays it out.
+local function plugin_source()
+  local source = tmpdir() .. "/opencode/agentcomplete"
+  vim.fn.mkdir(source, "p")
+  return source
+end
+
+T["install_opencode_plugin"]["symlinks the plugin directory into plugins/"] = function()
+  local source, home = plugin_source(), tmpdir()
   local status, target = require("agentcomplete").install_opencode_plugin(source, home)
   expect.equality(status, "created")
-  expect.equality(target, home .. "/plugin/agentcomplete.ts")
+  expect.equality(target, home .. "/plugins/agentcomplete")
   expect.equality(vim.loop.fs_readlink(target), source)
 end
 
 T["install_opencode_plugin"]["reports an existing link to the same source as already current"] = function()
-  local source, home = tmpdir() .. "/agentcomplete.ts", tmpdir()
-  vim.fn.writefile({ "" }, source)
+  local source, home = plugin_source(), tmpdir()
   local install = require("agentcomplete").install_opencode_plugin
   install(source, home)
   expect.equality(install(source, home), "current")
@@ -49,39 +54,57 @@ end
 -- Refusing rather than overwriting: whatever is there is the user's, and a symlink from an
 -- older checkout reads the same as a hand-written plugin.
 T["install_opencode_plugin"]["refuses when something else already occupies the target"] = function()
-  local source, home = tmpdir() .. "/agentcomplete.ts", tmpdir()
-  vim.fn.writefile({ "" }, source)
-  vim.fn.mkdir(home .. "/plugin", "p")
-  vim.fn.writefile({ "mine" }, home .. "/plugin/agentcomplete.ts")
+  local source, home = plugin_source(), tmpdir()
+  vim.fn.mkdir(home .. "/plugins/agentcomplete", "p")
+  vim.fn.writefile({ "mine" }, home .. "/plugins/agentcomplete/index.ts")
   expect.equality(
     require("agentcomplete").install_opencode_plugin(source, home),
     "conflict"
   )
-  expect.equality(vim.fn.readfile(home .. "/plugin/agentcomplete.ts"), { "mine" })
+  expect.equality(vim.fn.readfile(home .. "/plugins/agentcomplete/index.ts"), { "mine" })
 end
 
 -- A link we wrote for a checkout that has since moved is indistinguishable from a stale one
 -- the user wrote; re-pointing it is what keeps a moved checkout from erroring on every launch.
 T["install_opencode_plugin"]["re-points a link left by another checkout"] = function()
   local stale, source, home =
-    tmpdir() .. "/opencode/agentcomplete.ts", tmpdir() .. "/agentcomplete.ts", tmpdir()
-  vim.fn.writefile({ "" }, source)
-  vim.fn.mkdir(home .. "/plugin", "p")
-  vim.loop.fs_symlink(stale, home .. "/plugin/agentcomplete.ts")
+    tmpdir() .. "/opencode/agentcomplete", plugin_source(), tmpdir()
+  vim.fn.mkdir(home .. "/plugins", "p")
+  vim.loop.fs_symlink(stale, home .. "/plugins/agentcomplete")
   local status, target = require("agentcomplete").install_opencode_plugin(source, home)
   expect.equality(status, "relinked")
   expect.equality(vim.loop.fs_readlink(target), source)
 end
 
 T["install_opencode_plugin"]["refuses a symlink that is not one of ours"] = function()
-  local source, home = tmpdir() .. "/agentcomplete.ts", tmpdir()
-  vim.fn.writefile({ "" }, source)
-  vim.fn.mkdir(home .. "/plugin", "p")
-  vim.loop.fs_symlink(tmpdir() .. "/notes.md", home .. "/plugin/agentcomplete.ts")
+  local source, home = plugin_source(), tmpdir()
+  vim.fn.mkdir(home .. "/plugins", "p")
+  vim.loop.fs_symlink(tmpdir() .. "/notes", home .. "/plugins/agentcomplete")
   expect.equality(
     require("agentcomplete").install_opencode_plugin(source, home),
     "conflict"
   )
+end
+
+-- OpenCode v2 loads plugin/ as well as plugins/, and lists the v1 single-file plugin an older
+-- install linked there as failed.
+T["install_opencode_plugin"]["removes the single-file plugin an older install linked into plugin/"] = function()
+  local source, home = plugin_source(), tmpdir()
+  vim.fn.mkdir(home .. "/plugin", "p")
+  vim.loop.fs_symlink(
+    tmpdir() .. "/opencode/agentcomplete.ts",
+    home .. "/plugin/agentcomplete.ts"
+  )
+  require("agentcomplete").install_opencode_plugin(source, home)
+  expect.equality(vim.loop.fs_lstat(home .. "/plugin/agentcomplete.ts"), nil)
+end
+
+T["install_opencode_plugin"]["leaves a file of the user's in plugin/ alone"] = function()
+  local source, home = plugin_source(), tmpdir()
+  vim.fn.mkdir(home .. "/plugin", "p")
+  vim.fn.writefile({ "mine" }, home .. "/plugin/agentcomplete.ts")
+  require("agentcomplete").install_opencode_plugin(source, home)
+  expect.equality(vim.fn.readfile(home .. "/plugin/agentcomplete.ts"), { "mine" })
 end
 
 ---Put a stub `opencode` on PATH, so what `setup()` does is decided by the test rather than by
@@ -119,30 +142,30 @@ T["install_plugin"]["defaults off, and installs nothing"] = function()
   agentcomplete.setup({})
   expect.equality(agentcomplete.config.opencode.install_plugin, false)
   expect.equality(
-    vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"),
+    vim.loop.fs_lstat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugins/agentcomplete"),
     nil
   )
 end
 
 T["install_plugin"]["symlinks the shipped plugin when opted in"] = function()
   require("agentcomplete").setup({ opencode = { install_plugin = true } })
-  local target = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts"
+  local target = vim.env.XDG_CONFIG_HOME .. "/opencode/plugins/agentcomplete"
   local linked = vim.loop.fs_readlink(target)
   expect.equality(type(linked), "string")
   ---@cast linked string
-  expect.equality(vim.endswith(linked, "opencode/agentcomplete.ts"), true)
+  expect.equality(vim.endswith(linked, "opencode/agentcomplete"), true)
   -- fs_stat follows the link, so this is what separates an installed plugin from a dangling one.
   expect.equality(vim.loop.fs_stat(target) ~= nil, true)
 end
 
 T["install_plugin"]["reports a conflict rather than overwriting what is already there"] = function()
-  local plugin_dir = vim.env.XDG_CONFIG_HOME .. "/opencode/plugin"
+  local plugin_dir = vim.env.XDG_CONFIG_HOME .. "/opencode/plugins/agentcomplete"
   vim.fn.mkdir(plugin_dir, "p")
-  vim.fn.writefile({ "mine" }, plugin_dir .. "/agentcomplete.ts")
+  vim.fn.writefile({ "mine" }, plugin_dir .. "/index.ts")
   require("agentcomplete").setup({ opencode = { install_plugin = true } })
   expect.equality(#notes, 1)
   expect.equality(notes[1].level, vim.log.levels.ERROR)
-  expect.equality(vim.fn.readfile(plugin_dir .. "/agentcomplete.ts"), { "mine" })
+  expect.equality(vim.fn.readfile(plugin_dir .. "/index.ts"), { "mine" })
 end
 
 -- The flag ships in a synced config, so it runs on machines the user is not thinking about;
@@ -168,7 +191,7 @@ T["install_plugin"]["the command installs and reports even without OpenCode on P
   require("agentcomplete").setup({})
   vim.cmd("AgentCompleteInstallOpenCodePlugin")
   expect.equality(
-    vim.loop.fs_stat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugin/agentcomplete.ts")
+    vim.loop.fs_stat(vim.env.XDG_CONFIG_HOME .. "/opencode/plugins/agentcomplete/tui.ts")
       ~= nil,
     true
   )

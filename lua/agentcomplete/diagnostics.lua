@@ -107,7 +107,7 @@ end
 ---@return string|nil
 local function installed_plugin()
   local path = require("agentcomplete.scan").opencode_config_home()
-    .. "/plugin/agentcomplete.ts"
+    .. "/plugins/agentcomplete"
   if not vim.loop.fs_lstat(path) then
     return nil
   end
