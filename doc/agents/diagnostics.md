@@ -68,11 +68,12 @@ launch).
   discovery path that searched the wrong directory hides (the static built-ins alone put
   ~17 on the commands line while the filesystem scan found nothing). A zero beside a
   source that should have items is the finding. Skills come from the filesystem scan and
-  `opencode debug skill`; commands from the filesystem scan, `opencode debug config`, and
-  the `opencode.json[c]` map plus static built-ins. The two CLI counts are async (see
-  `lua/agentcomplete/opencode_cli.lua`): they populate ~1s after the buffer attaches, so a
-  live `:luafile` run shows them, but a fresh `mise run diag` (which exits immediately)
-  reports 0 for both.
+  `opencode api skill.list`; commands from the filesystem scan,
+  `opencode api command.list`, and the `opencode.json[c]` map plus static built-ins. The
+  two CLI counts are async (see `lua/agentcomplete/opencode_cli.lua`) and need OpenCode
+  2's running server: they populate ~1s after the buffer attaches, so a live `:luafile`
+  run shows them, but a fresh `mise run diag` (which exits immediately) reports 0 for
+  both.
 - `## Highlighting` — whether token highlighting is attached to this buffer, how many
   tokens are currently painted, what `AgentCompleteSkill` and `AgentCompleteFile` resolve
   to (the group each links to, or `(explicit)` when the user set attributes directly —

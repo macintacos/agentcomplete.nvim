@@ -115,9 +115,9 @@ OpenCode resolves more than that filesystem scan can see: skills that are
 built in, live under `~/.claude/skills`, or nest deeply as `**/SKILL.md`,
 and — most notably — every command contributed by an installed OpenCode
 plugin, which lives in OpenCode's package cache and so is reachable by no
-config-directory scan at all. agentcomplete asks OpenCode for the
-authoritative sets by running `opencode debug skill` and
-`opencode debug config` asynchronously (once per project, never blocking
+config-directory scan at all. agentcomplete asks OpenCode's running server
+for the authoritative sets with `opencode api skill.list` and
+`opencode api command.list` (asynchronously, once per project, never blocking
 the editor), then merges the results with the filesystem scan,
 de-duplicated by name. This is OpenCode-only; disable it with
 `opencode.resolve_via_cli = false` — see |agentcomplete-configuration|.
@@ -177,7 +177,7 @@ The full default configuration, with every option: >lua
 	  },
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
-	    resolve_via_cli = true,            -- also source skills/commands from `opencode debug`
+	    resolve_via_cli = true,            -- also source skills/commands from `opencode api`
 	    install_plugin = false,            -- symlink the session-pointer plugin from setup()
 	  },
 	})
@@ -264,9 +264,9 @@ The full default configuration, with every option: >lua
 
 'opencode.resolve_via_cli'
 			boolean (default `true`). When true, OpenCode
-			prompt buffers also source skills from `opencode
-			debug skill` and commands from the `command` map of
-			`opencode debug config`, both run asynchronously and
+			prompt buffers also source skills and commands from
+			OpenCode's running server (`opencode api skill.list`
+			and `command.list`), both run asynchronously and
 			once per project so the editor never blocks. Results
 			merge with the filesystem scan, de-duplicated by
 			name, surfacing what the scan alone misses: built-in
