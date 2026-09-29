@@ -66,7 +66,7 @@ function M.diagnose_suppression(state)
       "The suppression wrap is NOT installed even though 'agentcomplete' is registered. It installs when a prompt buffer attaches, so either none has attached in this Neovim (':AgentCompleteAttach' installs it; 'enabled = false' never auto-attaches), or blink was not configured yet when one did — blink.cmp.setup() must run before a prompt buffer opens."
   elseif not state.detected then
     cause =
-      "The suppression wrap IS installed, but the current buffer is not detected as an agent prompt buffer (a Claude Code 'claude-prompt-<uuid>.md' or an OpenCode '<digits>.md' under $OPENCODE), so blink uses your original (unsuppressed) source list here. Run this from the real prompt buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."
+      "The suppression wrap IS installed, but the current buffer is not detected as an agent prompt buffer (a Claude Code 'claude-prompt-<uuid>.md' or an OpenCode '<digits>.md' in a Neovim OpenCode launched), so blink uses your original (unsuppressed) source list here. Run this from the real prompt buffer (':AgentCompleteAttach' forces a session but does not change blink detection)."
   else
     cause = "Suppression is installed AND this buffer is detected, so agentcomplete should be the only source (plus allowed_sources: "
       .. table.concat(effective, ", ")
@@ -127,7 +127,7 @@ end
 ---@field nvim_version string
 ---@field config { backend: string, resolved_backend: string, detect: string, enabled: boolean, sources: { slash: boolean, file: boolean }, allowed_sources: string[], opencode: AgentComplete.Config.OpenCode }
 ---@field buffer { nr: integer, name: string, detected: boolean, native_attached: boolean, session_source: string }
----@field session { tool: string, cwd: string, session_id: string|nil, skill_dirs: string[], command_dirs: string[] }|nil
+---@field session { tool: string, cwd: string, session_id: string|nil, agent_pid: integer|nil, skill_dirs: string[], command_dirs: string[] }|nil
 ---@field discovery { skills: integer, cli_skills: integer, commands: integer, cli_commands: integer, extra_commands: integer, files: integer }|nil
 ---@field highlighting { attached: boolean, painted: integer, groups: { AgentCompleteSkill: string|nil, AgentCompleteFile: string|nil }, slash_set: integer|nil }
 ---@field context AgentComplete.Context.State|nil
@@ -188,6 +188,7 @@ function M.render(report)
     add("- session.tool:             " .. val(s.tool))
     add("- session.cwd:              " .. val(s.cwd))
     add("- session.session_id:       " .. val(s.session_id))
+    add("- session.agent_pid:        " .. val(s.agent_pid))
     add("- session.skill_dirs:       " .. list(s.skill_dirs))
     add("- session.command_dirs:     " .. list(s.command_dirs))
   else
@@ -375,6 +376,7 @@ function M.collect(opts)
       tool = session.tool,
       cwd = session.cwd,
       session_id = session.session_id,
+      agent_pid = session.agent_pid,
       skill_dirs = session.skill_dirs,
       command_dirs = session.command_dirs,
     } or nil,

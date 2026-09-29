@@ -87,11 +87,13 @@ Skills are found one level deep, as `<dir>/<name>/SKILL.md`.
 OpenCode ~
 
 OpenCode (`/editor`, default `<leader>e`) writes the prompt to a bare
-`<tmpdir>/<epoch-millis>.md` file with no tool-specific name. Detection
-therefore keys on the environment variable `OPENCODE` being `1` — OpenCode
-sets it for every command and the spawned editor inherits it — corroborated by
-the buffer basename matching `<digits>.md`, so other files opened in the same
-Neovim are not misdetected.
+`<tmpdir>/<epoch-millis>.md` file with no tool-specific name. A buffer whose
+basename matches `<digits>.md` is therefore taken for the prompt only when
+OpenCode launched this Neovim, so other files opened in the same Neovim are
+not misdetected. OpenCode 2 tells the editor nothing, so agentcomplete looks
+for an `opencode` process among Neovim's ancestors — once per Neovim, and only
+for a `<digits>.md` buffer. OpenCode 1's `OPENCODE=1` environment variable is
+accepted as well.
 
 Skills and commands are discovered across OpenCode's config bases — the global
 config home (`$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`), an
@@ -723,7 +725,8 @@ directory and prints the report to |:messages|. The report contains:
 
 	Config		configured vs. resolved backend, detect mode,
 			'enabled', the 'sources' toggles, 'allowed_sources'
-	Detection	whether the buffer is detected, the resolved tool, and
+	Detection	whether the buffer is detected, the resolved tool, the
+			agent process detection found (OpenCode's TUI), and
 			the skill/command directories discovery searched
 	Discovery	counts of skills, commands, and files found
 	Highlighting	whether highlighting attached, how many tokens are

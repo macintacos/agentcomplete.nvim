@@ -37,8 +37,14 @@ local T = new_set({
       saved.oc_config = vim.env.OPENCODE_CONFIG
       saved.oc_config_dir = vim.env.OPENCODE_CONFIG_DIR
       saved.config_oc = require("agentcomplete").config.opencode
+      -- No case climbs the real process tree: this test run may itself sit under OpenCode.
+      local oc = require("agentcomplete.detect.opencode")
+      saved.launcher = oc.launcher
+      ---@diagnostic disable-next-line: duplicate-set-field
+      oc.launcher = function() end
     end,
     post_case = function()
+      require("agentcomplete.detect.opencode").launcher = saved.launcher
       require("agentcomplete").config.opencode = saved.config_oc
       vim.env.AGENTCOMPLETE_CWD = saved.env
       vim.g.agentcomplete_cwd = saved.g
@@ -185,16 +191,75 @@ T["opencode"]["matches a <millis>.md buffer when OPENCODE=1, rooted at cwd"] = f
   local s = assert(oc.detect(buf))
   expect.equality(s.tool, "opencode")
   expect.equality(s.session_id, "12345")
+  expect.equality(s.agent_pid, 12345)
   expect.equality(s.cwd, vim.loop.cwd())
   expect.equality(#s.skill_dirs > 0, true)
   expect.equality(#s.command_dirs > 0, true)
 end
 
-T["opencode"]["ignores every buffer when OPENCODE is not set"] = function()
+T["opencode"]["ignores every buffer when OpenCode did not launch this Neovim"] = function()
   vim.env.OPENCODE = nil
   vim.env.OPENCODE_PID = nil
   local oc = require("agentcomplete.detect.opencode")
   expect.equality(oc.detect(named_buf("/private/tmp/1718646000002.md")), nil)
+end
+
+-- OpenCode v2 exports nothing to the editor it spawns; its process is the only evidence.
+T["opencode"]["matches a <millis>.md buffer when an OpenCode process launched this Neovim"] = function()
+  vim.env.OPENCODE = nil
+  vim.env.OPENCODE_PID = nil
+  local oc = require("agentcomplete.detect.opencode")
+  ---@diagnostic disable-next-line: duplicate-set-field
+  oc.launcher = function()
+    return 4242
+  end
+  local s = assert(oc.detect(named_buf("/private/tmp/1718646000010.md")))
+  expect.equality(s.tool, "opencode")
+  expect.equality(s.agent_pid, 4242)
+end
+
+T["opencode"]["never climbs the process tree for a buffer not shaped like the prompt"] = function()
+  vim.env.OPENCODE = nil
+  local oc = require("agentcomplete.detect.opencode")
+  local climbed = false
+  ---@diagnostic disable-next-line: duplicate-set-field
+  oc.launcher = function()
+    climbed = true
+  end
+  expect.equality(oc.detect(named_buf("/tmp/oc-d/notes.md")), nil)
+  expect.equality(climbed, false)
+end
+
+T["proc.find_ancestor"] = new_set()
+
+---A `ps -o ppid=,comm=` stand-in over `tree`, a map of pid → `{ ppid, comm }`.
+local function fake_ps(tree)
+  return function(cmd)
+    local node = tree[tonumber(cmd[#cmd])]
+    return node and ("%5d %s\n"):format(node[1], node[2]) or ""
+  end
+end
+
+T["proc.find_ancestor"]["climbs to the nearest process with that executable name"] = function()
+  local proc = require("agentcomplete.context.proc")
+  local ps = fake_ps({
+    [30] = { 20, "/bin/sh" },
+    [20] = { 10, "/opt/homebrew/Cellar/opencode-v2/2.0.18/bin/opencode" },
+    [10] = { 1, "opencode" },
+  })
+  expect.equality(proc.find_ancestor(30, "opencode", ps), 20)
+end
+
+T["proc.find_ancestor"]["returns nil when no ancestor has the name"] = function()
+  local proc = require("agentcomplete.context.proc")
+  local ps = fake_ps({ [30] = { 20, "/bin/sh" }, [20] = { 1, "/usr/bin/login" } })
+  expect.equality(proc.find_ancestor(30, "opencode", ps), nil)
+  expect.equality(
+    proc.find_ancestor(30, "opencode", function()
+      error("ps missing")
+    end),
+    nil
+  )
 end
 
 T["opencode"]["ignores non-opencode-shaped names even when OPENCODE=1"] = function()

@@ -11,6 +11,7 @@ local M = {}
 ---@field tool string Identifier of the detecting tool (e.g. "claude-code").
 ---@field cwd string The agent's project working directory.
 ---@field session_id string|nil Tool session id, when available.
+---@field agent_pid? integer Pid of the agent process that opened the prompt (OpenCode's TUI), when known.
 ---@field skill_dirs string[] Directories this tool keeps skills in.
 ---@field command_dirs string[] Directories this tool keeps commands in.
 ---@field skill_namespaces? table<string, string> Map of skill-dir path → plugin namespace; dirs absent from the map (user/project, OpenCode) complete unqualified.

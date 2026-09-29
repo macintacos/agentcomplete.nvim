@@ -197,6 +197,15 @@ T["render"]["reports the OpenCode session env and what the plugin path holds"] =
   expect.equality(has(out, "/checkout/opencode/agentcomplete.ts"), true)
 end
 
+-- OpenCode v2 exports nothing to its editor, so the TUI found up the process tree is what both
+-- detection and the context pane's pointer hinge on.
+T["render"]["reports the agent process detection found"] = function()
+  local diag = require("agentcomplete.diagnostics")
+  local report = full_report()
+  report.session = { tool = "opencode", cwd = "/proj", agent_pid = 4242 }
+  expect.equality(has(diag.render(report), "session.agent_pid:        4242"), true)
+end
+
 T["render"]["surfaces the reason no pane opened"] = function()
   local diag = require("agentcomplete.diagnostics")
   local report = full_report()

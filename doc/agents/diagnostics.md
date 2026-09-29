@@ -46,20 +46,23 @@ How each tool's prompt buffer is recognized (detectors live under
 | Tool | Signal | cwd |
 | --- | --- | --- |
 | Claude Code | buffer name matches `claude-prompt-<uuid>.md` | editor cwd (project root) |
-| OpenCode | `vim.env.OPENCODE == "1"` (set for every OpenCode command, inherited by the spawned editor) **and** buffer basename matches `<digits>.md` | editor cwd (project root) |
+| OpenCode | buffer basename matches `<digits>.md` **and** an `opencode` process is among Neovim's ancestors (v2, reported as `session.agent_pid`) or `vim.env.OPENCODE == "1"` (v1) | editor cwd (project root) |
 
 Both honor `$AGENTCOMPLETE_CWD` / `vim.g.agentcomplete_cwd` to override the cwd.
 OpenCode's temp file has no tool-specific name — it is a bare `<epoch-millis>.md` in the
-system temp dir — which is why detection keys on the inherited `OPENCODE` env var rather
-than the buffer name.
+system temp dir — so detection also needs evidence that OpenCode launched this Neovim.
+OpenCode 2 exports nothing to the editor, which leaves the process tree: a `<digits>.md`
+buffer with `session.agent_pid: (unset)` means no `opencode` process was found within five
+ancestors (an `$EDITOR` wrapper chain deeper than that, or an editor OpenCode did not
+launch).
 
 ## What the report contains
 
 - `## Config` — configured vs. resolved backend, detect mode, `enabled`, the `sources`
   toggles, and `allowed_sources`.
 - `## Detection` — whether the current buffer is detected, the session source, the
-  resolved `session.tool`, and the `skill_dirs` / `command_dirs` discovery actually
-  searched.
+  resolved `session.tool`, the `session.agent_pid` detection found (OpenCode's TUI), and
+  the `skill_dirs` / `command_dirs` discovery actually searched.
 - `## Discovery` — counts for the active session,
   **one line per source rather than a total**, because a healthy-looking sum is how a
   discovery path that searched the wrong directory hides (the static built-ins alone put

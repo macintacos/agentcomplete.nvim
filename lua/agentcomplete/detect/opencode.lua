@@ -1,25 +1,40 @@
 ---OpenCode detector.
 ---
----OpenCode opens its prompt via `/editor` (default `<leader>e`): it writes the prompt to
----`<tmpdir>/<epoch-millis>.md` and opens that file in `$VISUAL`/`$EDITOR`. The temp file
----carries no OpenCode-specific name, so name-matching alone is unreliable. Instead detection
----keys on `vim.env.OPENCODE == "1"` — OpenCode sets `OPENCODE=1` (plus `OPENCODE_PID`) in
----`process.env` for every command via a yargs middleware, and the spawned editor inherits it —
----corroborated by the buffer's `<digits>.md` temp-file shape (so other files opened in the same
----Neovim are not misdetected). The cwd is OpenCode's project root, overridable via
+---OpenCode opens its prompt via `/editor`: it writes the prompt to `<tmpdir>/<epoch-millis>.md`
+---and opens that file in `$VISUAL`/`$EDITOR`. That name is not OpenCode-specific, so detection
+---also requires evidence that OpenCode launched this Neovim: v1 exports `OPENCODE=1` (and
+---`OPENCODE_PID`) to the editor, while v2 exports nothing, leaving an `opencode` process among
+---Neovim's ancestors as the only signal. The cwd is OpenCode's project root, overridable via
 ---`$AGENTCOMPLETE_CWD` (per-launch) or `vim.g.agentcomplete_cwd` (static config).
 local M = { name = "opencode" }
 
----Whether the buffer is OpenCode's external-editor prompt: OpenCode launched this Neovim
----(`$OPENCODE`) and the buffer is its `<epoch-millis>.md` temp file.
+---@type integer|false|nil
+local launcher
+
+---The OpenCode process that launched this Neovim, or nil when none did. Looked up once: blink
+---detects on every keystroke, and a process's launcher never changes.
+---@return integer|nil
+function M.launcher()
+  if launcher == nil then
+    launcher = require("agentcomplete.context.proc").find_ancestor(
+      vim.loop.os_getppid(),
+      "opencode",
+      vim.fn.system
+    ) or false
+  end
+  return launcher or nil
+end
+
+---Whether the buffer is OpenCode's external-editor prompt: its `<epoch-millis>.md` temp file, in
+---a Neovim OpenCode launched. The name is checked first so other buffers never cost a `ps`.
 ---@param bufnr integer
 ---@return boolean
 local function is_opencode_prompt(bufnr)
-  if vim.env.OPENCODE ~= "1" then
+  local base = vim.api.nvim_buf_get_name(bufnr):match("[^/]+$") or ""
+  if not base:match("^%d+%.md$") then
     return false
   end
-  local base = vim.api.nvim_buf_get_name(bufnr):match("[^/]+$") or ""
-  return base:match("^%d+%.md$") ~= nil
+  return vim.env.OPENCODE == "1" or M.launcher() ~= nil
 end
 
 ---Resolve the project cwd: explicit override (env, then `vim.g`) else the editor cwd.
@@ -64,6 +79,7 @@ function M.detect(bufnr)
     tool = "opencode",
     cwd = cwd,
     session_id = vim.env.OPENCODE_PID,
+    agent_pid = tonumber(vim.env.OPENCODE_PID) or M.launcher(),
     skill_dirs = skill_dirs,
     command_dirs = command_dirs,
     extra_commands = extra_commands,

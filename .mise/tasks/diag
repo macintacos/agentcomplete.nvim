@@ -26,11 +26,12 @@ nvim --headless --noplugin -u tests/minimal_init.lua \
 
 echo
 echo "=== OpenCode detection pass ==="
-# Simulate an OpenCode external-editor session: OpenCode sets OPENCODE=1 in the
-# environment (inherited by the spawned editor) and writes the prompt to a bare
-# <epoch-millis>.md temp file. With those two signals the diagnostics report should
-# show `session.tool: opencode` and the resolved OpenCode skill/command search dirs —
-# the same `:luafile scripts/diagnostics.lua` flow a human runs from an OpenCode buffer.
+# Simulate an OpenCode external-editor session: OpenCode writes the prompt to a bare
+# <epoch-millis>.md temp file. OpenCode v2 is recognized by being Neovim's ancestor,
+# which a headless run cannot fake, so this pass sets v1's OPENCODE=1 instead. The
+# diagnostics report should show `session.tool: opencode` and the resolved OpenCode
+# skill/command search dirs — the same `:luafile scripts/diagnostics.lua` flow a human
+# runs from an OpenCode buffer.
 OPENCODE=1 OPENCODE_PID=99999 nvim --headless --noplugin -u tests/minimal_init.lua \
 	-c 'lua require("agentcomplete").setup({})' \
 	-c 'file 1700000000000.md' \
