@@ -305,7 +305,7 @@ local function with_ui(fn)
   assert(ok, err)
 end
 
----Attach to a fresh prompt with a message to show, so the last-message pane opens beside it.
+---Attach to a fresh prompt with a message to show, so a last-message pane opens.
 ---@return integer buf
 local function attach_with_pane()
   require("agentcomplete.context").register({

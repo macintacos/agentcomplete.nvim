@@ -19,8 +19,7 @@ local T = new_set({
   },
 })
 
----A prompt buffer, focused, in a window with a code buffer's gutter, fold column, cursor line,
----and unwrapped text.
+---A prompt buffer, focused, in a window styled like a code buffer's.
 local function prompt()
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_set_current_buf(buf)
@@ -95,8 +94,7 @@ T["attach"]["keeps a winbar and wrap a plugin sets after attach"] = function()
   )
 end
 
--- The composer leaves a winbar a plugin sets from its own `BufWritePost` handler, where
--- `OptionSet` never fires.
+-- dropbar sets its winbar from inside its own `BufWritePost` handler.
 T["attach"]["keeps a winbar a plugin sets from its own autocmd"] = function()
   local buf, win = prompt()
   local grp =

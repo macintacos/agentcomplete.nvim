@@ -282,7 +282,7 @@ function M.open(buf, session, config, opts)
   local reported = false
   local claimed, err = M.resolve(session, function(result)
     -- A resolver reports once, and only while this buffer is still attached. A second report
-    -- would build a pane over the first and overwrite the record of its windows; one arriving
+    -- would build a pane over the first and overwrite the record of its window; one arriving
     -- after `close` would hang autocmds on an augroup nothing owns.
     if reported or M._augroups[buf] ~= grp then
       return

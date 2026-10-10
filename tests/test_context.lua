@@ -528,8 +528,7 @@ T["open"]["stacks above the prompt one column narrower than min_width"] = functi
   expect.equality(layout[2][1][2], pane_win())
 end
 
--- The side is picked once, when the pane opens. A terminal that narrows afterwards keeps the
--- pane where it is: Neovim's own split sizing is the only thing that moves it.
+-- The side is picked once, at open: a later narrowing leaves the pane where it is.
 T["open"]["keeps its side when the terminal is resized"] = function()
   local context = require("agentcomplete.context")
   vim.o.columns = 140
@@ -614,8 +613,8 @@ T["open"]["names the pane buffer after the resolver"] = function()
   )
 end
 
--- The rung the resolver answered on is what admits a guessed session is a guess, so it belongs
--- in the name of the pane, where the reader already looks to see whose message this is.
+-- The rung records how the session was found; it belongs in the pane's name, where the reader
+-- already looks to see whose message this is.
 T["open"]["names the resolution rung in the buffer name"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
@@ -881,10 +880,8 @@ T["open"]["shows the message from its first line"] = function()
 end
 
 -- Quitting the prompt is how the agent CLI is answered, so the pane has to be gone *before* that
--- quit resolves: a pane still standing is a window Neovim keeps the editor open for, leaving the
--- reader in a message they cannot reply to instead of back at the agent. Asserting the prompt
--- window is still open is what pins the ordering — after it closes, dismissing the pane is too
--- late to matter.
+-- quit resolves. Asserting the prompt is still open pins the order: after it closes, dismissing
+-- the pane is too late.
 T["open"]["dismisses the pane before the prompt's quit resolves"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
@@ -1114,8 +1111,8 @@ T["open"]["shows a message resolved by the real Claude Code resolver"] = functio
   expect.equality(context._state[buf].transcript, fx.transcript)
 end
 
--- The pane is two windows over two scratch buffers, and closing a window does not take its
--- buffer with it: unwiped, every prompt a session opens leaves one behind for its lifetime.
+-- The pane is a scratch buffer in its own window, and closing a window does not take its buffer
+-- with it: unwiped, every prompt a session opens leaves one behind for its lifetime.
 T["open"]["leaves no buffer behind when the pane closes"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
@@ -1147,7 +1144,7 @@ T["open"]["records a failure when the prompt buffer is on no screen to split fro
 end
 
 -- A resolver reports once. A second report would build a second pane over the first and
--- overwrite the record of the first one's windows, leaving two nothing can close.
+-- overwrite the record of the first one's window, leaving two nothing can close.
 T["open"]["ignores a resolver that reports twice"] = function()
   local context = require("agentcomplete.context")
   context.register({

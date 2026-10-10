@@ -1,4 +1,4 @@
----The pane the agent's last message is shown in: a plain split beside the prompt, the keys that
+---The pane the agent's last message is shown in: a plain split next to the prompt, the keys that
 ---scroll it from the prompt, and the autocmds that close it with the prompt. Nothing here knows
 ---what a resolver is — it is handed text, a buffer name, and keys to map.
 ---@class AgentComplete.Context.Pane
@@ -9,12 +9,12 @@ local M = {}
 ---@type table<integer, { win: integer, keys: string[] }>
 M._panes = {}
 
----Every value is named, because a split copies the options of the window it splits: a reader's
----own 'number' or 'list' would otherwise reach the pane. `style = "minimal"` is documented for
----floats only, and the plugin still supports 0.10. 'conceallevel' is the point of the pane,
----not a detail of it: markdown markup exists to be edited, and this is the one markdown in
----the editor nobody will edit. 'smoothscroll' lets the scroll keys step through a paragraph
----the pane wraps a row at a time, where Vim would otherwise skip it whole as one line.
+---Every value is named, because a split copies the options of the window it splits.
+---`style = "minimal"` would be shorter, but it is documented for floats only, and the plugin
+---supports 0.10. 'conceallevel' is the point of the pane, not a detail of it: markdown markup
+---exists to be edited, and this is the one markdown in the editor nobody will edit.
+---'smoothscroll' lets the scroll keys step through a paragraph the pane wraps a row at a time,
+---where Vim would otherwise skip it whole as one line.
 local PANE_OPTIONS = {
   number = false,
   relativenumber = false,
@@ -126,9 +126,9 @@ end
 local function follow(pane)
   local group, host, win = pane.group, pane.host, pane.win
 
-  -- The pane belongs to the prompt, so it goes when the prompt does — and on `QuitPre`,
-  -- before the quit resolves, so the prompt window is the last one standing and `:q` returns
-  -- the reader to the agent instead of stranding them in a message they cannot reply to.
+  -- The pane goes with the prompt, and on `QuitPre` before the quit resolves: left standing, it
+  -- would keep `:q` from returning the reader to the agent, stranding them in a message they
+  -- cannot reply to.
   vim.api.nvim_create_autocmd(
     "QuitPre",
     { group = group, buffer = pane.buf, callback = pane.on_close }

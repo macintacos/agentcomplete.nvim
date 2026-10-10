@@ -6,8 +6,7 @@ local new_set, expect = MiniTest.new_set, MiniTest.expect
 
 local child = MiniTest.new_child_neovim()
 
----Start a child editing a real prompt file, with a resolver that always reports a message. The
----file exists so `:wq` and `:x` have something to write.
+---Start a child editing a real prompt file, so `:wq` and `:x` have something to write.
 local function start()
   child.restart({ "-u", "tests/minimal_init.lua" })
   child.lua([[
@@ -27,7 +26,6 @@ local function start()
   ]])
 end
 
----Open the pane beside the prompt the child is editing.
 local function open_pane()
   child.lua([[
     require("agentcomplete.context").open(
