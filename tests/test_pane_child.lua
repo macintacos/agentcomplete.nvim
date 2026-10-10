@@ -1,6 +1,5 @@
 -- Tests for the pane that need their own Neovim: quitting the editor with the pane open, and
 -- opening it from insert mode. The in-process suite cannot quit itself or sit in insert mode.
--- Follows tests/test_lazy.lua.
 
 local MiniTest = require("mini.test")
 local new_set, expect = MiniTest.new_set, MiniTest.expect

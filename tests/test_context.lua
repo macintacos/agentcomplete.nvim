@@ -424,6 +424,9 @@ T["open"] = new_set({
       -- case after it running in insert mode.
       vim.cmd("silent! stopinsert")
       vim.cmd("silent! only")
+      -- `vim.wo` also sets the global value, so a case's window options would reach the window
+      -- the next case reuses.
+      vim.cmd("set nonumber nobreakindent nocursorline nolist")
       vim.o.columns = 80
       vim.o.lines = 24
     end,
@@ -463,7 +466,7 @@ local function ok_result(text)
   }
 end
 
----The window holding the message: the one pane the first prompt buffer has open.
+---The window of the one open pane.
 local function pane_win()
   local _, pane = next(require("agentcomplete.context.pane")._panes)
   return pane and pane.win
@@ -785,6 +788,15 @@ T["open"]["leaves a scroll key alone when it is disabled"] = function()
   context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   expect.equality(mapping(buf, "i", "<C-f>") ~= nil, true)
   expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
+T["open"]["opens no window when a scroll key is not a string"] = function()
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 160, keys = { scroll_down = true } }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+  expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
 end
 
 -- The pane is the one markdown in the editor nobody will edit, so the markup that exists to
@@ -1199,6 +1211,21 @@ T["open"]["does not inherit the prompt's window options"] = function()
   }, { false, false, false, false })
 end
 
+T["open"]["does not pass the pane's window options to a window split from it"] = function()
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  vim.api.nvim_set_current_win(assert(pane_win()))
+  vim.cmd("new")
+  expect.equality(vim.wo.conceallevel, vim.wo[prompt_win].conceallevel)
+end
+
 T["open"]["keeps a window option set on the pane across focus changes"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
@@ -1238,33 +1265,28 @@ T["open"]["keeps the prompt's view where the reader left it"] = function()
   expect.equality(vim.api.nvim_win_get_cursor(prompt_win), { 42, 0 })
 end
 
-T["open"]["closes only the pane when quit from inside it"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  vim.api.nvim_set_current_win(assert(pane_win()))
-  vim.cmd("quit")
-  expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
-  expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
-  expect.equality(mapping(buf, "n", "<C-f>"), nil)
-  expect.equality(mapping(buf, "i", "<C-b>"), nil)
-end
-
-T["open"]["closes only the pane when closed from inside it"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  vim.api.nvim_set_current_win(assert(pane_win()))
-  vim.cmd("close")
-  expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
-  expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
-  expect.equality(mapping(buf, "n", "<C-f>"), nil)
-  expect.equality(mapping(buf, "i", "<C-b>"), nil)
-end
+T["open"]["quit or close from inside the pane"] = new_set({
+  parametrize = { { "quit" }, { "close" } },
+}, {
+  ["closes only the pane"] = function(cmd)
+    local context = require("agentcomplete.context")
+    local buf = prompt_buffer()
+    local prompt_win = vim.api.nvim_get_current_win()
+    local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+    context.open(
+      buf,
+      session_for("claude-code"),
+      config,
+      with_resolver(ok_result("hello"))
+    )
+    vim.api.nvim_set_current_win(assert(pane_win()))
+    vim.cmd(cmd)
+    expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
+    expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
+    expect.equality(mapping(buf, "n", "<C-f>"), nil)
+    expect.equality(mapping(buf, "i", "<C-b>"), nil)
+  end,
+})
 
 T["open"]["gives the prompt its full width back when the pane closes"] = function()
   local context = require("agentcomplete.context")

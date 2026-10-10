@@ -6,8 +6,8 @@
 ---@class AgentComplete.Composer
 local M = {}
 
----What the prompt window turns off and on. The statusline is absent on purpose: it is the
----user's, and it is where their mode shows.
+---What the prompt window turns off and on. Nothing that draws chrome — statusline, winbar,
+---'statuscolumn' — is here: those belong to the user and their plugins.
 local OPTIONS = {
   number = false,
   relativenumber = false,

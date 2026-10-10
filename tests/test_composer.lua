@@ -95,8 +95,8 @@ T["attach"]["keeps a winbar and wrap a plugin sets after attach"] = function()
   )
 end
 
--- dropbar re-attaches from inside its own `BufWritePost` handler, where `OptionSet` never fires:
--- autocmds do not nest.
+-- The composer leaves a winbar a plugin sets from its own `BufWritePost` handler, where
+-- `OptionSet` never fires.
 T["attach"]["keeps a winbar a plugin sets from its own autocmd"] = function()
   local buf, win = prompt()
   local grp =
@@ -114,7 +114,6 @@ T["attach"]["keeps a winbar a plugin sets from its own autocmd"] = function()
   expect.equality(vim.wo[win].winbar, "%{%v:lua.dropbar()%}")
 end
 
--- A `:set` in the prompt sets its local value as much as a `:setlocal` does.
 T["attach"]["keeps a statuscolumn set with :set in the prompt"] = function()
   local buf, win = prompt()
   require("agentcomplete.composer").attach(buf)

@@ -369,7 +369,7 @@ T["attach"]["turns the prompt window into a page, and detach turns it back"] = f
   }, { true, "auto", "0", false, false })
 end
 
-T["attach"]["ignores a composer.width it does not read"] = function()
+T["attach"]["ignores a stale width key in the composer config"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({ backend = "native", composer = { width = 80 } })
   with_ui(function()

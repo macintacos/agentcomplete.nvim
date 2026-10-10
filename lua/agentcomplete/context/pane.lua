@@ -4,16 +4,17 @@
 ---@class AgentComplete.Context.Pane
 local M = {}
 
----What the pane left behind, per prompt buffer: `win` is the pane's window, and `keys` what `open`
----mapped on the prompt, so `close` removes exactly that without needing the configuration again.
+---What the pane left behind, per prompt buffer: `win` is the pane's window, and `keys` what
+---`open` mapped on the prompt, so `close` removes exactly that without the configuration again.
 ---@type table<integer, { win: integer, keys: string[] }>
 M._panes = {}
 
--- Every value is named, because a split copies the options of the window it splits: a reader's own
--- 'number' or 'list' would otherwise reach the pane. 'conceallevel' is the point of the pane rather
--- than a detail of it: markdown markup exists to be edited, and this is the one markdown in the
--- editor nobody will edit. 'smoothscroll' lets the scroll keys step through a paragraph the pane
--- wraps a row at a time, where Vim would otherwise skip it whole as one line.
+---Every value is named, because a split copies the options of the window it splits: a reader's
+---own 'number' or 'list' would otherwise reach the pane. `style = "minimal"` is documented for
+---floats only, and the plugin still supports 0.10. 'conceallevel' is the point of the pane,
+---not a detail of it: markdown markup exists to be edited, and this is the one markdown in
+---the editor nobody will edit. 'smoothscroll' lets the scroll keys step through a paragraph
+---the pane wraps a row at a time, where Vim would otherwise skip it whole as one line.
 local PANE_OPTIONS = {
   number = false,
   relativenumber = false,
@@ -61,6 +62,10 @@ local function configured(keys)
   for _, scroll in ipairs(SCROLL) do
     local lhs = keys and keys[scroll.option]
     if lhs then
+      assert(
+        type(lhs) == "string",
+        ("context.keys.%s must be a key or false"):format(scroll.option)
+      )
       active[#active + 1] = { lhs = lhs, keycode = scroll.keycode, desc = scroll.desc }
     end
   end
@@ -102,8 +107,6 @@ local function scroll_pane(win, keycode, lhs)
   end)
 end
 
----The buffer name the pane shows under: `agentcomplete://<resolver>`, plus `/<rung>` when the
----resolver reports one.
 ---@param resolver string
 ---@param rung string|nil
 ---@return string
@@ -118,7 +121,7 @@ end
 ---@field win integer Window showing the message.
 ---@field on_close fun() What dismissing the pane means to its owner.
 
----Wire the pane to the windows around it.
+---Close the pane when the prompt quits or either window closes.
 ---@param pane AgentComplete.Context.Pane.Built
 local function follow(pane)
   local group, host, win = pane.group, pane.host, pane.win
@@ -130,7 +133,7 @@ local function follow(pane)
     "QuitPre",
     { group = group, buffer = pane.buf, callback = pane.on_close }
   )
-  -- Every window the pane is built from is a way out of it.
+  -- Closing either window, by any route, takes the pane down.
   vim.api.nvim_create_autocmd("WinClosed", {
     group = group,
     pattern = { tostring(win), tostring(host) },
@@ -154,8 +157,8 @@ end
 ---@param opts AgentComplete.Context.Pane.Options
 ---@return integer|nil win nil when `buf` is on no screen to split from.
 function M.open(buf, opts)
-  -- Before the split: these are the first things here a bad `keys` value can raise from, and
-  -- a raise once the split exists strands it — nothing owns it yet to close it.
+  -- `configured` first: it is where a bad `keys` value raises, and a raise once the split
+  -- exists strands it — nothing owns it yet to close it.
   local scrolls = configured(opts.keys)
   local host = vim.fn.bufwinid(buf)
   if host == -1 then
@@ -164,8 +167,8 @@ function M.open(buf, opts)
   local side = vim.o.columns >= opts.min_width and "left" or (opts.stacked or "above")
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
-  -- ponytail: a second pane under the same name stays unnamed (E95); suffix it if one Neovim
-  -- ever holds two prompts
+  -- ponytail: a second prompt with the same resolver gets an unnamed pane (E95); suffix the
+  -- prompt's buffer number if that matters.
   pcall(vim.api.nvim_buf_set_name, pane_buf, name(opts.resolver, opts.rung))
   local topline = vim.api.nvim_win_call(host, vim.fn.winsaveview).topline
   local win = vim.api.nvim_open_win(pane_buf, false, { split = side, win = host })
@@ -181,7 +184,7 @@ function M.open(buf, opts)
   vim.bo[pane_buf].modifiable = false
   vim.bo[pane_buf].filetype = "markdown"
   for option, value in pairs(PANE_OPTIONS) do
-    vim.wo[win][option] = value
+    vim.api.nvim_set_option_value(option, value, { win = win, scope = "local" })
   end
 
   -- On the prompt buffer, not the pane: the message has to be readable without leaving the

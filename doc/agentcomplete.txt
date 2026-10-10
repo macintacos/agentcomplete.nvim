@@ -220,8 +220,9 @@ The full default configuration, with every option: >lua
 'context.stacked'	`"above"` | `"below"` (default `"above"`). Which side of
 			the prompt the pane takes when the terminal is narrower
 			than 'context.min_width' and the two are stacked rather
-			than side by side. Unrelated to the wide layout, which
-			is always to the left. See |agentcomplete-context|.
+			than side by side. Unrelated to the side-by-side
+			placement, which is always to the left. See
+			|agentcomplete-context|.
 
 'context.rumdl_config'	string (default `nil`). Absolute path to a rumdl config
 			file, used to format the message the pane shows. A
@@ -381,10 +382,11 @@ the editor's working directory.
 
                                                         *:AgentCompleteAttach*
 :AgentCompleteAttach	Force completion, |agentcomplete-highlighting|, the
-			|agentcomplete-composer|, the context pane, onto the
-			current buffer, bypassing detection. Use it when a
-			session is not auto-detected (an unusual launch) or
-			when 'enabled' is false.
+			|agentcomplete-composer|, and the
+			|agentcomplete-context| pane onto the current buffer,
+			bypassing detection. Use it when a session is not
+			auto-detected (an unusual launch) or when 'enabled'
+			is false.
 
                                                         *:AgentCompleteDetach*
 :AgentCompleteDetach	Detach completion, highlighting, the composer, and the
@@ -505,15 +507,15 @@ agentcomplete sets every option on the prompt buffer only (|:setlocal|).
 Other buffers opened in that window look as they always do.
 |:AgentCompleteDetach| puts each option back.
 
-If 'statuscolumn' is set, Neovim draws that column in place of the number,
-sign, and fold columns, so the composer's settings for those have no effect
-there.
-
 agentcomplete leaves your statusline, winbar, 'statuscolumn', colorscheme,
 spelling, 'textwidth', and keymaps alone. Plugins that draw in those places
 draw on the prompt as on any other buffer. The context pane's scroll keys are
 the one exception: they are mapped on the prompt while the pane is open; see
 |agentcomplete-context-keys|.
+
+If 'statuscolumn' is set, Neovim draws that column in place of the number,
+sign, and fold columns, so the composer's settings for those have no effect
+there.
 
 Set 'composer.enabled' to `false` to leave the prompt window exactly as your
 own configuration draws it. The |agentcomplete-context| pane is unaffected
@@ -528,11 +530,11 @@ agent's last message. Without it a reply is written blind: the buffer the
 agent opens for you carries no conversation at all.
 
 The pane is an ordinary split. It goes to the left of the prompt when the
-terminal is at least 'context.min_width' columns wide, the message then your
-reply to it. Narrower than that, it goes on the 'context.stacked' side of the
-prompt. agentcomplete picks the placement once, when the pane opens. After
-that Neovim sizes the pane as it sizes any other split, and resizing the
-terminal does not move it to the other side.
+terminal is at least 'context.min_width' columns wide, with the message on
+the left and your reply to it on the right. Narrower than that, it goes on the
+'context.stacked' side of the prompt. agentcomplete picks the placement once,
+when the pane opens. After that Neovim sizes the pane as it sizes any other
+split, and resizing the terminal does not move it to the other side.
 
 Stacked, the pane goes above the prompt, so the conversation reads top-down:
 the message over the reply to it. Set 'context.stacked' to `"below"` to keep
@@ -553,12 +555,12 @@ the message looks is your own markdown setup, unchanged: the pane sets
 `filetype` to `markdown` and lets treesitter and whatever renderer you use
 style it exactly as they style any other markdown.
 
-The pane's buffer is named after the agent that spoke. Claude Code's is
-`agentcomplete://claude-code`. OpenCode's is
-`agentcomplete://opencode/<step>`, where the step is the lookup that found
+The pane's buffer is named after the agent that spoke. A second prompt
+answered by the same agent in one Neovim gets an unnamed pane.
+Claude Code's is `agentcomplete://claude-code`. OpenCode's is
+`agentcomplete://opencode/<rung>`, where the rung is the lookup that found
 the session: `$OPENCODE_SESSION_ID`, `pointer file`, or `guessed`. Neovim
-shows the name wherever it shows a buffer
-name, such as `:ls` and your statusline.
+shows the name wherever it shows a buffer name: your statusline and `:ls!`.
 
 The buffer is not a file. It is a `nofile` scratch buffer, never written
 anywhere. It is wiped when the pane closes. 'modifiable' is off, so you can
@@ -571,7 +573,7 @@ the pane down a line and `<S-Up>` back up, in normal and insert mode both;
 hold either to keep going. Those are the default keys. Scrolling any other
 way means moving the cursor into the pane and back, which leaves the reply
 you are composing. A long paragraph that wraps scrolls a row at a time, not
-all at once. Lines are counted as the pane draws them.
+all at once.
 
 Both are 'context.keys', and either may be set to `false` to leave that key
 alone: >lua
@@ -625,8 +627,8 @@ For OpenCode the message is read from OpenCode's running server with
 `opencode api`, which needs OpenCode 2. Which session to read is the hard
 part: OpenCode's external editor inherits no session id, and OpenCode records
 no mapping between an editor and the session it was opened from. So the
-session is looked up in three steps, and the pane's buffer name says which
-step found it — a guess is never shown as a certainty:
+session is looked up in three rungs, and the pane's buffer name says which
+rung found it — a guess is never shown as a certainty:
 
 	`$OPENCODE_SESSION_ID`
 			The session id straight from the environment. Nothing

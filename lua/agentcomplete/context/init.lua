@@ -7,7 +7,7 @@
 ---through `cb` anyway so an asynchronous sibling drops in without changing the contract.
 ---
 ---The module splits the way `highlight.lua` does: `format` and `log` are the editor-state-free
----core the tests drive directly, and `open`/`close` are the glue. The windows themselves are
+---core the tests drive directly, and `open`/`close` are the glue. The pane itself is
 ---`context.pane`, which knows nothing about resolvers.
 ---@class AgentComplete.Context
 local M = {}
@@ -186,7 +186,8 @@ local function show(buf, result, config, log_path, format)
     return
   end
   -- A resolver that had to choose between candidates says so here as well as in the pane's
-  -- buffer name: the message reads the same whichever conversation it found, and this records which.
+  -- buffer name: the message reads the same whichever conversation it found, and this
+  -- records which.
   if result.rung then
     M.log(log_path, result.resolver .. " resolved via " .. result.rung)
   end
