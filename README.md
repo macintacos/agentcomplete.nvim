@@ -83,8 +83,8 @@ belongs to. Run this once to remove the guess:
 ```
 
 It symlinks a small plugin into OpenCode's `plugins/` directory; restart OpenCode to pick
-it up. Skipping it costs you only certainty — the pane still opens, labelled `guessed`.
-See `:help agentcomplete-context`.
+it up. Skipping it costs you only certainty — the pane still opens, with the buffer name
+`agentcomplete://opencode/guessed`. See `:help agentcomplete-context`.
 
 If your Neovim config is synced across machines, ask for the same symlink from `setup()`
 instead — the command is a one-shot you have to remember on each new machine, while
