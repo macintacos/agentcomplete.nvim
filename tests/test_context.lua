@@ -420,10 +420,6 @@ T["open"] = new_set({
       for buf in pairs(context._state) do
         context.close(buf)
       end
-      local layout = require("agentcomplete.layout")
-      for buf in pairs(layout._layouts) do
-        layout.detach(buf)
-      end
       -- A case that fed keys and failed before its own cleanup would otherwise leave every
       -- case after it running in insert mode.
       vim.cmd("silent! stopinsert")
@@ -434,17 +430,12 @@ T["open"] = new_set({
   },
 })
 
----A prompt buffer holding `lines`, focused, with the layout the pane reserves its room in. No
----margins, so the windows each case counts are the pane's own.
+---A prompt buffer holding `lines`, focused.
 ---@param lines? string[]
 local function prompt_buffer(lines)
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or { "" })
   vim.api.nvim_set_current_buf(buf)
-  require("agentcomplete.layout").attach(
-    buf,
-    { measure = 80, margins = false, inset = 0 }
-  )
   return buf
 end
 
@@ -472,38 +463,10 @@ local function ok_result(text)
   }
 end
 
----The window holding the message: the floating one. `open` leaves two windows behind — the
----split that reserves the room and the float that fills it — so "not the prompt's" no longer
----picks one out.
+---The window holding the message: the one pane the first prompt buffer has open.
 local function pane_win()
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_win_get_config(win).relative ~= "" then
-      return win
-    end
-  end
-end
-
----The text of a float's title, with its highlight groups and padding dropped.
-local function title_text(win)
-  return vim.trim(table.concat(vim.tbl_map(function(chunk)
-    return chunk[1]
-  end, vim.api.nvim_win_get_config(win).title)))
-end
-
----The text of a float's footer, with its highlight groups and padding dropped.
-local function footer_text(win)
-  return vim.trim(table.concat(vim.tbl_map(function(chunk)
-    return chunk[1]
-  end, vim.api.nvim_win_get_config(win).footer)))
-end
-
----The split the float sits over, i.e. the remaining non-floating window that is not `prompt_win`.
-local function spacer_win(prompt_win)
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    if win ~= prompt_win and vim.api.nvim_win_get_config(win).relative == "" then
-      return win
-    end
-  end
+  local _, pane = next(require("agentcomplete.context.pane")._panes)
+  return pane and pane.win
 end
 
 -- Left to right is the order the conversation reads in: the message, then the reply to it.
@@ -520,10 +483,7 @@ T["open"]["sits to the left of the prompt when the terminal is at least min_widt
   )
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "row")
-  expect.equality(
-    { layout[2][1][2], layout[2][2][2] },
-    { spacer_win(prompt_win), prompt_win }
-  )
+  expect.equality({ layout[2][1][2], layout[2][2][2] }, { pane_win(), prompt_win })
 end
 
 -- Stacked, a chat reads top to bottom: the message, then the reply under it.
@@ -531,7 +491,6 @@ T["open"]["stacks above the prompt when the terminal is narrower than min_width"
   local context = require("agentcomplete.context")
   vim.o.columns = 80
   local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
   context.open(
     buf,
     session_for("claude-code"),
@@ -540,7 +499,44 @@ T["open"]["stacks above the prompt when the terminal is narrower than min_width"
   )
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "col")
-  expect.equality(layout[2][1][2], spacer_win(prompt_win))
+  expect.equality(layout[2][1][2], pane_win())
+end
+
+T["open"]["sits beside the prompt at exactly min_width columns"] = function()
+  local context = require("agentcomplete.context")
+  vim.o.columns = 140
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  local config = { enabled = true, min_width = 140 }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  local layout = vim.fn.winlayout()
+  expect.equality(layout[1], "row")
+  expect.equality({ layout[2][1][2], layout[2][2][2] }, { pane_win(), prompt_win })
+end
+
+T["open"]["stacks above the prompt one column narrower than min_width"] = function()
+  local context = require("agentcomplete.context")
+  vim.o.columns = 139
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 140 }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  local layout = vim.fn.winlayout()
+  expect.equality(layout[1], "col")
+  expect.equality(layout[2][1][2], pane_win())
+end
+
+-- The side is picked once, when the pane opens. A terminal that narrows afterwards keeps the
+-- pane where it is: Neovim's own split sizing is the only thing that moves it.
+T["open"]["keeps its side when the terminal is resized"] = function()
+  local context = require("agentcomplete.context")
+  vim.o.columns = 140
+  local buf = prompt_buffer()
+  local config = { enabled = true, min_width = 140 }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  vim.o.columns = 100
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  vim.wait(100)
+  expect.equality(vim.fn.winlayout()[1], "row")
 end
 
 T["open"]["stacks the pane below the prompt when asked to"] = function()
@@ -584,11 +580,14 @@ T["open"]["leaves the pane read-only and the cursor in the prompt"] = function()
     with_resolver(ok_result("hello"))
   )
   local win = assert(pane_win())
-  expect.equality(vim.bo[vim.api.nvim_win_get_buf(win)].modifiable, false)
+  local pane_buf = vim.api.nvim_win_get_buf(win)
+  expect.equality(vim.bo[pane_buf].modifiable, false)
+  expect.equality(vim.bo[pane_buf].buftype, "nofile")
+  expect.equality(vim.bo[pane_buf].bufhidden, "wipe")
   expect.equality(vim.api.nvim_get_current_win(), prompt_win)
 end
 
-T["open"]["sets the message on a blank border naming the resolver"] = function()
+T["open"]["names the pane buffer after the resolver"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   context.open(
@@ -598,15 +597,23 @@ T["open"]["sets the message on a blank border naming the resolver"] = function()
     with_resolver(ok_result("hello"))
   )
   local win = assert(pane_win())
-  local border = vim.api.nvim_win_get_config(win).border --[[@as string[] ]]
-  expect.equality(vim.trim(table.concat(border)), "")
-  expect.equality(title_text(win), "claude-code · last message")
-  expect.equality(footer_text(win):find("read-only", 1, true) ~= nil, true)
+  expect.equality(
+    vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)),
+    "agentcomplete://claude-code"
+  )
+  expect.equality(
+    vim.api.nvim_get_option_value("winbar", { win = win, scope = "local" }),
+    ""
+  )
+  expect.equality(
+    vim.api.nvim_get_option_value("statusline", { win = win, scope = "local" }),
+    ""
+  )
 end
 
 -- The rung the resolver answered on is what admits a guessed session is a guess, so it belongs
--- where the reader already looks to see whose message this is.
-T["open"]["names the resolution rung in the border"] = function()
+-- in the name of the pane, where the reader already looks to see whose message this is.
+T["open"]["names the resolution rung in the buffer name"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local result =
@@ -618,57 +625,12 @@ T["open"]["names the resolution rung in the border"] = function()
     with_resolver(result)
   )
   expect.equality(
-    title_text(assert(pane_win())),
-    "opencode · pointer file · last message"
+    vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(assert(pane_win()))),
+    "agentcomplete://opencode/pointer file"
   )
 end
 
 local SCROLL_KEYS = { scroll_down = "<C-f>", scroll_up = "<C-b>" }
-
--- The pane is reference material for the prompt beside it, so the keys that scroll it belong
--- where the reader is already looking rather than in the help alone.
-T["open"]["advertises the scroll keys in the footer"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "^B/^F scroll · read-only")
-end
-
-T["open"]["advertises only the scroll key that is mapped"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local config = {
-    enabled = true,
-    min_width = 160,
-    keys = { scroll_down = "<C-f>", scroll_up = false },
-  }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "^F scroll · read-only")
-end
-
-T["open"]["keeps the footer to what the pane still is when no key scrolls it"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local config =
-    { enabled = true, min_width = 160, keys = { scroll_down = false, scroll_up = false } }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "read-only")
-end
-
--- Anything that is not a plain control key is shown as Vim spells it, since there is no
--- shorter form of it a reader would recognise.
-T["open"]["shows a non-control scroll key by its Vim notation"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local config = {
-    enabled = true,
-    min_width = 160,
-    keys = { scroll_down = "<PageDown>", scroll_up = false },
-  }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  expect.equality(footer_text(assert(pane_win())), "<PageDown> scroll · read-only")
-end
 
 ---A message long enough that the pane has somewhere to scroll to.
 local function long_message()
@@ -838,13 +800,29 @@ T["open"]["reads as a document rather than an editable buffer"] = function()
     with_resolver(ok_result("hello"))
   )
   local win = assert(pane_win())
-  expect.equality(vim.wo[win].number, false)
-  expect.equality(vim.wo[win].relativenumber, false)
-  expect.equality(vim.wo[win].signcolumn, "no")
-  expect.equality(vim.wo[win].foldcolumn, "0")
-  expect.equality(vim.wo[win].spell, false)
-  expect.equality(vim.wo[win].conceallevel, 3)
-  expect.equality(vim.wo[win].wrap, true)
+  local expected = {
+    number = false,
+    relativenumber = false,
+    signcolumn = "no",
+    foldcolumn = "0",
+    statuscolumn = "",
+    cursorline = false,
+    cursorcolumn = false,
+    colorcolumn = "",
+    spell = false,
+    list = false,
+    breakindent = false,
+    wrap = true,
+    linebreak = true,
+    smoothscroll = true,
+    conceallevel = 3,
+    concealcursor = "nc",
+    winfixbuf = true,
+    winhighlight = "",
+  }
+  for option, value in pairs(expected) do
+    expect.equality({ option, vim.wo[win][option] }, { option, value })
+  end
   expect.equality(vim.bo[vim.api.nvim_win_get_buf(win)].filetype, "markdown")
 end
 
@@ -890,137 +868,11 @@ T["open"]["shows the message from its first line"] = function()
   expect.equality(lines[1], "hello")
 end
 
--- The split exists only to reserve the room the float fills; landing in it means landing on an
--- empty buffer exactly where the message appears to be.
-T["open"]["hands the cursor to the message when the split is entered"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hello"))
-  )
-  vim.api.nvim_set_current_win(assert(spacer_win(prompt_win)))
-  vim.wait(100)
-  expect.equality(vim.api.nvim_get_current_win(), pane_win())
-end
-
--- Every window move that leaves the float lands on the split first -- `<C-w>h`, `<C-w>p` and
--- `<C-w>W` all do. Passing the cursor on to the message there, rather than back out, is what
--- makes the pane impossible to leave.
-T["open"]["lets the cursor leave the message through the split"] = function()
-  local context = require("agentcomplete.context")
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hello"))
-  )
-  vim.api.nvim_set_current_win(assert(pane_win()))
-  vim.api.nvim_set_current_win(assert(spacer_win(prompt_win)))
-  vim.wait(100)
-  expect.equality(vim.api.nvim_get_current_win(), prompt_win)
-end
-
--- The message wraps at the same measure the reply does, and its frame is drawn around that.
-T["open"]["gives the message the layout's measure beside the prompt"] = function()
-  local context = require("agentcomplete.context")
-  vim.o.columns = 200
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hello"))
-  )
-  expect.equality(vim.api.nvim_win_get_width(assert(spacer_win(prompt_win))), 84)
-  expect.equality(vim.api.nvim_win_get_width(assert(pane_win())), 80)
-end
-
--- Boxed, the message is placed against the box rather than filling the room reserved for it.
-T["open"]["sizes the message to its text beside a boxed prompt"] = function()
-  local context = require("agentcomplete.context")
-  vim.o.columns, vim.o.lines = 200, 40
-  local buf = vim.api.nvim_create_buf(true, false)
-  vim.api.nvim_set_current_buf(buf)
-  require("agentcomplete.layout").attach(buf, { measure = 80, margins = true, inset = 2 })
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hello"))
-  )
-  local win = require("agentcomplete.context.pane")._panes[buf].win
-  expect.equality(vim.api.nvim_win_get_height(win), 1)
-end
-
--- The terminal is resized mid-session, and an orientation chosen once at open time leaves the
--- pane wedged beside a prompt with no room for either.
-T["open"]["stacks the pane with the prompt when the terminal narrows"] = function()
-  local context = require("agentcomplete.context")
-  vim.o.columns = 200
-  local buf = prompt_buffer()
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hello"))
-  )
-  expect.equality(vim.fn.winlayout()[1], "row")
-  vim.o.columns = 80
-  vim.api.nvim_exec_autocmds("VimResized", {})
-  vim.wait(100)
-  expect.equality(vim.fn.winlayout()[1], "col")
-end
-
--- The same narrowing, with the stacked side configured: a re-place that reached for the default
--- would put the pane above the prompt the first time the terminal narrowed.
-T["open"]["moves the pane below the prompt when the terminal narrows"] = function()
-  local context = require("agentcomplete.context")
-  vim.o.columns = 200
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  local config = { enabled = true, min_width = 160, stacked = "below" }
-  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
-  vim.o.columns = 80
-  vim.api.nvim_exec_autocmds("VimResized", {})
-  vim.wait(100)
-  local layout = vim.fn.winlayout()
-  expect.equality(layout[1], "col")
-  expect.equality(layout[2][1][2], prompt_win)
-end
-
--- The float carries the frame, so it has to follow the split it is drawn over.
-T["open"]["refits the message to its room when the terminal is resized"] = function()
-  local context = require("agentcomplete.context")
-  vim.o.columns = 200
-  local buf = prompt_buffer()
-  local prompt_win = vim.api.nvim_get_current_win()
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hello"))
-  )
-  vim.o.columns = 100
-  vim.api.nvim_exec_autocmds("VimResized", {})
-  local spacer = assert(spacer_win(prompt_win))
-  expect.equality(
-    vim.api.nvim_win_get_width(assert(pane_win())),
-    vim.api.nvim_win_get_width(spacer) - 4
-  )
-end
-
--- Quitting the prompt is how the agent CLI is answered, so both of the pane's windows have to
--- be gone *before* that quit resolves: either one still standing is a window Neovim keeps the
--- editor open for, leaving the reader in a message they cannot reply to instead of back at the
--- agent. Asserting the prompt window is still open is what pins the ordering — after it closes,
--- dismissing the pane is too late to matter.
+-- Quitting the prompt is how the agent CLI is answered, so the pane has to be gone *before* that
+-- quit resolves: a pane still standing is a window Neovim keeps the editor open for, leaving the
+-- reader in a message they cannot reply to instead of back at the agent. Asserting the prompt
+-- window is still open is what pins the ordering — after it closes, dismissing the pane is too
+-- late to matter.
 T["open"]["dismisses the pane before the prompt's quit resolves"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
@@ -1031,10 +883,10 @@ T["open"]["dismisses the pane before the prompt's quit resolves"] = function()
     { enabled = true, min_width = 160 },
     with_resolver(ok_result("hello"))
   )
-  local win, spacer = assert(pane_win()), assert(spacer_win(prompt_win))
+  local win = assert(pane_win())
   vim.api.nvim_exec_autocmds("QuitPre", { buffer = buf })
   expect.equality(vim.api.nvim_win_is_valid(win), false)
-  expect.equality(vim.api.nvim_win_is_valid(spacer), false)
+  expect.equality(#vim.api.nvim_list_wins(), 1)
   expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
 end
 
@@ -1192,7 +1044,7 @@ T["open"]["opens one pane however many times it is called"] = function()
   local config = { enabled = true, min_width = 160 }
   context.open(buf, session_for("claude-code"), config, opts)
   context.open(buf, session_for("claude-code"), config, opts)
-  expect.equality(#vim.api.nvim_list_wins(), 3)
+  expect.equality(#vim.api.nvim_list_wins(), 2)
 end
 
 -- `:edit!` fires BufUnload but not BufDelete, and the buffer survives it — so must the pane.
@@ -1202,10 +1054,6 @@ T["open"]["keeps the pane across a reload of the prompt buffer"] = function()
   vim.fn.writefile({ "draft" }, path)
   vim.cmd("silent edit " .. vim.fn.fnameescape(path))
   local buf = vim.api.nvim_get_current_buf()
-  require("agentcomplete.layout").attach(
-    buf,
-    { measure = 80, margins = false, inset = 0 }
-  )
   context.open(
     buf,
     session_for("claude-code"),
@@ -1276,13 +1124,14 @@ T["open"]["records a failure when the prompt buffer is on no screen to split fro
   local context = require("agentcomplete.context")
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
-  context.open(
-    buf,
-    session_for("claude-code"),
-    { enabled = true, min_width = 160 },
-    with_resolver(ok_result("hi"))
+  local opts = with_resolver(ok_result("hi"))
+  context.open(buf, session_for("claude-code"), { enabled = true, min_width = 160 }, opts)
+  expect.equality(#vim.api.nvim_list_wins(), 1)
+  expect.equality(context._state[buf].err:find("no screen", 1, true) ~= nil, true)
+  expect.equality(
+    vim.fn.readfile(opts.log_path)[1]:find("no screen", 1, true) ~= nil,
+    true
   )
-  expect.equality(type(context._state[buf].err), "string")
 end
 
 -- A resolver reports once. A second report would build a second pane over the first and
@@ -1305,12 +1154,12 @@ T["open"]["ignores a resolver that reports twice"] = function()
       return text
     end,
   })
-  expect.equality(#vim.api.nvim_list_wins(), 3)
+  expect.equality(#vim.api.nvim_list_wins(), 2)
 end
 
--- Every window the pane owns is a way out of it, so the teardown listens on all of them: a
--- split closed on its own would otherwise leave the float drawn over nothing.
-T["open"]["dismisses the pane when the split it sits over is closed"] = function()
+-- Closing the pane by hand is a way out of it, so the teardown has to notice a window closing
+-- on its own, not only the prompt's quit: otherwise the scroll keys outlive the pane they scroll.
+T["open"]["forgets the pane when its window is closed by hand"] = function()
   local context = require("agentcomplete.context")
   local buf = prompt_buffer()
   local prompt = vim.api.nvim_get_current_win()
@@ -1320,9 +1169,133 @@ T["open"]["dismisses the pane when the split it sits over is closed"] = function
     { enabled = true, min_width = 160 },
     with_resolver(ok_result("hello"))
   )
-  local float = assert(pane_win())
-  vim.api.nvim_win_close(assert(spacer_win(prompt)), true)
-  expect.equality(vim.api.nvim_win_is_valid(float), false)
+  vim.api.nvim_win_close(assert(pane_win()), true)
+  expect.equality(vim.api.nvim_win_is_valid(prompt), true)
+  expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
+end
+
+-- A split copies the window options of the window it splits, so the reader's own settings on the
+-- prompt must not reach the pane.
+T["open"]["does not inherit the prompt's window options"] = function()
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  vim.wo[prompt_win].number = true
+  vim.wo[prompt_win].breakindent = true
+  vim.wo[prompt_win].cursorline = true
+  vim.wo[prompt_win].list = true
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  local win = assert(pane_win())
+  expect.equality({
+    vim.wo[win].number,
+    vim.wo[win].breakindent,
+    vim.wo[win].cursorline,
+    vim.wo[win].list,
+  }, { false, false, false, false })
+end
+
+T["open"]["keeps a window option set on the pane across focus changes"] = function()
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer()
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  local win = assert(pane_win())
+  vim.wo[win].cursorline = true
+  vim.api.nvim_exec_autocmds("WinEnter", {})
+  vim.api.nvim_exec_autocmds("WinLeave", {})
+  expect.equality(vim.wo[win].cursorline, true)
+end
+
+-- The prompt is the reader's place: a stacked split shortens it, and the view they left must
+-- still be there rather than scrolled to follow the new edge.
+T["open"]["keeps the prompt's view where the reader left it"] = function()
+  local context = require("agentcomplete.context")
+  vim.o.columns = 80
+  local lines = {}
+  for i = 1, 200 do
+    lines[i] = "line " .. i
+  end
+  local buf = prompt_buffer(lines)
+  local prompt_win = vim.api.nvim_get_current_win()
+  vim.fn.winrestview({ topline = 40, lnum = 42 })
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  vim.cmd("redraw")
+  expect.equality(vim.fn.line("w0", prompt_win), 40)
+  expect.equality(vim.api.nvim_win_get_cursor(prompt_win), { 42, 0 })
+end
+
+T["open"]["closes only the pane when quit from inside it"] = function()
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  vim.api.nvim_set_current_win(assert(pane_win()))
+  vim.cmd("quit")
+  expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
+  expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
+  expect.equality(mapping(buf, "n", "<C-f>"), nil)
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
+T["open"]["closes only the pane when closed from inside it"] = function()
+  local context = require("agentcomplete.context")
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  local config = { enabled = true, min_width = 160, keys = SCROLL_KEYS }
+  context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
+  vim.api.nvim_set_current_win(assert(pane_win()))
+  vim.cmd("close")
+  expect.equality(vim.api.nvim_win_is_valid(prompt_win), true)
+  expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
+  expect.equality(mapping(buf, "n", "<C-f>"), nil)
+  expect.equality(mapping(buf, "i", "<C-b>"), nil)
+end
+
+T["open"]["gives the prompt its full width back when the pane closes"] = function()
+  local context = require("agentcomplete.context")
+  vim.o.columns = 200
+  local buf = prompt_buffer()
+  local prompt_win = vim.api.nvim_get_current_win()
+  context.open(
+    buf,
+    session_for("claude-code"),
+    { enabled = true, min_width = 160 },
+    with_resolver(ok_result("hello"))
+  )
+  expect.equality(vim.api.nvim_win_get_width(prompt_win) < vim.o.columns, true)
+  context.close(buf)
+  expect.equality(vim.api.nvim_win_get_width(prompt_win), vim.o.columns)
+end
+
+-- Two prompts that resolve the same way name their panes the same. The second name is taken by
+-- the first pane, so it has to open unnamed rather than fail.
+T["open"]["opens a pane for each prompt even when both name the same resolver"] = function()
+  local context = require("agentcomplete.context")
+  local opts = with_resolver(ok_result("hello"))
+  local config = { enabled = true, min_width = 160 }
+  local first = prompt_buffer()
+  context.open(first, session_for("claude-code"), config, opts)
+  vim.cmd("botright new")
+  local second = prompt_buffer()
+  context.open(second, session_for("claude-code"), config, opts)
+  local panes = require("agentcomplete.context.pane")._panes
+  expect.equality(vim.api.nvim_win_is_valid(assert(panes[first]).win), true)
+  expect.equality(vim.api.nvim_win_is_valid(assert(panes[second]).win), true)
 end
 
 T["opencode.parse_etime"] = new_set()

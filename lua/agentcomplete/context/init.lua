@@ -185,8 +185,8 @@ local function show(buf, result, config, log_path, format)
     M.log(log_path, result.err or "resolution failed")
     return
   end
-  -- A resolver that had to choose between candidates says so here as well as in the border: the
-  -- pane looks the same whichever conversation it found, and this is the record of which.
+  -- A resolver that had to choose between candidates says so here as well as in the pane's
+  -- buffer name: the message reads the same whichever conversation it found, and this records which.
   if result.rung then
     M.log(log_path, result.resolver .. " resolved via " .. result.rung)
   end
