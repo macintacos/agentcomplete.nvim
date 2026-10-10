@@ -232,10 +232,10 @@ T["setup stacks the context pane above the prompt by default"] = function()
   expect.equality(agentcomplete.config.context.stacked, "above")
 end
 
-T["setup defaults the composer on, at an 80-column measure"] = function()
+T["setup defaults the composer on"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({})
-  expect.equality(agentcomplete.config.composer, { enabled = true, width = 80 })
+  expect.equality(agentcomplete.config.composer, { enabled = true })
 end
 
 T["setup merges a context override over the defaults"] = function()
@@ -352,9 +352,30 @@ T["attach"]["turns the prompt window into a page, and detach turns it back"] = f
   agentcomplete.setup({ backend = "native" })
   local buf = numbered_buffer()
   expect.equality(agentcomplete.attach(buf, { force = true }), true)
-  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { false, "  " })
+  expect.equality({
+    vim.wo.number,
+    vim.wo.signcolumn,
+    vim.wo.foldcolumn,
+    vim.wo.breakindent,
+    vim.wo.smoothscroll,
+  }, { false, "no", "0", true, true })
   agentcomplete.detach(buf)
-  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { true, "" })
+  expect.equality({
+    vim.wo.number,
+    vim.wo.signcolumn,
+    vim.wo.foldcolumn,
+    vim.wo.breakindent,
+    vim.wo.smoothscroll,
+  }, { true, "auto", "0", false, false })
+end
+
+T["attach"]["ignores a composer.width it does not read"] = function()
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native", composer = { width = 80 } })
+  with_ui(function()
+    agentcomplete.attach(numbered_buffer(), { force = true })
+  end)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
 end
 
 T["attach"]["leaves the prompt as the only window, none floating, with a UI and no message"] = function()
@@ -405,8 +426,12 @@ T["attach"]["leaves the prompt window alone with the composer off"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({ backend = "native", composer = { enabled = false } })
   local buf = numbered_buffer()
+  vim.wo.wrap = false
   agentcomplete.attach(buf, { force = true })
-  expect.equality(vim.wo.number, true)
+  expect.equality(
+    { vim.wo.number, vim.wo.wrap, vim.wo.breakindent, vim.wo.smoothscroll },
+    { true, false, false, false }
+  )
 end
 
 return T

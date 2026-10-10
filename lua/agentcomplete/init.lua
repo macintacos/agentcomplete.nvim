@@ -9,8 +9,7 @@
 ---@field opencode AgentComplete.Config.OpenCode OpenCode-specific options.
 
 ---@class AgentComplete.Config.Composer
----@field enabled boolean When true, the prompt window drops its gutter, wraps prose inside an inset, and is held at `width` between blank margins, boxed in the middle of the screen while there is no last message beside it.
----@field width integer Columns of text the prompt and the context pane's message each wrap at.
+---@field enabled boolean When true, the prompt window turns into soft-wrapped prose with a hanging indent and no gutter.
 
 ---@class AgentComplete.Config.OpenCode
 ---@field show_all_builtin_commands boolean When true, built-in commands that are interactive TUI affordances (dialogs, pickers, toggles, lifecycle) are also completed.
@@ -34,7 +33,7 @@ local defaults = {
     stacked = "above",
     keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>" },
   },
-  composer = { enabled = true, width = 80 },
+  composer = { enabled = true },
   opencode = {
     show_all_builtin_commands = false,
     resolve_via_cli = true,
