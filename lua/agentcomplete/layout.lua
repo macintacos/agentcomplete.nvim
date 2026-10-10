@@ -342,6 +342,8 @@ local function open_frame()
       height = 1,
       focusable = false,
       style = "minimal",
+      -- Explicit, or a global 'winborder' boxes each one-cell edge in a border of its own.
+      border = "none",
       zindex = 1,
       noautocmd = true,
     })

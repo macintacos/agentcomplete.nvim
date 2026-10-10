@@ -360,6 +360,17 @@ T["windows"]["frames the box, and follows it as it grows"] = function()
   end
 end
 
+-- Each edge is a one-cell float, which a global 'winborder' would box in a border of its own.
+T["windows"]["draws the frame without a 'winborder'"] = function()
+  vim.o.columns = 200
+  vim.o.winborder = "rounded"
+  attached()
+  vim.o.winborder = ""
+  for _, win in ipairs(floats()) do
+    expect.equality(vim.api.nvim_win_get_config(win).border, "none")
+  end
+end
+
 -- So a plugin drawing over windows, such as a filename label, can leave the box alone.
 T["windows"]["marks the prompt's window while it is boxed"] = function()
   vim.o.columns = 200
