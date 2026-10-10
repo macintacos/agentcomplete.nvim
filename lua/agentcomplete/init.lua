@@ -203,7 +203,6 @@ function M.attach(bufnr, opts)
     local backends = require("agentcomplete.backends")
     backends.install_suppression(M.config)
     local highlight = require("agentcomplete.highlight")
-    local layout = require("agentcomplete.layout")
     local composer = require("agentcomplete.composer")
     local context = require("agentcomplete.context")
     session.sources = M.config.sources
@@ -211,13 +210,6 @@ function M.attach(bufnr, opts)
     backends.attach(buf, session, M.config)
     highlight.attach(buf, session)
     local page = M.config.composer
-    -- Before the pane, which reserves its room in the layout. Margins only with a UI to frame:
-    -- a headless run has no screen for them.
-    layout.attach(buf, {
-      measure = page.width,
-      margins = page.enabled and #vim.api.nvim_list_uis() > 0,
-      inset = page.enabled and composer.INSET or 0,
-    })
     if page.enabled then
       composer.attach(buf)
     end
@@ -236,12 +228,10 @@ function M.detach(bufnr)
   local backends = require("agentcomplete.backends")
   local highlight = require("agentcomplete.highlight")
   local context = require("agentcomplete.context")
-  local layout = require("agentcomplete.layout")
   local composer = require("agentcomplete.composer")
   backends.detach(buf)
   highlight.detach(buf)
   context.close(buf)
-  layout.detach(buf)
   composer.detach(buf)
 end
 
