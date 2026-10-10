@@ -53,10 +53,10 @@ T["ending the session with the pane open"] = new_set({
     { "ZZ", "input" },
   },
 }, {
-  ["ends the child in one step"] = function(keys, send)
+  ["ends the child in one step"] = function(keys, via)
     open_pane()
     expect.equality(#child.api.nvim_list_wins(), 2)
-    if send == "command" then
+    if via == "command" then
       child.api_notify.nvim_command(keys)
     else
       child.api_notify.nvim_input(keys)

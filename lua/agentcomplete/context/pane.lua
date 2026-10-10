@@ -110,7 +110,7 @@ end
 ---@param resolver string
 ---@param rung string|nil
 ---@return string
-local function name(resolver, rung)
+local function buffer_name(resolver, rung)
   return "agentcomplete://" .. resolver .. (rung and ("/" .. rung) or "")
 end
 
@@ -169,7 +169,7 @@ function M.open(buf, opts)
   vim.bo[pane_buf].bufhidden = "wipe"
   -- ponytail: a second prompt with the same resolver gets an unnamed pane (E95); suffix the
   -- prompt's buffer number if that matters.
-  pcall(vim.api.nvim_buf_set_name, pane_buf, name(opts.resolver, opts.rung))
+  pcall(vim.api.nvim_buf_set_name, pane_buf, buffer_name(opts.resolver, opts.rung))
   local topline = vim.api.nvim_win_call(host, vim.fn.winsaveview).topline
   local win = vim.api.nvim_open_win(pane_buf, false, { split = side, win = host })
   -- 'splitkeep' scrolls a window a stacked split shortens.
