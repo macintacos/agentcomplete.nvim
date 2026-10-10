@@ -232,10 +232,10 @@ T["setup stacks the context pane above the prompt by default"] = function()
   expect.equality(agentcomplete.config.context.stacked, "above")
 end
 
-T["setup defaults the composer on, at an 80-column measure"] = function()
+T["setup defaults the composer on"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({})
-  expect.equality(agentcomplete.config.composer, { enabled = true, width = 80 })
+  expect.equality(agentcomplete.config.composer, { enabled = true })
 end
 
 T["setup merges a context override over the defaults"] = function()
@@ -277,6 +277,7 @@ T["attach"] = new_set({
     end,
     post_case = function()
       require("agentcomplete").detach(0)
+      require("agentcomplete.context").clear()
       vim.env.CLAUDE_CONFIG_DIR = nil
       vim.g.agentcomplete_cwd = nil
       vim.cmd("silent! only")
@@ -290,6 +291,46 @@ local function numbered_buffer()
   vim.api.nvim_set_current_buf(buf)
   vim.wo[0][0].number = true
   return buf
+end
+
+---Run `fn` with a UI attached: the last-message pane only opens with a screen to split.
+local function with_ui(fn)
+  local list_uis = vim.api.nvim_list_uis
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.api.nvim_list_uis = function()
+    return { {} }
+  end
+  local ok, err = pcall(fn)
+  vim.api.nvim_list_uis = list_uis
+  assert(ok, err)
+end
+
+---Attach to a fresh prompt with a message to show, so a last-message pane opens.
+---@return integer buf
+local function attach_with_pane()
+  require("agentcomplete.context").register({
+    name = "stub",
+    resolve = function(_, cb)
+      cb({ ok = true, resolver = "stub", text = "hello" })
+      return true
+    end,
+  })
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native" })
+  local buf = numbered_buffer()
+  with_ui(function()
+    agentcomplete.attach(buf, { force = true })
+  end)
+  return buf
+end
+
+---The tabpage's split layout and every window's size, for asserting that nothing moved.
+local function geometry()
+  local sizes = {}
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    sizes[win] = { vim.api.nvim_win_get_width(win), vim.api.nvim_win_get_height(win) }
+  end
+  return { vim.fn.winlayout(), sizes }
 end
 
 T["attach"]["registers the built-in context resolvers"] = function()
@@ -311,25 +352,73 @@ T["attach"]["turns the prompt window into a page, and detach turns it back"] = f
   agentcomplete.setup({ backend = "native" })
   local buf = numbered_buffer()
   expect.equality(agentcomplete.attach(buf, { force = true }), true)
-  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { false, "  " })
+  expect.equality({
+    vim.wo.number,
+    vim.wo.signcolumn,
+    vim.wo.foldcolumn,
+    vim.wo.breakindent,
+    vim.wo.smoothscroll,
+  }, { false, "no", "0", true, true })
   agentcomplete.detach(buf)
-  expect.equality({ vim.wo.number, vim.wo.statuscolumn }, { true, "" })
+  expect.equality({
+    vim.wo.number,
+    vim.wo.signcolumn,
+    vim.wo.foldcolumn,
+    vim.wo.breakindent,
+    vim.wo.smoothscroll,
+  }, { true, "auto", "0", false, false })
 end
 
-T["attach"]["frames the prompt with margins when there is a UI to frame"] = function()
+T["attach"]["ignores a stale width key in the composer config"] = function()
+  local agentcomplete = require("agentcomplete")
+  agentcomplete.setup({ backend = "native", composer = { width = 80 } })
+  with_ui(function()
+    agentcomplete.attach(numbered_buffer(), { force = true })
+  end)
+  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
+end
+
+T["attach"]["leaves the prompt as the only window, none floating, with a UI and no message"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({ backend = "native" })
   local buf = numbered_buffer()
-  local list_uis = vim.api.nvim_list_uis
-  ---@diagnostic disable-next-line: duplicate-set-field
-  vim.api.nvim_list_uis = function()
-    return { {} }
+  with_ui(function()
+    agentcomplete.attach(buf, { force = true })
+  end)
+  local wins = vim.api.nvim_tabpage_list_wins(0)
+  expect.equality(#wins, 1)
+  expect.equality(vim.api.nvim_win_get_config(wins[1]).relative, "")
+end
+
+T["attach"]["splits the last message beside the prompt, with neither window floating"] = function()
+  attach_with_pane()
+  local wins = vim.api.nvim_tabpage_list_wins(0)
+  expect.equality(#wins, 2)
+  for _, win in ipairs(wins) do
+    expect.equality(vim.api.nvim_win_get_config(win).relative, "")
   end
-  local ok = pcall(agentcomplete.attach, buf, { force = true })
-  vim.api.nvim_list_uis = list_uis
-  expect.equality(ok, true)
-  expect.equality(#vim.api.nvim_tabpage_list_wins(0), 9)
-  agentcomplete.detach(buf)
+end
+
+T["attach"]["editing the prompt leaves every window where it was"] = function()
+  local buf = attach_with_pane()
+  local before = geometry()
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "a first line", "and a second" })
+  vim.api.nvim_exec_autocmds({ "TextChangedI", "TextChanged" }, { buffer = buf })
+  expect.equality(geometry(), before)
+end
+
+T["attach"]["registers no resize handler, so the windows keep Neovim's sizes"] = function()
+  attach_with_pane()
+  local resize = vim.api.nvim_get_autocmds({ event = { "VimResized", "WinResized" } })
+  local ours = vim.tbl_filter(function(autocmd)
+    return vim.startswith(autocmd.group_name or "", "AgentComplete")
+  end, resize)
+  expect.equality(#ours, 0)
+end
+
+T["attach"]["the detach command closes the last message and leaves the prompt"] = function()
+  attach_with_pane()
+  vim.cmd("AgentCompleteDetach")
   expect.equality(#vim.api.nvim_tabpage_list_wins(0), 1)
 end
 
@@ -337,8 +426,12 @@ T["attach"]["leaves the prompt window alone with the composer off"] = function()
   local agentcomplete = require("agentcomplete")
   agentcomplete.setup({ backend = "native", composer = { enabled = false } })
   local buf = numbered_buffer()
+  vim.wo.wrap = false
   agentcomplete.attach(buf, { force = true })
-  expect.equality(vim.wo.number, true)
+  expect.equality(
+    { vim.wo.number, vim.wo.wrap, vim.wo.breakindent, vim.wo.smoothscroll },
+    { true, false, false, false }
+  )
 end
 
 return T

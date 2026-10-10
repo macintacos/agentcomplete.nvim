@@ -42,9 +42,8 @@ useful while writing a prompt:
 	`/`	skills and commands available to the agent in this project
 	`@`	files and folders under the project root
 
-It also lays the prompt out for writing rather than coding: a centered page
-at a readable width (|agentcomplete-composer|), beside the agent's last
-message (|agentcomplete-context|).
+It also makes the prompt read as prose (|agentcomplete-composer|). The agent's
+last message sits next to it, in a pane (|agentcomplete-context|).
 
 It does nothing in any other buffer. Outside a detected prompt buffer your
 normal completion stack is untouched.
@@ -172,8 +171,7 @@ The full default configuration, with every option: >lua
 	    },
 	  },
 	  composer = {
-	    enabled = true,      -- write the prompt on a centered page, without a gutter
-	    width = 80,          -- columns the prompt and the pane's message wrap at
+	    enabled = true,      -- soft-wrap the prompt as prose, with no gutter
 	  },
 	  opencode = {
 	    show_all_builtin_commands = false, -- complete interactive built-ins (/help, /models, …)
@@ -215,15 +213,16 @@ The full default configuration, with every option: >lua
 			|agentcomplete-context|.
 
 'context.min_width'	number (default `140`). Terminal width at or above
-			which the context pane sits to the left of the prompt,
-			as wide as 'composer.width'; below that, stacked with
-			it. Re-checked whenever the terminal is resized.
+			which the context pane sits to the left of the prompt;
+			below that, stacked with it. agentcomplete picks the
+			placement once, when the pane opens.
 
 'context.stacked'	`"above"` | `"below"` (default `"above"`). Which side of
 			the prompt the pane takes when the terminal is narrower
 			than 'context.min_width' and the two are stacked rather
-			than side by side. Unrelated to the wide layout, which
-			is always to the left. See |agentcomplete-context|.
+			than side by side. Unrelated to the side-by-side
+			placement, which is always to the left. See
+			|agentcomplete-context|.
 
 'context.rumdl_config'	string (default `nil`). Absolute path to a rumdl config
 			file, used to format the message the pane shows. A
@@ -245,15 +244,12 @@ The full default configuration, with every option: >lua
 			scrolling back up.
 
 'composer.enabled'	boolean (default `true`). When true, the prompt window
-			drops its gutter, wraps prose inside an inset, and is
-			held at 'composer.width' between blank margins, boxed
-			in the middle of the screen while there is no last
-			message to show beside it. When
-			false, it is left exactly as your configuration draws
-			it. See |agentcomplete-composer|.
-
-'composer.width'	number (default `80`). Columns of text the prompt wraps
-			at, and the context pane's message with it.
+			reads as prose. It soft-wraps at word boundaries,
+			with a hanging indent under list items, and scrolls by
+			screen row. It also drops its line numbers, sign and
+			fold columns, and cursor line; detach restores them.
+			When false, the prompt window is left exactly as your
+			configuration draws it. See |agentcomplete-composer|.
 
 'opencode.show_all_builtin_commands'
 			boolean (default `false`). When true, OpenCode's
@@ -385,18 +381,19 @@ the editor's working directory.
                                                       *agentcomplete-commands*
 
                                                         *:AgentCompleteAttach*
-:AgentCompleteAttach	Force completion, |agentcomplete-highlighting|, and the
-			|agentcomplete-composer| onto the current buffer,
+:AgentCompleteAttach	Force completion, |agentcomplete-highlighting|, the
+			|agentcomplete-composer|, and the
+			|agentcomplete-context| pane onto the current buffer,
 			bypassing detection. Use it when a session is not
-			auto-detected (an unusual launch) or when 'enabled' is
-			false.
+			auto-detected (an unusual launch) or when 'enabled'
+			is false.
 
                                                         *:AgentCompleteDetach*
-:AgentCompleteDetach	Detach completion, highlighting, and the composer from
-			the current buffer, removing the backend, the token
-			highlights, the margins, and any buffer-local state
-			they installed — the prompt window's own options are
-			put back as they were.
+:AgentCompleteDetach	Detach completion, highlighting, the composer, and the
+			context pane from the current buffer, removing the
+			backend, the token highlights, and any buffer-local
+			state they installed — the prompt window's own options
+			are put back as they were.
 
                                          *:AgentCompleteInstallOpenCodePlugin*
 :AgentCompleteInstallOpenCodePlugin
@@ -494,110 +491,50 @@ colorschemes after startup: >lua
 12. Composer
                                                       *agentcomplete-composer*
 
-Attaching turns the prompt window into a page to write on rather than a code
-buffer. The prompt is where you compose a message to the agent, so it is set
-up the way a chat box or a document is: prose wraps at a readable width, and
-nothing around it asks for your attention.
+Attaching makes the prompt window read as prose. The prompt is where you
+compose a message to the agent, so it wraps the way a chat box or a document
+does.
 
 In the prompt window, agentcomplete:
 
-	hides	line numbers, the sign and fold columns, the cursor
-		line, and the winbar's contents
-	pads	the text with a blank row above it, where the
-		winbar was
 	wraps	at word boundaries, with a wrapped list item hanging
 		under its text rather than its bullet
-	insets	the text two columns from the window's edge
-	blanks	the window separators and the `~` rows past the last
+	scrolls	a wrapped line one row at a time
+	hides	line numbers, the sign and fold columns, and the cursor
 		line
 
-Your statusline, colorscheme, spelling, 'textwidth', and keymaps are left
-alone. Every option is set for the prompt buffer only (|:setlocal|), so any
-other buffer opened in that window looks as it always does, and each is put
-back by |:AgentCompleteDetach|.
+agentcomplete sets every option on the prompt buffer only (|:setlocal|).
+Other buffers opened in that window look as they always do.
+|:AgentCompleteDetach| puts each option back.
 
-The text wraps at 'composer.width' columns — 80 by default — however wide the
-terminal is. Blank margins either side hold the prompt at that width and keep
-it centered: a wide terminal widens the margins, never the lines. The margins
-hold nothing: moving the cursor into one puts it back in the prompt, closing
-either closes both and lets the prompt take the full width, and quitting the
-prompt closes them first, so `:q` still leaves Neovim in one step.
+agentcomplete leaves your statusline, winbar, 'statuscolumn', colorscheme,
+spelling, 'textwidth', and keymaps alone. Plugins that draw in those places
+draw on the prompt as on any other buffer. The context pane's scroll keys are
+the one exception: they are mapped on the prompt while the pane is open; see
+|agentcomplete-context-keys|.
 
-The prompt is boxed in the middle of its column instead of running its full
-height. The box starts ten rows tall and grows with your text, staying
-centered, until it is a few rows short of the top and bottom edges; past that
-the prompt scrolls. Its rounded border sits a blank row above your text, with
-a row inside it below the text — where the prompt's own statusline sits, when
-each window has one ('laststatus' other than 3). Beside the
-|agentcomplete-context| pane the box is centered on the screen's full height;
-stacked with it, the box and the message are centered together, a row apart,
-and the box grows into no more than half the column while the message needs
-the rest.
+If 'statuscolumn' is set, Neovim draws that column in place of the number,
+sign, and fold columns, so the composer's settings for those have no effect
+there.
 
-With the |agentcomplete-context| pane open the page reads as a conversation.
-On a terminal at least 'context.min_width' columns wide the message sits to
-the left of your reply, both at 'composer.width', centered as a pair; when
-there is not room for both at full width, they share it evenly. Narrower than
-'context.min_width', the two share one centered column, the message above
-your reply by default, and the reply's inset lines its text up with the
-message's: your reply starts where the message's text does, and wraps two
-columns past it, at the width of the message's padding. Everything is
-re-placed as the terminal is resized.
-
-Margins open only when the prompt is the only window on the screen, as it is
-when Claude Code or OpenCode opens it. |:AgentCompleteAttach| in a session
-already split into several windows styles the prompt window but leaves your
-layout alone.
-
-Some plugins set a winbar or a 'statuscolumn' on every window they see, and
-dropbar.nvim sets its winbar again each time the buffer is written. The
-composer takes those two back off the prompt window after the events such
-plugins attach on. The other options it only sets once: turn line numbers
-back on with `:setlocal number` and they stay on.
-
-The margins draw their background, separators, and statuslines in the
-`AgentCompleteMargin` highlight group, linked by default to `Normal` so they
-vanish into the rest of the screen. Link it elsewhere to see where they
-are: >lua
-	vim.api.nvim_set_hl(0, "AgentCompleteMargin", { link = "NormalFloat" })
-<
-The box's border is drawn in `FloatBorder`. Its background is the
-`AgentCompletePrompt` highlight group, linked by default to `NormalFloat` —
-invisible under a colorscheme whose floats have no background of their own,
-such as a transparent one. Link it to `Normal` to draw the box without a
-tint: >lua
-	vim.api.nvim_set_hl(0, "AgentCompletePrompt", { link = "Normal" })
-<
-                                                         *w:agentcomplete_box*
-While the prompt is boxed, its window has `w:agentcomplete_box` set to
-`true`, so a plugin that draws over windows can leave the box alone. For
-incline.nvim's filename label: >lua
-	require("incline").setup {
-	  ignore = {
-	    wintypes = function(winid, wintype)
-	      return vim.w[winid].agentcomplete_box or wintype ~= ""
-	    end,
-	  },
-	}
-<
 Set 'composer.enabled' to `false` to leave the prompt window exactly as your
-own configuration draws it. The context pane still sits to its left at
-'composer.width' when there is room, and nothing else is sized.
+own configuration draws it. The |agentcomplete-context| pane is unaffected
+either way.
 
 ==============================================================================
 13. Context pane
                                                        *agentcomplete-context*
 
-Attaching to a prompt buffer opens a read-only pane beside it holding the
+Attaching to a prompt buffer opens a read-only pane next to it holding the
 agent's last message. Without it a reply is written blind: the buffer the
 agent opens for you carries no conversation at all.
 
-The pane goes to the left of the prompt when the terminal is at least
-'context.min_width' columns wide — the message, then your reply to it — as
-wide as the 'composer.width' your reply wraps at, and stacks with the prompt
-when the terminal is narrower than that. It re-places itself as you resize, so
-a window dragged narrower restacks rather than leaving both halves too
-cramped to read. |agentcomplete-composer| describes the page the two share.
+The pane is an ordinary split. It goes to the left of the prompt when the
+terminal is at least 'context.min_width' columns wide, with the message on
+the left and your reply to it on the right. Narrower than that, it goes on the
+'context.stacked' side of the prompt. agentcomplete picks the placement once,
+when the pane opens. After that Neovim sizes the pane as it sizes any other
+split, and resizing the terminal does not move it to the other side.
 
 Stacked, the pane goes above the prompt, so the conversation reads top-down:
 the message over the reply to it. Set 'context.stacked' to `"below"` to keep
@@ -606,13 +543,9 @@ the reply on top instead: >lua
 	  context = { stacked = "below" },
 	})
 <
-Either way it is drawn without a border, padded by a blank cell all round:
-titled on the blank row above with the agent that spoke, and footed on the
-one below with the keys that scroll it and a reminder that you cannot answer
-here: "<S-Up>/<S-Down> scroll · read-only". Around a boxed prompt
-(|agentcomplete-composer|) it is only as tall as the message: beside the box
-it is centered on it, and stacked it sits a row clear of it. A message longer
-than the room it has scrolls.
+It draws no border, title, or tint, and sets no winbar or statusline, so yours
+draw on it as on any other window. A message longer than the room it has
+scrolls.
 
 It reads as a document rather than a buffer you act on: no line numbers, no
 sign or fold column, and markdown markup concealed. That last one is the point
@@ -622,19 +555,25 @@ the message looks is your own markdown setup, unchanged: the pane sets
 `filetype` to `markdown` and lets treesitter and whatever renderer you use
 style it exactly as they style any other markdown.
 
-It holds a scratch buffer — unnamed, never written anywhere, wiped when it
-closes — with 'modifiable' off, so you can move the cursor in to read or copy
-but never type. The cursor starts in the prompt buffer.
+The pane's buffer is named after the agent that spoke. A second prompt
+answered by the same agent in one Neovim gets an unnamed pane.
+Claude Code's is `agentcomplete://claude-code`. OpenCode's is
+`agentcomplete://opencode/<rung>`, where the rung is the lookup that found
+the session: `$OPENCODE_SESSION_ID`, `pointer file`, or `guessed`. Neovim
+shows the name wherever it shows a buffer name: your statusline and `:ls!`.
+
+The buffer is not a file. It is a `nofile` scratch buffer, never written
+anywhere. It is wiped when the pane closes. 'modifiable' is off, so you can
+move the cursor in to read or copy but never type. The cursor starts in the
+prompt buffer.
 
                                                   *agentcomplete-context-keys*
-A message longer than one screen is read from the prompt itself: `<S-Down>`
-scrolls the pane down a line and `<S-Up>` back up, in normal and insert mode
-both; hold either to keep going. Reaching it any other way means moving the
-cursor into the pane and back, which you cannot do without dropping out of
-the reply you are composing. Lines are counted as the pane draws them, so a
-long paragraph it wraps scrolls a row at a time rather than all at once.
-Whichever of the two is configured is named in the pane's footer, which
-falls back to `read-only` alone when neither is.
+A message longer than one screen scrolls from the prompt: `<S-Down>` scrolls
+the pane down a line and `<S-Up>` back up, in normal and insert mode both;
+hold either to keep going. Those are the default keys. Scrolling any other
+way means moving the cursor into the pane and back, which leaves the reply
+you are composing. A long paragraph that wraps scrolls a row at a time, not
+all at once.
 
 Both are 'context.keys', and either may be set to `false` to leave that key
 alone: >lua
@@ -688,8 +627,8 @@ For OpenCode the message is read from OpenCode's running server with
 `opencode api`, which needs OpenCode 2. Which session to read is the hard
 part: OpenCode's external editor inherits no session id, and OpenCode records
 no mapping between an editor and the session it was opened from. So the
-session is resolved down three rungs, and the pane's title names the one that
-answered — a guess is never shown as a certainty:
+session is looked up in three rungs, and the pane's buffer name says which
+rung found it — a guess is never shown as a certainty:
 
 	`$OPENCODE_SESSION_ID`
 			The session id straight from the environment. Nothing
@@ -706,10 +645,10 @@ answered — a guess is never shown as a certainty:
 			with `--continue` resolves as readily as a fresh one.
 			Correct in the ordinary case of one OpenCode per
 			project, and wrong when two share a directory — which
-			is why it says so in the title.
+			is why the buffer name shows `guessed`.
 
-A `guessed` header means the pane may be showing another conversation. Install
-the plugin to replace the guess with a certainty, either with
+A `guessed` buffer name means the pane may be showing another conversation.
+Install the plugin to replace the guess with a certainty, either with
 |:AgentCompleteInstallOpenCodePlugin| or by setting 'opencode.install_plugin'.
 
 ==============================================================================

@@ -7,7 +7,7 @@
 ---through `cb` anyway so an asynchronous sibling drops in without changing the contract.
 ---
 ---The module splits the way `highlight.lua` does: `format` and `log` are the editor-state-free
----core the tests drive directly, and `open`/`close` are the glue. The windows themselves are
+---core the tests drive directly, and `open`/`close` are the glue. The pane itself is
 ---`context.pane`, which knows nothing about resolvers.
 ---@class AgentComplete.Context
 local M = {}
@@ -185,8 +185,9 @@ local function show(buf, result, config, log_path, format)
     M.log(log_path, result.err or "resolution failed")
     return
   end
-  -- A resolver that had to choose between candidates says so here as well as in the border: the
-  -- pane looks the same whichever conversation it found, and this is the record of which.
+  -- A resolver that had to choose between candidates says so here as well as in the pane's
+  -- buffer name: the message reads the same whichever conversation it found, and this
+  -- records which.
   if result.rung then
     M.log(log_path, result.resolver .. " resolved via " .. result.rung)
   end
@@ -281,7 +282,7 @@ function M.open(buf, session, config, opts)
   local reported = false
   local claimed, err = M.resolve(session, function(result)
     -- A resolver reports once, and only while this buffer is still attached. A second report
-    -- would build a pane over the first and overwrite the record of its windows; one arriving
+    -- would build a pane over the first and overwrite the record of its window; one arriving
     -- after `close` would hang autocmds on an augroup nothing owns.
     if reported or M._augroups[buf] ~= grp then
       return

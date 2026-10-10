@@ -22,7 +22,7 @@ Set Framerate 24
 Hide
 Type "assets/demo.sh"
 Enter
-Wait+Screen@20s /read-only/
+Wait+Screen@20s /Found it/
 # Entering insert mode repaints the whole screen, which vhs captures as a blank frame.
 Type "i"
 Sleep 1s
@@ -36,13 +36,13 @@ Tab
 Sleep 400ms
 Enter
 Type " to write a failing case in "
-Type "@tests/lay"
+Type "@tests/test_con"
 Sleep 1.5s
 Tab
 Sleep 400ms
 Enter
 Type " that crosses the min_width boundary, then make "
-Type "@lua/lay"
+Type "@lua/agentcomplete/context/pa"
 Sleep 1.5s
 Tab
 Sleep 400ms

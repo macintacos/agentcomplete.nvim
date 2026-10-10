@@ -1,5 +1,5 @@
--- Tests for agentcomplete.composer: the prompt window's options, applied, held against plugins
--- that re-set them, and restored.
+-- Tests for agentcomplete.composer: the prompt window's prose options, applied to it, left alone
+-- by the plugins that set their own, and restored on detach.
 local MiniTest = require("mini.test")
 local new_set = MiniTest.new_set
 local expect = MiniTest.expect
@@ -19,63 +19,58 @@ local T = new_set({
   },
 })
 
----A prompt buffer, focused, in a window with a code buffer's gutter.
+---A prompt buffer, focused, in a window styled like a code buffer's.
 local function prompt()
   local buf = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_set_current_buf(buf)
   local win = vim.api.nvim_get_current_win()
   vim.wo[win][0].number = true
   vim.wo[win][0].relativenumber = true
+  vim.wo[win][0].signcolumn = "yes"
+  vim.wo[win][0].foldcolumn = "1"
+  vim.wo[win][0].cursorline = true
+  vim.wo[win][0].wrap = false
   vim.wo[win][0].winbar = "%f"
   return buf, win
 end
 
-T["fillchars"] = new_set()
-
-T["fillchars"]["blanks the separators and end-of-buffer rows after the window's own"] = function()
-  local merged = require("agentcomplete.composer").fillchars("fold:x,eob:~")
-  expect.equality(vim.startswith(merged, "fold:x,eob:~,eob: ,vert: "), true)
-end
-
-T["fillchars"]["stands alone when the window has none of its own"] = function()
-  expect.equality(
-    vim.startswith(require("agentcomplete.composer").fillchars(""), "eob: ,"),
-    true
-  )
-end
-
 T["attach"] = new_set()
 
-T["attach"]["drops the gutter and wraps prose inside an inset"] = function()
+T["attach"]["drops the gutter and wraps prose with a hanging indent"] = function()
   local buf, win = prompt()
   require("agentcomplete.composer").attach(buf)
-  expect.equality(vim.wo[win].number, false)
-  expect.equality(vim.wo[win].relativenumber, false)
-  expect.equality(vim.wo[win].signcolumn, "no")
-  expect.equality(vim.wo[win].cursorline, false)
-  expect.equality(vim.wo[win].statuscolumn, "  ")
-  expect.equality(
-    { vim.wo[win].wrap, vim.wo[win].linebreak, vim.wo[win].breakindent },
-    { true, true, true }
-  )
+  expect.equality({
+    vim.wo[win].number,
+    vim.wo[win].relativenumber,
+    vim.wo[win].signcolumn,
+    vim.wo[win].foldcolumn,
+    vim.wo[win].cursorline,
+  }, { false, false, "no", "0", false })
+  expect.equality({
+    vim.wo[win].wrap,
+    vim.wo[win].linebreak,
+    vim.wo[win].breakindent,
+    vim.wo[win].breakindentopt,
+    vim.wo[win].smoothscroll,
+  }, { true, true, true, "list:-1", true })
 end
 
--- The winbar row is the padding between the box's top border and the first line.
-T["attach"]["pads the text with a blank row above it"] = function()
+T["attach"]["leaves the statuscolumn, winbar, statusline and fillchars as they were"] = function()
   local buf, win = prompt()
+  vim.wo[win][0].statuscolumn = "%l "
+  vim.wo[win][0].statusline = "mine"
+  vim.wo[win][0].fillchars = "fold:x"
+  local function chrome()
+    return {
+      vim.wo[win].statuscolumn,
+      vim.wo[win].winbar,
+      vim.wo[win].statusline,
+      vim.wo[win].fillchars,
+    }
+  end
+  local before = chrome()
   require("agentcomplete.composer").attach(buf)
-  expect.equality(vim.wo[win].winbar, " ")
-end
-
-T["attach"]["keeps the window's other fill characters"] = function()
-  vim.o.fillchars = "fold:x"
-  local buf, win = prompt()
-  require("agentcomplete.composer").attach(buf)
-  local fcs = vim.api.nvim_win_call(win, function()
-    return vim.opt_local.fillchars:get()
-  end)
-  vim.o.fillchars = ""
-  expect.equality({ fcs.fold, fcs.eob, fcs.vert }, { "x", " ", " " })
+  expect.equality(chrome(), before)
 end
 
 T["attach"]["leaves the statusline alone"] = function()
@@ -85,18 +80,22 @@ T["attach"]["leaves the statusline alone"] = function()
   expect.equality(vim.wo[win].statusline, "mine")
 end
 
--- dropbar re-attaches its winbar on every write, from whichever window is current.
-T["attach"]["takes the winbar back off when a plugin sets it again"] = function()
+-- Plugins re-attach their winbar on window events, and the composer must not undo it.
+T["attach"]["keeps a winbar and wrap a plugin sets after attach"] = function()
   local buf, win = prompt()
   require("agentcomplete.composer").attach(buf)
-  vim.cmd("vsplit")
   vim.wo[win].winbar = "%{%v:lua.dropbar()%}"
-  expect.equality(vim.wo[win].winbar, " ")
+  vim.wo[win].wrap = false
+  vim.api.nvim_exec_autocmds({ "BufWinEnter", "WinEnter" }, { buffer = buf })
+  vim.wait(10)
+  expect.equality(
+    { vim.wo[win].winbar, vim.wo[win].wrap },
+    { "%{%v:lua.dropbar()%}", false }
+  )
 end
 
--- dropbar re-attaches from inside its own `BufWritePost` handler, where `OptionSet` never fires:
--- autocmds do not nest.
-T["attach"]["takes the winbar back off when a plugin sets it from its own autocmd"] = function()
+-- dropbar sets its winbar from inside its own `BufWritePost` handler.
+T["attach"]["keeps a winbar a plugin sets from its own autocmd"] = function()
   local buf, win = prompt()
   local grp =
     vim.api.nvim_create_augroup("AgentCompleteComposerDropbarTest", { clear = true })
@@ -109,20 +108,17 @@ T["attach"]["takes the winbar back off when a plugin sets it from its own autocm
   require("agentcomplete.composer").attach(buf)
   vim.api.nvim_exec_autocmds("BufWritePost", { buffer = buf })
   vim.api.nvim_del_augroup_by_id(grp)
-  vim.wait(100, function()
-    return vim.wo[win].winbar == " "
-  end)
-  expect.equality(vim.wo[win].winbar, " ")
+  vim.wait(100)
+  expect.equality(vim.wo[win].winbar, "%{%v:lua.dropbar()%}")
 end
 
--- A `:set` in the prompt sets its local value as much as a `:setlocal` does.
-T["attach"]["takes the statuscolumn back from a plain :set in the prompt"] = function()
+T["attach"]["keeps a statuscolumn set with :set in the prompt"] = function()
   local buf, win = prompt()
   require("agentcomplete.composer").attach(buf)
   vim.cmd("set statuscolumn=%l")
-  local held = vim.wo[win].statuscolumn
+  local kept = vim.wo[win].statuscolumn
   vim.go.statuscolumn = ""
-  expect.equality(held, "  ")
+  expect.equality(kept, "%l")
 end
 
 -- A user who sets the number column in the prompt meant to.
@@ -131,14 +127,6 @@ T["attach"]["lets the number column be turned back on"] = function()
   require("agentcomplete.composer").attach(buf)
   vim.wo[win][0].number = true
   expect.equality(vim.wo[win].number, true)
-end
-
-T["attach"]["holds nothing on another window"] = function()
-  local buf = prompt()
-  require("agentcomplete.composer").attach(buf)
-  vim.cmd("vnew")
-  vim.wo.winbar = "other"
-  expect.equality(vim.wo.winbar, "other")
 end
 
 T["attach"]["is idempotent, so a second attach cannot save its own values as the user's"] = function()
@@ -157,24 +145,18 @@ T["detach"]["restores the window's own options"] = function()
   local composer = require("agentcomplete.composer")
   composer.attach(buf)
   composer.detach(buf)
-  expect.equality(
-    { vim.wo[win].number, vim.wo[win].relativenumber, vim.wo[win].winbar },
-    { true, true, "%f" }
-  )
-  expect.equality(vim.wo[win].statuscolumn, "")
-  expect.equality(
-    vim.api.nvim_get_option_value("fillchars", { win = win, scope = "local" }),
-    ""
-  )
-end
-
-T["detach"]["stops holding the winbar"] = function()
-  local buf, win = prompt()
-  local composer = require("agentcomplete.composer")
-  composer.attach(buf)
-  composer.detach(buf)
-  vim.wo[win].winbar = "back"
-  expect.equality(vim.wo[win].winbar, "back")
+  expect.equality({
+    vim.wo[win].number,
+    vim.wo[win].relativenumber,
+    vim.wo[win].signcolumn,
+    vim.wo[win].foldcolumn,
+    vim.wo[win].cursorline,
+    vim.wo[win].wrap,
+    vim.wo[win].linebreak,
+    vim.wo[win].breakindent,
+    vim.wo[win].breakindentopt,
+    vim.wo[win].smoothscroll,
+  }, { true, true, "yes", "1", true, false, false, false, "", false })
 end
 
 T["detach"]["forgets a buffer that was wiped"] = function()
