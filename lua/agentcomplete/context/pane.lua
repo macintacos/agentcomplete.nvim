@@ -20,7 +20,8 @@ local PANE_OPTIONS = {
   relativenumber = false,
   signcolumn = "no",
   foldcolumn = "0",
-  statuscolumn = "",
+  -- The inset off the window's edge, matching the prompt's.
+  statuscolumn = "  ",
   cursorline = false,
   cursorcolumn = false,
   colorcolumn = "",

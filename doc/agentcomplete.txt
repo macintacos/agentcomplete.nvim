@@ -497,6 +497,7 @@ does.
 
 In the prompt window, agentcomplete:
 
+	insets	the text two columns from the window's edge
 	wraps	at word boundaries, with a wrapped list item hanging
 		under its text rather than its bullet
 	scrolls	a wrapped line one row at a time
@@ -507,15 +508,14 @@ agentcomplete sets every option on the prompt buffer only (|:setlocal|).
 Other buffers opened in that window look as they always do.
 |:AgentCompleteDetach| puts each option back.
 
-agentcomplete leaves your statusline, winbar, 'statuscolumn', colorscheme,
-spelling, 'textwidth', and keymaps alone. Plugins that draw in those places
+agentcomplete leaves your statusline, winbar, colorscheme, spelling,
+'textwidth', and keymaps alone. Plugins that draw in those places
 draw on the prompt as on any other buffer. The context pane's scroll keys are
 the one exception: they are mapped on the prompt while the pane is open; see
 |agentcomplete-context-keys|.
 
-If 'statuscolumn' is set, Neovim draws that column in place of the number,
-sign, and fold columns, so the composer's settings for those have no effect
-there.
+The inset is a two-space 'statuscolumn' set on the prompt, so it takes the
+place of your own 'statuscolumn' there.
 
 Set 'composer.enabled' to `false` to leave the prompt window exactly as your
 own configuration draws it. The |agentcomplete-context| pane is unaffected
@@ -547,10 +547,11 @@ It draws no border, title, or tint, and sets no winbar or statusline, so yours
 draw on it as on any other window. A message longer than the room it has
 scrolls.
 
-It reads as a document rather than a buffer you act on: no line numbers, no
-sign or fold column, and markdown markup concealed. That last one is the point
-of the pane rather than a detail of it — markup exists to be edited, and this
-is the one markdown in the editor nobody will edit. Everything else about how
+It reads as a document rather than a buffer you act on: inset two columns
+like the prompt, with no line numbers, no sign or fold column, and markdown
+markup concealed. That last one is the point of the pane rather than a detail
+of it — markup exists to be edited, and this is the one markdown in the editor
+nobody will edit. Everything else about how
 the message looks is your own markdown setup, unchanged: the pane sets
 `filetype` to `markdown` and lets treesitter and whatever renderer you use
 style it exactly as they style any other markdown.

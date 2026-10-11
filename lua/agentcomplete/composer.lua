@@ -6,13 +6,15 @@
 ---@class AgentComplete.Composer
 local M = {}
 
----What the prompt window sets. Statusline, winbar and 'statuscolumn' are left to the user and
----their plugins.
+---What the prompt window sets. Statusline and winbar are left to the user and their plugins.
 local OPTIONS = {
   number = false,
   relativenumber = false,
   signcolumn = "no",
   foldcolumn = "0",
+  -- The inset off the window's edge, matching the pane's. Padding on the text instead would land
+  -- in every yank.
+  statuscolumn = "  ",
   cursorline = false,
   wrap = true,
   linebreak = true,

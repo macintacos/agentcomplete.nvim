@@ -55,14 +55,22 @@ T["attach"]["drops the gutter and wraps prose with a hanging indent"] = function
   }, { true, true, true, "list:-1", true })
 end
 
-T["attach"]["leaves the statuscolumn, winbar, statusline and fillchars as they were"] = function()
+T["attach"]["insets the text two columns, over a global statuscolumn"] = function()
   local buf, win = prompt()
-  vim.wo[win][0].statuscolumn = "%l "
+  vim.go.statuscolumn = "%l "
+  require("agentcomplete.composer").attach(buf)
+  vim.cmd.redraw()
+  local textoff = vim.fn.getwininfo(win)[1].textoff
+  vim.go.statuscolumn = ""
+  expect.equality(textoff, 2)
+end
+
+T["attach"]["leaves the winbar, statusline and fillchars as they were"] = function()
+  local buf, win = prompt()
   vim.wo[win][0].statusline = "mine"
   vim.wo[win][0].fillchars = "fold:x"
   local function chrome()
     return {
-      vim.wo[win].statuscolumn,
       vim.wo[win].winbar,
       vim.wo[win].statusline,
       vim.wo[win].fillchars,
@@ -156,7 +164,8 @@ T["detach"]["restores the window's own options"] = function()
     vim.wo[win].breakindent,
     vim.wo[win].breakindentopt,
     vim.wo[win].smoothscroll,
-  }, { true, true, "yes", "1", true, false, false, false, "", false })
+    vim.wo[win].statuscolumn,
+  }, { true, true, "yes", "1", true, false, false, false, "", false, "" })
 end
 
 T["detach"]["forgets a buffer that was wiped"] = function()
