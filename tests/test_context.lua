@@ -472,8 +472,7 @@ local function pane_win()
   return pane and pane.win
 end
 
--- Left to right is the order the conversation reads in: the message, then the reply to it.
-T["open"]["sits to the left of the prompt when the terminal is at least min_width wide"] = function()
+T["open"]["sits to the right of the prompt when the terminal is at least min_width wide"] = function()
   local context = require("agentcomplete.context")
   vim.o.columns = 200
   local buf = prompt_buffer()
@@ -486,7 +485,7 @@ T["open"]["sits to the left of the prompt when the terminal is at least min_widt
   )
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "row")
-  expect.equality({ layout[2][1][2], layout[2][2][2] }, { pane_win(), prompt_win })
+  expect.equality({ layout[2][1][2], layout[2][2][2] }, { prompt_win, pane_win() })
 end
 
 -- Stacked, a chat reads top to bottom: the message, then the reply under it.
@@ -514,7 +513,7 @@ T["open"]["sits beside the prompt at exactly min_width columns"] = function()
   context.open(buf, session_for("claude-code"), config, with_resolver(ok_result("hello")))
   local layout = vim.fn.winlayout()
   expect.equality(layout[1], "row")
-  expect.equality({ layout[2][1][2], layout[2][2][2] }, { pane_win(), prompt_win })
+  expect.equality({ layout[2][1][2], layout[2][2][2] }, { prompt_win, pane_win() })
 end
 
 T["open"]["stacks above the prompt one column narrower than min_width"] = function()

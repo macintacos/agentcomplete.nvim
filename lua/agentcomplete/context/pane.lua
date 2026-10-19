@@ -152,7 +152,7 @@ end
 ---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
----Split the pane off `buf`: to its left at or above `min_width` columns, otherwise on the
+---Split the pane off `buf`: to its right at or above `min_width` columns, otherwise on the
 ---`stacked` edge.
 ---@param buf integer Prompt buffer the pane belongs to.
 ---@param opts AgentComplete.Context.Pane.Options
@@ -165,7 +165,7 @@ function M.open(buf, opts)
   if host == -1 then
     return nil
   end
-  local side = vim.o.columns >= opts.min_width and "left" or (opts.stacked or "above")
+  local side = vim.o.columns >= opts.min_width and "right" or (opts.stacked or "above")
   local pane_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[pane_buf].bufhidden = "wipe"
   -- ponytail: a second prompt with the same resolver gets an unnamed pane (E95); suffix the

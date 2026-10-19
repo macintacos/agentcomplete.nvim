@@ -4,7 +4,7 @@
 ---@field detect "auto"|"always"|"never" Detection mode: registry detectors, force on, or off.
 ---@field sources { slash: boolean, file: boolean } Which completion sources to offer.
 ---@field allowed_sources string[] Blink provider ids kept alongside agentcomplete in detected buffers (blink backend only; each must already be registered in blink).
----@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it sits to the left of the prompt rather than stacked with it.
+---@field context AgentComplete.Context.Options Read-only pane showing the agent's last message beside the prompt. `min_width` is the terminal width at or above which it sits to the right of the prompt rather than stacked with it.
 ---@field composer AgentComplete.Config.Composer The prompt window as a page to write on.
 ---@field opencode AgentComplete.Config.OpenCode OpenCode-specific options.
 

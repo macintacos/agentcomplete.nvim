@@ -164,7 +164,7 @@ end
 
 ---@class AgentComplete.Context.Options
 ---@field enabled boolean Whether attaching opens the pane at all.
----@field min_width integer Terminal width at or above which the pane sits to the left of the prompt rather than stacked with it.
+---@field min_width integer Terminal width at or above which the pane sits to the right of the prompt rather than stacked with it.
 ---@field stacked? "above"|"below" Which side of the prompt the pane takes below `min_width`; defaults to `above`.
 ---@field rumdl_config? string Path to a rumdl config file for the pane's formatting; unset formats with rumdl's built-in defaults.
 ---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
