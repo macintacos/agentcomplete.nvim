@@ -168,6 +168,7 @@ The full default configuration, with every option: >lua
 	    keys = {
 	      scroll_down = "<S-Down>", -- scroll the pane down a line from the prompt
 	      scroll_up = "<S-Up>",     -- scroll it back up
+	      quote = "<localleader>q", -- in the pane: quote into the reply
 	    },
 	  },
 	  composer = {
@@ -242,6 +243,13 @@ The full default configuration, with every option: >lua
 'context.keys.scroll_up'
 			string | `false` (default `<S-Up>`). The same,
 			scrolling back up.
+
+'context.keys.quote'
+			string | `false` (default `<localleader>q`). Key mapped
+			on the context pane's buffer, normal and visual mode,
+			that quotes the line under the cursor, or the
+			selection, into the reply. `false` leaves the key
+			alone. See |agentcomplete-context-quote|.
 
 'composer.enabled'	boolean (default `true`). When true, the prompt window
 			reads as prose. It soft-wraps at word boundaries,
@@ -588,6 +596,27 @@ The mappings are buffer-local to the prompt and last only as long as the
 pane, so they shadow `<S-Down>` and `<S-Up>` nowhere else. Inside the prompt
 they do shadow Vim's own paging — though the prompt itself has little to
 page, holding only the reply you are writing.
+
+                                                 *agentcomplete-context-quote*
+To answer one part of the message, move the cursor into the pane and press
+`<localleader>q`. The line under the cursor goes to the end of your reply as a
+markdown quote, and you are left in insert mode under it, ready to answer.
+The pane wraps each paragraph rather than breaking it, so the line is usually
+the whole paragraph. In visual mode the selection is quoted instead: exactly
+the characters selected with |v|, whole lines with |V|, and the rows of the
+block with |CTRL-V|.
+
+Each quoted line gets a `> ` in front, a blank line becomes a bare `>`, and a
+line that is already a quote nests one level deeper. One blank line separates
+the quote from any text above it and from the line you type on below it, so a
+reply built from several quotes reads quote, answer, quote, answer.
+
+The key is 'context.keys.quote', mapped on the pane's buffer only. `false`
+leaves it alone: >lua
+	require("agentcomplete").setup({
+	  context = { keys = { quote = false } },
+	})
+<
 
 The pane belongs to the prompt and goes when the prompt does. Quitting the
 prompt window dismisses the pane first, so `:q` returns you to the agent

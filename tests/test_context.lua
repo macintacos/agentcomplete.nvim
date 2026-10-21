@@ -797,6 +797,43 @@ T["open"]["opens no window when a scroll key is not a string"] = function()
   expect.equality(require("agentcomplete.context.pane")._panes[buf], nil)
 end
 
+-- Each case starts with the pane's cursor on "beta".
+T["open"]["quoting from the pane"] = new_set({
+  parametrize = {
+    { "", { "> alpha beta gamma" } },
+    { "ve", { "> beta" } },
+    { "vj", { "> beta gamma", "> delta e" } },
+    { "Vj", { "> alpha beta gamma", "> delta epsilon" } },
+    { "<C-v>jl", { "> be", "> ep" } },
+  },
+}, {
+  ["appends the line or selection to the reply and moves there under it"] = function(
+    motion,
+    quoted
+  )
+    local context = require("agentcomplete.context")
+    local buf = prompt_buffer()
+    local prompt_win = vim.api.nvim_get_current_win()
+    local config = { enabled = true, min_width = 160, keys = { quote = "Q" } }
+    local message = "alpha beta gamma\ndelta epsilon"
+    context.open(
+      buf,
+      session_for("claude-code"),
+      config,
+      with_resolver(ok_result(message))
+    )
+    vim.api.nvim_set_current_win(assert(pane_win()))
+    vim.api.nvim_win_set_cursor(0, { 1, 6 })
+    press(motion .. "Q")
+    expect.equality(
+      vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+      vim.list_extend(vim.deepcopy(quoted), { "", "" })
+    )
+    expect.equality(vim.api.nvim_get_current_win(), prompt_win)
+    expect.equality(vim.api.nvim_win_get_cursor(0), { #quoted + 2, 0 })
+  end,
+})
+
 -- The pane is the one markdown in the editor nobody will edit, so the markup that exists to
 -- be edited is what it hides. Everything a gutter is for -- line numbers to jump to, signs,
 -- folds -- addresses a buffer you act on, and this is a buffer you read.
@@ -1315,6 +1352,50 @@ T["open"]["opens a pane for each prompt even when both name the same resolver"] 
   expect.equality(vim.api.nvim_win_is_valid(assert(panes[first]).win), true)
   expect.equality(vim.api.nvim_win_is_valid(assert(panes[second]).win), true)
 end
+
+T["pane.quote"] = new_set({
+  parametrize = {
+    { "an empty reply", { "" }, { "hi" }, 0, { "> hi", "", "" } },
+    { "a draft", { "draft" }, { "hi" }, 1, { "", "> hi", "", "" } },
+    {
+      "a reply ending in blank lines",
+      { "draft", "", " " },
+      { "hi" },
+      1,
+      {
+        "",
+        "> hi",
+        "",
+        "",
+      },
+    },
+    {
+      "quoted markdown",
+      { "" },
+      { "one", "", "> two" },
+      0,
+      {
+        "> one",
+        ">",
+        "> > two",
+        "",
+        "",
+      },
+    },
+  },
+}, {
+  ["sets the quote off by one blank line on either side"] = function(
+    _,
+    reply,
+    quoted,
+    start,
+    lines
+  )
+    local got_start, got_lines =
+      require("agentcomplete.context.pane").quote(reply, quoted)
+    expect.equality({ got_start, got_lines }, { start, lines })
+  end,
+})
 
 T["opencode.parse_etime"] = new_set()
 

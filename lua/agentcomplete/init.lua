@@ -31,7 +31,7 @@ local defaults = {
     enabled = true,
     min_width = 140,
     stacked = "above",
-    keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>" },
+    keys = { scroll_down = "<S-Down>", scroll_up = "<S-Up>", quote = "<localleader>q" },
   },
   composer = { enabled = true },
   opencode = {

@@ -167,11 +167,12 @@ end
 ---@field min_width integer Terminal width at or above which the pane sits to the right of the prompt rather than stacked with it.
 ---@field stacked? "above"|"below" Which side of the prompt the pane takes below `min_width`; defaults to `above`.
 ---@field rumdl_config? string Path to a rumdl config file for the pane's formatting; unset formats with rumdl's built-in defaults.
----@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
+---@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane, and the pane key that quotes from it.
 
 ---@class AgentComplete.Context.Keys
 ---@field scroll_down string|false Key that scrolls the pane down a line; `false` leaves it alone.
 ---@field scroll_up string|false Key that scrolls it back up; `false` leaves it alone.
+---@field quote? string|false Pane key that quotes the line or selection into the prompt; `false` leaves it alone.
 
 ---Build the pane for a resolved message, or record and log a resolver's failure.
 ---@param buf integer

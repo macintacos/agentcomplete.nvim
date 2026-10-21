@@ -1,6 +1,7 @@
 ---The pane the agent's last message is shown in: a plain split next to the prompt, the keys that
----scroll it from the prompt, and the autocmds that close it with the prompt. Nothing here knows
----what a resolver is — it is handed text, a buffer name, and keys to map.
+---scroll it from the prompt and quote from it into the prompt, and the autocmds that close it
+---with the prompt. Nothing here knows what a resolver is — it is handed text, a buffer name, and
+---keys to map.
 ---@class AgentComplete.Context.Pane
 local M = {}
 
@@ -55,22 +56,74 @@ local SCROLL = {
 ---@field keycode string What Vim scrolls the pane with.
 ---@field desc string How the mapping names itself.
 
+---The key `keys` sets for `option`, or nil when it is unset or `false`.
+---@param keys AgentComplete.Context.Keys|nil
+---@param option string
+---@return string|nil
+local function key(keys, option)
+  local lhs = keys and keys[option]
+  if lhs then
+    assert(
+      type(lhs) == "string",
+      ("context.keys.%s must be a key or false"):format(option)
+    )
+  end
+  return lhs or nil
+end
+
 ---The scroll keys `keys` binds; one set to `false` is left out.
 ---@param keys AgentComplete.Context.Keys|nil
 ---@return AgentComplete.Context.Pane.Scroll[]
 local function configured(keys)
   local active = {}
   for _, scroll in ipairs(SCROLL) do
-    local lhs = keys and keys[scroll.option]
+    local lhs = key(keys, scroll.option)
     if lhs then
-      assert(
-        type(lhs) == "string",
-        ("context.keys.%s must be a key or false"):format(scroll.option)
-      )
       active[#active + 1] = { lhs = lhs, keycode = scroll.keycode, desc = scroll.desc }
     end
   end
   return active
+end
+
+---@param line string
+---@return boolean
+local function blank(line)
+  return line:find("^%s*$") ~= nil
+end
+
+---Where `quoted` goes at the end of a reply holding `reply`, and the lines it becomes there. The
+---reply's trailing blank lines give way to it, so it sits one blank line under any text above,
+---and one blank line over the empty line left to type on.
+---@param reply string[]
+---@param quoted string[]
+---@return integer start 0-based line the lines replace from, through the end of the reply.
+---@return string[] lines
+function M.quote(reply, quoted)
+  local start = #reply
+  while start > 0 and blank(reply[start]) do
+    start = start - 1
+  end
+  local lines = start > 0 and { "" } or {}
+  for _, line in ipairs(quoted) do
+    lines[#lines + 1] = blank(line) and ">" or ("> " .. line)
+  end
+  vim.list_extend(lines, { "", "" })
+  return start, lines
+end
+
+---Quote the pane's current line, or its visual selection, at the end of the prompt shown in
+---`host`, and start typing on the line under it.
+---@param buf integer Prompt buffer.
+---@param host integer Window showing it.
+local function quote_into(buf, host)
+  local mode = vim.fn.mode()
+  local quoted = mode == "n" and { vim.api.nvim_get_current_line() }
+    or vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos("."), { type = mode })
+  local start, lines = M.quote(vim.api.nvim_buf_get_lines(buf, 0, -1, false), quoted)
+  vim.api.nvim_buf_set_lines(buf, start, -1, false, lines)
+  vim.api.nvim_set_current_win(host)
+  vim.api.nvim_win_set_cursor(host, { vim.api.nvim_buf_line_count(buf), 0 })
+  vim.cmd.startinsert()
 end
 
 ---Give `lhs` back, but only while it is still the mapping `open` set. A neighbour that has
@@ -149,7 +202,7 @@ end
 ---@field stacked? "above"|"below" Edge it takes below that width; defaults to `above`.
 ---@field resolver string Name the pane's buffer carries.
 ---@field rung? string Which step of the resolver's chain produced the session; appended to the name.
----@field keys? AgentComplete.Context.Keys Prompt-buffer keys that scroll the pane.
+---@field keys? AgentComplete.Context.Keys Keys that scroll the pane and quote from it.
 ---@field on_close fun() Called for every route out of the pane the pane itself sees.
 
 ---Split the pane off `buf`: to its right at or above `min_width` columns, otherwise on the
@@ -161,6 +214,7 @@ function M.open(buf, opts)
   -- `configured` first: it is where a bad `keys` value raises, and a raise once the split
   -- exists strands it — nothing owns it yet to close it.
   local scrolls = configured(opts.keys)
+  local quote = key(opts.keys, "quote")
   local host = vim.fn.bufwinid(buf)
   if host == -1 then
     return nil
@@ -196,6 +250,11 @@ function M.open(buf, opts)
     end, { buffer = buf, desc = scroll.desc })
     return scroll.lhs
   end, scrolls)
+  if quote then
+    vim.keymap.set({ "n", "x" }, quote, function()
+      quote_into(buf, host)
+    end, { buffer = pane_buf, desc = "agentcomplete: quote into the reply" })
+  end
 
   M._panes[buf] = { win = win, keys = mapped }
   follow({

@@ -26,15 +26,19 @@ local function start()
   ]])
 end
 
-local function open_pane()
-  child.lua([[
+---@param keys? table `context.keys` for the pane.
+local function open_pane(keys)
+  child.lua(
+    [[
     require("agentcomplete.context").open(
       vim.api.nvim_get_current_buf(),
       { tool = "claude-code", cwd = "/proj", skill_dirs = {}, command_dirs = {} },
-      { enabled = true, min_width = 160 },
+      { enabled = true, min_width = 160, keys = ... },
       { log_path = vim.fn.tempname(), format = function(text) return text end }
     )
-  ]])
+  ]],
+    { keys }
+  )
 end
 
 local T = new_set({
@@ -71,6 +75,22 @@ T["opening the pane from insert mode keeps the prompt typing"] = function()
   expect.equality(#child.api.nvim_list_wins(), 2)
   expect.equality(child.api.nvim_get_mode().mode, "i")
   expect.equality(child.api.nvim_win_get_cursor(0), { 1, 5 })
+end
+
+T["quoting a selection from the pane leaves the reader typing under it"] = function()
+  local prompt_win = child.api.nvim_get_current_win()
+  open_pane({ quote = "Q" })
+  child.lua([[
+    local _, pane = next(require("agentcomplete.context.pane")._panes)
+    vim.api.nvim_set_current_win(pane.win)
+  ]])
+  child.type_keys("V", "Q", "ok")
+  expect.equality(child.api.nvim_get_current_win(), prompt_win)
+  expect.equality(child.api.nvim_get_mode().mode, "i")
+  expect.equality(
+    child.api.nvim_buf_get_lines(0, 0, -1, false),
+    { "draft", "", "> hello", "", "ok" }
+  )
 end
 
 return T
