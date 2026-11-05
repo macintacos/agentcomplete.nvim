@@ -653,12 +653,12 @@ For Claude Code the message comes from the session transcript under
 `~/.claude/sessions/<pid>.json` that Claude Code wrote — so the pane works
 through an $EDITOR wrapper script as well as a direct launch.
 
-For OpenCode the message is read from OpenCode's running server with
-`opencode api`, which needs OpenCode 2. Which session to read is the hard
-part: OpenCode's external editor inherits no session id, and OpenCode records
-no mapping between an editor and the session it was opened from. So the
-session is looked up in three rungs, and the pane's buffer name says which
-rung found it — a guess is never shown as a certainty:
+For OpenCode the message is read from the `opencode` CLI: `opencode export`
+prints the session, and `opencode session list` dates the guess. Which session
+to read is the hard part: OpenCode's external editor inherits no session id,
+and OpenCode records no mapping between an editor and the session it was
+opened from. So the session is looked up in three rungs, and the pane's
+buffer name says which rung found it — a guess is never shown as a certainty:
 
 	`$OPENCODE_SESSION_ID`
 			The session id straight from the environment. Nothing

@@ -245,12 +245,13 @@ local function stdout_file(payload)
   return path
 end
 
----Call `_on_exit` and return what it handed its callback.
-local function on_exit(obj, path)
+---Call `_on_exit` and return what it handed its callback. `name` overrides the command name
+---the error messages carry.
+local function on_exit(obj, path, name)
   local got = {}
   require("agentcomplete.opencode_cli")._on_exit(obj, path, function(data, err)
     got = { data = data, err = err }
-  end)
+  end, name)
   return got
 end
 
@@ -265,6 +266,18 @@ T["api"]["reports a non-zero exit with its stderr"] = function()
   local got = on_exit({ code = 1, stderr = "no server\n" }, stdout_file("{}"))
   expect.equality(got.data, nil)
   expect.equality(got.err, "opencode api exited 1: no server")
+end
+
+-- The v1 CLI colors its stderr (e.g. `\27[91mError:\27[0m Session not found: …`), and escape
+-- bytes ride straight into the diagnostics row and the context pane.
+T["api"]["strips ANSI color codes from reported stderr"] = function()
+  local got = on_exit({
+    code = 1,
+    stderr = "\27[91mError:\27[0m Session not found: ses_x\n",
+  }, stdout_file("{}"))
+  expect.equality(got.data, nil)
+  expect.equality(got.err, "opencode api exited 1: Error: Session not found: ses_x")
+  expect.equality(got.err:find("\27", 1, true), nil)
 end
 
 T["api"]["reports output that is not JSON"] = function()
@@ -302,6 +315,29 @@ T["api"]["reports a spawn that throws instead of raising"] = function()
     error("ENOENT")
   end)
   expect.equality(type(err), "string")
+end
+
+T["json"] = new_set()
+
+-- The v1 CLI needs full subcommand lines (`opencode session list …`, `opencode export …`),
+-- so `json` runs `opencode <args>` where `api` runs `opencode api <args>`.
+T["json"]["runs the whole subcommand line through the same redirected runner"] = function()
+  local oc = require("agentcomplete.opencode_cli")
+  local cmd
+  oc.json({ "session", "list", "--format", "json" }, function() end, function(c)
+    cmd = c
+  end)
+  expect.equality(cmd[1], "sh")
+  expect.equality(
+    cmd[3]:match("^opencode 'session' 'list' '%-%-format' 'json' > ") ~= nil,
+    true
+  )
+end
+
+T["json"]["names the opencode command in its errors"] = function()
+  local got = on_exit({ code = 1, stderr = "boom\n" }, stdout_file("{}"), "opencode")
+  expect.equality(got.data, nil)
+  expect.equality(got.err, "opencode exited 1: boom")
 end
 
 T["spawn"] = new_set()

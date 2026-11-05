@@ -1,5 +1,6 @@
 ---Async access to OpenCode's running server through `opencode api`, and the skill and command
----sets resolved from it.
+---sets resolved from it. `json` runs the v1 CLI's serverless subcommands (`session list`,
+---`export`) for callers that need no server.
 ---
 ---The filesystem scan in `scan.opencode_dirs` only sees skills and commands under OpenCode's
 ---own config dirs; OpenCode itself resolves more. For skills: built-ins, `~/.claude/skills`,
@@ -30,48 +31,76 @@ local M = {}
 M._cache = {}
 
 ---Read and remove `path`, the finished command's redirected stdout, and hand `cb` its decoded
----JSON — or nil and why not.
+---JSON — or nil and why not. `name` is the command named in the error messages.
 ---@param obj { code: integer, stderr?: string }
 ---@param path string
 ---@param cb fun(data: any|nil, err: string|nil)
-function M._on_exit(obj, path, cb)
+---@param name? string Defaults to `opencode api`.
+function M._on_exit(obj, path, cb, name)
+  name = name or "opencode api"
   local read, lines = pcall(vim.fn.readfile, path)
   pcall(vim.fn.delete, path)
   if obj.code ~= 0 then
-    return cb(
-      nil,
-      "opencode api exited " .. tostring(obj.code) .. ": " .. vim.trim(obj.stderr or "")
-    )
+    -- The CLI colors its stderr (`\27[91mError:\27[0m …`); escape bytes have no business in an
+    -- error row or the context pane.
+    local stderr = (vim.trim(obj.stderr or ""):gsub("\27%[[%d;]*m", ""))
+    return cb(nil, name .. " exited " .. tostring(obj.code) .. ": " .. stderr)
   end
   local ok, data = pcall(vim.json.decode, table.concat(read and lines or {}, "\n"))
   if not ok then
-    return cb(nil, "opencode api printed no JSON")
+    return cb(nil, name .. " printed no JSON")
   end
   cb(data)
 end
 
----Run `opencode api <args>` against the running server and hand `cb` the decoded response, or
----nil and a reason. `opencode`'s Bun runtime truncates large output (~64KB) read through a pipe —
----which `skill.list` exceeds outright — so stdout is redirected to a temp file read on exit.
----`pcall`-guarded so a missing `opencode`/`sh` never raises into the editor.
----@param args string[] Arguments after `opencode api`: an operation id and its `--param`s.
+---Run `sh -c <line>`, redirecting stdout to a temp file read on exit, and hand `cb` the decoded
+---JSON via `_on_exit`. `pcall`-guarded so a missing `opencode`/`sh` never raises into the editor.
+---@param line string
 ---@param cb fun(data: any|nil, err: string|nil)
+---@param name string Command name for `_on_exit`'s error messages.
 ---@param system? fun(cmd: string[], opts: table, on_exit: fun(obj: table)): any Defaults to `vim.system`; injected in tests.
-function M.api(args, cb, system)
+local function run(line, cb, name, system)
   system = system or vim.system
   local path = vim.fn.tempname()
-  local argv = table.concat(vim.tbl_map(vim.fn.shellescape, args), " ")
   local started = pcall(
     system,
-    { "sh", "-c", "opencode api " .. argv .. " > " .. vim.fn.shellescape(path) },
+    { "sh", "-c", line .. " > " .. vim.fn.shellescape(path) },
     { text = true, timeout = 5000 },
     vim.schedule_wrap(function(obj)
-      M._on_exit(obj, path, cb)
+      M._on_exit(obj, path, cb, name)
     end)
   )
   if not started then
     cb(nil, "could not run opencode")
   end
+end
+
+---The shell-escaped argument list of a command line.
+---@param args string[]
+---@return string
+local function argv(args)
+  return table.concat(vim.tbl_map(vim.fn.shellescape, args), " ")
+end
+
+---Run `opencode api <args>` against the running server and hand `cb` the decoded response, or
+---nil and a reason. `opencode`'s Bun runtime truncates large output (~64KB) read through a pipe —
+---which `skill.list` exceeds outright — so stdout is redirected to a temp file read on exit.
+---@param args string[] Arguments after `opencode api`: an operation id and its `--param`s.
+---@param cb fun(data: any|nil, err: string|nil)
+---@param system? fun(cmd: string[], opts: table, on_exit: fun(obj: table)): any Defaults to `vim.system`; injected in tests.
+function M.api(args, cb, system)
+  run("opencode api " .. argv(args), cb, "opencode api", system)
+end
+
+---Run `opencode <args>` — a subcommand the v1 CLI answers without a server, e.g.
+---`session list --format json` or `export <sessionID>` — and hand `cb` the decoded stdout
+---JSON, or nil and a reason. Same temp-file redirection as `api`, for the same Bun pipe
+---truncation.
+---@param args string[] Arguments after `opencode`.
+---@param cb fun(data: any|nil, err: string|nil)
+---@param system? fun(cmd: string[], opts: table, on_exit: fun(obj: table)): any Defaults to `vim.system`; injected in tests.
+function M.json(args, cb, system)
+  run("opencode " .. argv(args), cb, "opencode", system)
 end
 
 ---The `data` array of a list response, or an empty one when the payload has none.

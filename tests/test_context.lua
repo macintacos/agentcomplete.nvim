@@ -1431,82 +1431,89 @@ T["opencode.roots"]["hang the pointers off the XDG state base"] = function()
   vim.env.XDG_STATE_HOME = saved
 end
 
----An assistant message as `session.message.list` returns it, one content part per
+---One message as `opencode export` returns it: `{ info = { role }, parts }`, one part per
 ---`{ type, text }` pair.
-local function assistant_message(parts)
+local function export_message(role, parts)
   return {
-    type = "assistant",
-    content = vim.tbl_map(function(part)
+    info = { role = role },
+    parts = vim.tbl_map(function(part)
       return { type = part[1], text = part[2] }
     end, parts),
   }
 end
 
--- Newest first, as the resolver asks for them: a tool-only step, the answer (split around
--- reasoning), then an earlier answer it supersedes.
-local NEW_MESSAGES = {
-  assistant_message({ { "tool" } }),
-  assistant_message({
+-- Oldest first, as export prints them: an earlier answer it supersedes, a tool-only step,
+-- the answer (split around reasoning), then the user's next prompt.
+local EXPORT_MESSAGES = {
+  export_message("assistant", { { "text", "superseded" } }),
+  export_message("assistant", { { "tool" } }),
+  export_message("assistant", {
     { "text", "the answer" },
     { "reasoning", "hmm" },
     { "text", "and more" },
   }),
-  assistant_message({ { "text", "superseded" } }),
+  export_message("user", { { "text", "a follow-up question" } }),
 }
 
 T["opencode.message_text"] = new_set()
 
--- The text of one message, not every assistant message in the session: a session's whole
--- conversation would otherwise land in the pane.
+-- The newest assistant message, not the newest message: the session's last entry can be the
+-- user's own prompt or a tool-only step, and the whole conversation must not land in the pane.
 T["opencode.message_text"]["reads the newest assistant message that carries text"] = function()
   local opencode = require("agentcomplete.context.opencode")
   expect.equality(
-    opencode.message_text({ data = NEW_MESSAGES }),
+    opencode.message_text({ messages = EXPORT_MESSAGES }),
     "the answer\n\nand more"
   )
 end
 
 T["opencode.message_text"]["reports nothing for a payload with no text to show"] = function()
   local opencode = require("agentcomplete.context.opencode")
-  expect.equality(opencode.message_text({ data = {} }), nil)
+  expect.equality(opencode.message_text({ messages = {} }), nil)
   expect.equality(
-    opencode.message_text({ data = { assistant_message({ { "text", "  " } }) } }),
+    opencode.message_text({
+      messages = { export_message("assistant", { { "text", "  " } }) },
+    }),
     nil
   )
   expect.equality(opencode.message_text("HTTP 404 Not Found"), nil)
 end
 
----A root session as `session.list` returns it.
-local function session_info(id, created, updated, parent)
-  return { id = id, parentID = parent, time = { created = created, updated = updated } }
+---A row of `opencode session list --format json` output.
+local function session_info(id, updated, extra)
+  return vim.tbl_extend("force", {
+    id = id,
+    updated = updated,
+    created = updated - 1000,
+    directory = "/proj",
+  }, extra or {})
 end
 
 T["opencode.newest_session"] = new_set()
 
 -- `opencode --continue` shows a session far older than the process showing it, so dating the
--- guess by when a session was created hides exactly the conversation being worked in.
-T["opencode.newest_session"]["takes the session used most recently since the floor"] = function()
+-- guess by when a session was created hides exactly the conversation being worked in. The CLI
+-- lists every directory's sessions, so the cwd filter is the resolver's own job.
+T["opencode.newest_session"]["takes the cwd's session used most recently since the floor"] = function()
   local opencode = require("agentcomplete.context.opencode")
-  local payload = {
-    data = {
-      session_info("ses_new", 1800000, 1800300),
-      session_info("ses_resumed", 500000, 1900000),
-      session_info("ses_old", 1000000, 1000100),
-    },
+  local sessions = {
+    session_info("ses_new", 1800300),
+    session_info("ses_resumed", 1900000, { created = 500000 }),
+    session_info("ses_elsewhere", 1950000, { directory = "/elsewhere" }),
+    session_info("ses_old", 1000100),
   }
-  expect.equality(opencode.newest_session(payload, 1700000), "ses_resumed")
+  expect.equality(opencode.newest_session(sessions, 1700000, "/proj"), "ses_resumed")
 end
 
-T["opencode.newest_session"]["skips subagent sessions and any the floor excludes"] = function()
+T["opencode.newest_session"]["skips subagent sessions, other directories, and any the floor excludes"] = function()
   local opencode = require("agentcomplete.context.opencode")
-  local payload = {
-    data = {
-      session_info("ses_child", 1850000, 1850100, "ses_new"),
-      session_info("ses_old", 1000000, 1000100),
-    },
+  local sessions = {
+    session_info("ses_child", 1850100, { parentID = "ses_new" }),
+    session_info("ses_elsewhere", 1850200, { directory = "/elsewhere" }),
+    session_info("ses_old", 1000100),
   }
-  expect.equality(opencode.newest_session(payload, 1700000), nil)
-  expect.equality(opencode.newest_session("not a payload", 0), nil)
+  expect.equality(opencode.newest_session(sessions, 1700000, "/proj"), nil)
+  expect.equality(opencode.newest_session("not a payload", 0, "/proj"), nil)
 end
 
 local saved_opencode
@@ -1522,27 +1529,24 @@ T["opencode.resolve"] = new_set({
   },
 })
 
----An `opencode api` stand-in serving the `/proj` fixture: `ses_new` is the newest root session,
+---An `opencode` CLI stand-in serving the `/proj` fixture: `ses_new` is the newest root session,
 ---`ses_old` fell idle before the guess's floor. Records each call's arguments in `calls`.
-local function fake_api(calls)
-  local messages = {
-    ses_new = NEW_MESSAGES,
-    ses_old = { assistant_message({ { "text", "old answer" } }) },
+local function fake_cli(calls)
+  local exports = {
+    ses_new = { messages = EXPORT_MESSAGES },
+    ses_old = { messages = { export_message("assistant", { { "text", "old answer" } }) } },
   }
   return function(args, cb)
     if calls then
       calls[#calls + 1] = args
     end
-    if args[1] == "session.list" then
+    if args[1] == "session" then
       return cb({
-        data = {
-          session_info("ses_new", 1800000, 1800300),
-          session_info("ses_old", 1000000, 1000100),
-        },
+        session_info("ses_new", 1800300),
+        session_info("ses_old", 1000100),
       })
     end
-    local id = table.concat(args, " "):match("sessionID=(%S+)")
-    cb({ data = messages[id] or {} })
+    cb(exports[args[2]] or {})
   end
 end
 
@@ -1565,7 +1569,7 @@ end
 local function opencode_opts(fields)
   return vim.tbl_extend("force", {
     state_root = tmpdir(),
-    api = fake_api(),
+    cli = fake_cli(),
     system = fake_ps,
     now = function()
       return 2000000
@@ -1640,14 +1644,12 @@ end
 -- The newest root session in this directory used since the TUI started; `ses_old` predates it.
 T["opencode.resolve"]["guesses the newest session in the cwd when nothing points at one"] = function()
   local calls = {}
-  local result = resolve_opencode(opencode_opts({ api = fake_api(calls) }))
+  local result = resolve_opencode(opencode_opts({ cli = fake_cli(calls) }))
   expect.equality(result.rung, "guessed")
   expect.equality(result.session_id, "ses_new")
   expect.equality(result.text, "the answer\n\nand more")
-  expect.equality(
-    calls[1],
-    { "session.list", "--param", "directory=/proj", "--param", "parentID=null" }
-  )
+  expect.equality(calls[1], { "session", "list", "--format", "json" })
+  expect.equality(calls[2], { "export", "ses_new" })
 end
 
 T["opencode.resolve"]["fills the session's id, which detection leaves holding a pid"] = function()
@@ -1684,13 +1686,26 @@ end
 T["opencode.resolve"]["reports the rung it was attempting when the read fails"] = function()
   vim.env.OPENCODE_SESSION_ID = "ses_old"
   local result = resolve_opencode(opencode_opts({
-    api = function(_, cb)
-      cb(nil, "opencode api exited 1: no server")
+    cli = function(_, cb)
+      cb(nil, "opencode exited 1: unknown command")
     end,
   }))
   expect.equality(result.ok, false)
   expect.equality(result.rung, "$OPENCODE_SESSION_ID")
-  expect.equality(result.err, "opencode api exited 1: no server")
+  expect.equality(result.err, "opencode exited 1: unknown command")
+end
+
+-- The guess rung fails on its own when `session list` does: no env id, a pointer-free state
+-- root, and the TUI's start time leave the CLI call as the only thing that can answer.
+T["opencode.resolve"]["reports a `session list` failure at the guess rung"] = function()
+  local result = resolve_opencode(opencode_opts({
+    cli = function(_, cb)
+      cb(nil, "opencode exited 1: boom")
+    end,
+  }))
+  expect.equality(result.ok, false)
+  expect.equality(result.rung, "guessed")
+  expect.equality(result.err, "opencode exited 1: boom")
 end
 
 T["opencode.resolve"]["fails soft on a session with no assistant text"] = function()

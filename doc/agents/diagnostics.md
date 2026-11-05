@@ -84,11 +84,11 @@ launch).
   the colorscheme renders invisibly.
 - `## Context` — what the last-message pane resolved for this buffer: the `resolver` that
   claimed the session, the `rung` of its chain that answered, the `session id` and
-  `transcript` it read (OpenCode reads through `opencode api`, so it leaves `transcript`
-  unset), the message's size in `bytes`, the `pointer dir` the OpenCode resolver looks in,
-  what the `opencode plugin` install path (`plugins/agentcomplete`) holds, and the
-  `last error`. A failed resolution still reports its rung, so the row says which
-  resolution was being attempted even when no pane opened.
+  `transcript` it read (OpenCode reads through the `opencode` CLI, so it leaves
+  `transcript` unset), the message's size in `bytes`, the `pointer dir` the OpenCode
+  resolver looks in, what the `opencode plugin` install path (`plugins/agentcomplete`)
+  holds, and the `last error`. A failed resolution still reports its rung, so the row says
+  which resolution was being attempted even when no pane opened.
 
   The `rung` is what to read when an OpenCode pane shows the *wrong* conversation.
   `pointer file` and `$OPENCODE_SESSION_ID` are certainties; `guessed` means the resolver

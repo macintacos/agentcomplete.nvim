@@ -1,18 +1,15 @@
 ---OpenCode's last-assistant-message resolver.
 ---
----OpenCode serves its conversations through `opencode api`, but the external editor it spawns
+---OpenCode keeps its conversations behind the `opencode` CLI — `opencode export` prints a
+---session, `opencode session list` names the candidates — but the external editor it spawns
 ---inherits no session id. So the session is resolved down three rungs — an exported id, a pointer
 ---file the OpenCode plugin's TUI half writes for its own pid, then a guess at the newest session
 ---in the cwd — and the rung that answered is reported alongside the message, because a guess
 ---shown as a certainty is worse than no pane.
 ---
 ---The pointer root, the subprocesses and the clock are optional `opts` seams (the pattern
----`agentcomplete.opencode_cli` uses), so tests touch no real `$HOME`, `ps`, or server.
+---`agentcomplete.opencode_cli` uses), so tests touch no real `$HOME`, `ps`, or `opencode`.
 local M = { name = "opencode" }
-
----Assistant messages fetched per read, newest first. The one shown is the newest carrying text,
----so a turn ending in more tool-only steps than this shows nothing.
-local MESSAGE_PAGE = 20
 
 ---`ps -o etime=` output — POSIX `[[dd-]hh:]mm:ss` — as seconds. macOS `ps` has no `etimes`
 ---keyword, and `lstart` is a locale-formatted date Lua has no `strptime` for.
@@ -35,47 +32,60 @@ function M.parse_etime(s)
   return seconds + (tonumber(days) or 0) * 86400
 end
 
----The text of the newest assistant message in a `session.message.list` response (newest first)
----that carries any. Anchoring on that message rather than on every text part is what walks back
----past tool-only steps instead of returning the whole conversation.
+---The text of the newest assistant message in an `opencode export` payload (oldest first)
+---that carries any. Anchoring on that message rather than on every text part is what walks
+---back past tool-only steps and the user's own prompts instead of returning the whole
+---conversation.
 ---@param payload any
 ---@return string|nil
 function M.message_text(payload)
-  local messages = type(payload) == "table" and payload.data
-  for _, message in ipairs(type(messages) == "table" and messages or {}) do
-    local parts = {}
-    for _, part in ipairs(type(message) == "table" and message.content or {}) do
-      if
-        type(part) == "table"
-        and part.type == "text"
-        and type(part.text) == "string"
-        and vim.trim(part.text) ~= ""
-      then
-        parts[#parts + 1] = part.text
+  local messages = type(payload) == "table"
+      and type(payload.messages) == "table"
+      and payload.messages
+    or {}
+  for i = #messages, 1, -1 do
+    local message = messages[i]
+    if
+      type(message) == "table"
+      and type(message.info) == "table"
+      and message.info.role == "assistant"
+    then
+      local parts = {}
+      for _, part in ipairs(type(message.parts) == "table" and message.parts or {}) do
+        if
+          type(part) == "table"
+          and part.type == "text"
+          and type(part.text) == "string"
+          and vim.trim(part.text) ~= ""
+        then
+          parts[#parts + 1] = part.text
+        end
       end
-    end
-    if #parts > 0 then
-      return table.concat(parts, "\n\n")
+      if #parts > 0 then
+        return table.concat(parts, "\n\n")
+      end
     end
   end
   return nil
 end
 
----The root session in a `session.list` response used most recently at or after `since`. Ordered
----and floored on `time.updated`, not `time.created`: `opencode --continue` shows a session far
----older than the process showing it, which a creation floor hides outright.
+---The root session in `opencode session list --format json` output — a JSON array of
+---`{id, directory, updated, ...}` rows — that `cwd` used most recently at or after `since`.
+---Ordered and floored on `updated` (epoch ms), not `created`: `opencode --continue` shows a
+---session far older than the process showing it, which a creation floor hides outright.
 ---@param payload any
 ---@param since integer Epoch ms.
+---@param cwd string
 ---@return string|nil
-function M.newest_session(payload, since)
-  local sessions = type(payload) == "table" and payload.data
+function M.newest_session(payload, since, cwd)
   local best, best_updated
-  for _, s in ipairs(type(sessions) == "table" and sessions or {}) do
-    local updated = type(s) == "table" and type(s.time) == "table" and s.time.updated
+  for _, s in ipairs(type(payload) == "table" and payload or {}) do
+    local updated = type(s) == "table" and s.updated
     if
       type(updated) == "number"
       and type(s.id) == "string"
       and not s.parentID
+      and s.directory == cwd
       and updated >= since
       and (not best_updated or updated > best_updated)
     then
@@ -128,16 +138,16 @@ local function pointed_session(tui_pid, since, state_root)
   return type(record.sessionID) == "string" and record.sessionID or false
 end
 
----@alias AgentComplete.Context.OpenCode.Api fun(args: string[], cb: fun(data: any|nil, err: string|nil))
+---@alias AgentComplete.Context.OpenCode.Cli fun(args: string[], cb: fun(data: any|nil, err: string|nil))
 
 ---Resolve the session this prompt belongs to and hand `done` its id and rung, or nil, the rung
 ---that was being attempted, and why it failed.
 ---@param env { session_id: string|nil, tui_pid: integer|nil }
 ---@param cwd string
 ---@param opts AgentComplete.Context.OpenCode.Seams
----@param api AgentComplete.Context.OpenCode.Api
+---@param cli AgentComplete.Context.OpenCode.Cli
 ---@param done fun(id: string|nil, rung: string, err: string|nil)
-local function find_session(env, cwd, opts, api, done)
+local function find_session(env, cwd, opts, cli, done)
   if env.session_id and env.session_id ~= "" then
     return done(env.session_id, "$OPENCODE_SESSION_ID")
   end
@@ -156,20 +166,17 @@ local function find_session(env, cwd, opts, api, done)
   if pointed ~= nil then
     return done(pointed or nil, "pointer file", "the TUI is showing no session")
   end
-  api(
-    { "session.list", "--param", "directory=" .. cwd, "--param", "parentID=null" },
-    function(payload, err)
-      if payload == nil then
-        return done(nil, "guessed", err)
-      end
-      local id = M.newest_session(payload, since)
-      done(
-        id,
-        "guessed",
-        not id and ("no session in " .. cwd .. " used since the TUI started") or nil
-      )
+  cli({ "session", "list", "--format", "json" }, function(payload, err)
+    if payload == nil then
+      return done(nil, "guessed", err)
     end
-  )
+    local id = M.newest_session(payload, since, cwd)
+    done(
+      id,
+      "guessed",
+      not id and ("no session in " .. cwd .. " used since the TUI started") or nil
+    )
+  end)
 end
 
 ---Report a failure. The session is still claimed: the walk got far enough to know it is ours,
@@ -184,7 +191,7 @@ end
 
 ---@class AgentComplete.Context.OpenCode.Seams
 ---@field state_root? string Root the pointer directory hangs under; defaults to `$XDG_STATE_HOME` or `~/.local/state`.
----@field api? AgentComplete.Context.OpenCode.Api Async `opencode api`; defaults to `agentcomplete.opencode_cli.api`.
+---@field cli? AgentComplete.Context.OpenCode.Cli Async `opencode` CLI runner; defaults to `agentcomplete.opencode_cli.json`.
 ---@field system? fun(cmd: string[]): string Blocking `ps`; defaults to `vim.fn.system`.
 ---@field now? fun(): integer Current time in epoch milliseconds.
 
@@ -197,28 +204,18 @@ function M.resolve(session, cb, opts)
     return nil
   end
   opts = opts or {}
-  local api = opts.api or require("agentcomplete.opencode_cli").api
+  local cli = opts.cli or require("agentcomplete.opencode_cli").json
   -- Read here and nowhere below, so the rungs take what they need as arguments.
   local env = { session_id = vim.env.OPENCODE_SESSION_ID, tui_pid = session.agent_pid }
   -- Normalized because it may have been typed by the user via `$AGENTCOMPLETE_CWD`, while every
   -- directory it is compared against was recorded by OpenCode.
   local cwd = vim.fs.normalize(session.cwd)
 
-  find_session(env, cwd, opts, api, function(id, rung, find_err)
+  find_session(env, cwd, opts, cli, function(id, rung, find_err)
     if not id then
       return fail(cb, find_err or "no session", rung)
     end
-    api({
-      "session.message.list",
-      "--param",
-      "sessionID=" .. id,
-      "--param",
-      "type=assistant",
-      "--param",
-      "order=desc",
-      "--param",
-      "limit=" .. MESSAGE_PAGE,
-    }, function(payload, err)
+    cli({ "export", id }, function(payload, err)
       if payload == nil then
         return fail(cb, err or "no response", rung)
       end
